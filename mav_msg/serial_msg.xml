@@ -1,7 +1,6 @@
-<?xml version="1.0">
+<?xml version="1.0" encoding="UTF-8"?>
 <mavlink>
-    <version>2.0</version>
-    <include>common.xml</include>
+    <version>1</version>
     <messages>
         <message id="50001" name="gorur_gari_serial_msg">
             <description>Gorur Gari Serial Message</description>
