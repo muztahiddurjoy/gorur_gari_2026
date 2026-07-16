@@ -1,0 +1,19 @@
+<?xml version="1.0">
+<mavlink>
+    <version>2.0</version>
+    <include>common.xml</include>
+    <messages>
+        <message id="50001" name="gorur_gari_serial_msg">
+            <description>Gorur Gari Serial Message</description>
+            <field type="uint8_t" name="encoder_count">count</field>
+            <field type="uint8_t" name="encoder_speed">speed</field>
+            <field type="uint8_t" name="encoder_direction">direction</field>
+            <field type="uint8_t" name="servo">degree</field>
+
+            <field type="uint8_t" name="sonar_1">cm</field>
+            <field type="uint8_t" name="sonar_2">cm</field>
+            <field type="uint8_t" name="sonar_3">cm</field>
+            <field type="uint8_t" name="sonar_4">cm</field>
+        </message>
+    </messages>
+</mavlink>
