@@ -13,6 +13,7 @@ public:
     SteeringController(int pin);
     void begin(int frequency);
     void to(int angle);
+    uint8_t getAngle();
 };
 
 #endif // STEERING_CONTROL_H

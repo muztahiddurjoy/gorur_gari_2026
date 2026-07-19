@@ -1,23 +1,41 @@
+import geometry_msgs
 import rclpy
 from rclpy.node import Node
 from pymavlink import mavutil
+import gorur_gari_mavlink_msg
+from geometry_msgs.msg import Twist
 
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
-        self.port = '/dev/ttyUSB0'  # Update this to your MCU's serial port
+        self.port = '/dev/ttyUSB0' 
         self.baudrate = 115200
         self.get_logger().info(f'Connecting to MCU on {self.port} at {self.baudrate} baud.')
-
+        self.mcu_connected = False;
+        
         try:
-            self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
+            self.master = gorur_gari_mavlink_msg.MAVLink(self.port, self.baudrate)
             self.get_logger().info('Successfully connected to MCU.')
+            self.mcu_connected = True
+            self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
         except Exception as e:
             self.get_logger().error(f'Failed to connect to MCU: {e}')
             rclpy.shutdown()
             return
         self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
-
+        
+    def handle_cmd_vel(self,msg:Twist):
+        try:
+            if not self.mcu_connected: #handle the case where the MCU is not connected
+                self.get_logger().error("MCU is not connected. cannot send command.")
+                return;
+            throttle = msg.linear.x
+            steering = msg.angular.z
+            self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
+            self.master.gorur_gari_serial_msg_send(throttle, steering)
+        except Exception as e:
+            self.get_logger().error(f'Error in handle_cmd_vel: {e}')
+            return
     def send_heartbeat(self):
         msg = self.master.recv_match(blocking=False)
         if msg:

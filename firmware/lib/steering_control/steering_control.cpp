@@ -21,3 +21,7 @@ void SteeringController::to(int angle){
     steeringAngle = angle;
     steer.write(steeringAngle);
 }
+
+uint8_t SteeringController::getAngle(){
+    return steeringAngle;
+}

@@ -2,8 +2,8 @@
 <mavlink>
     <version>1</version>
     <messages>
-        <message id="50001" name="gorur_gari_serial_msg">
-            <description>Gorur Gari Serial Message</description>
+        <message id="50001" name="gorur_gari_mcu_to_ros2_msg">
+            <description>Gorur Gari MCU to ROS2 Serial Message</description>
             <field type="uint8_t" name="encoder_count">count</field>
             <field type="uint8_t" name="encoder_speed">speed</field>
             <field type="uint8_t" name="encoder_direction">direction</field>

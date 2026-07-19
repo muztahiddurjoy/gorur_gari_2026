@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mavlink>
+    <version>1</version>
+    <messages>
+        <message id="50002" name="gorur_gari_ros2_to_mcu_msg">
+            <description>Gorur Gari ROS2 to MCU Serial Message</description>
+            <field type="uint8_t" name="throttle">throttle</field>
+            <field type="uint8_t" name="steering">steering</field>
+        </message>
+    </messages>
+</mavlink>
