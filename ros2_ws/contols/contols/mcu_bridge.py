@@ -2,7 +2,8 @@ import geometry_msgs
 import rclpy
 from rclpy.node import Node
 from pymavlink import mavutil
-import MAVLink_gorur_gari_mcu_to_ros2_msg_message
+from contols import mcu_to_ros2
+from contols import ros2_to_mcu
 from geometry_msgs.msg import Twist
 
 class MCUBridgeNode(Node):
@@ -14,25 +15,37 @@ class MCUBridgeNode(Node):
         self.mcu_connected = False;
         
         try:
-            self.master = gorur_gari_mavlink_msg.MAVLink(self.port, self.baudrate)
+            self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
+            self.mav_rx = mcu_to_ros2.MAVLink(self.master, srcSystem=2, srcComponent=1)
+            self.master.mav = self.mav_rx
+
+            self.mav_tx = ros2_to_mcu.MAVLink(self.master, srcSystem=2, srcComponent=1);
             self.get_logger().info('Successfully connected to MCU.')
             self.mcu_connected = True
-            self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
+           
         except Exception as e:
             self.get_logger().error(f'Failed to connect to MCU: {e}')
-            rclpy.shutdown()
-            return
-        self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
+            # rclpy.shutdown()
+            # return
+        self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
+        # self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
+        
         
     def handle_cmd_vel(self,msg:Twist):
         try:
-            if not self.mcu_connected: #handle the case where the MCU is not connected
-                self.get_logger().error("MCU is not connected. cannot send command.")
-                return;
-            throttle = msg.linear.x
-            steering = msg.angular.z
+            # if not self.mcu_connected: #handle the case where the MCU is not connected
+            #     self.get_logger().error("MCU is not connected. cannot send command.")
+            #     return;
+            throttle = int(max(0, min(255, msg.linear.x * 100)))  # Scale linear.x to 0-100
+            steering = max(45, min(135, int(90+ msg.angular.z * 45)))  # Scale angular.z to 45-135 degrees
             self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
-            self.master.gorur_gari_serial_msg_send(throttle, steering)
+            if self.mcu_connected:
+                self.mav_tx.gorur_gari_ros2_to_mcu_msg_send(
+                    throttle=throttle,
+                    steering=steering
+                )
+            else:
+                self.get_logger().error("MCU is not connected. cannot send command.")
         except Exception as e:
             self.get_logger().error(f'Error in handle_cmd_vel: {e}')
             return
