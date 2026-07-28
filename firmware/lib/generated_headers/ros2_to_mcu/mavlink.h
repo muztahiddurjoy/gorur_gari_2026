@@ -1,12 +1,12 @@
 /** @file
- *  @brief MAVLink comm protocol built from serial_msg.xml
+ *  @brief MAVLink comm protocol built from ros2_to_mcu.xml
  *  @see http://mavlink.org
  */
 #pragma once
 #ifndef MAVLINK_H
 #define MAVLINK_H
 
-#define MAVLINK_PRIMARY_XML_HASH 5751880744690870182
+#define MAVLINK_PRIMARY_XML_HASH -8046836363555517823
 
 #ifndef MAVLINK_STX
 #define MAVLINK_STX 253
@@ -29,6 +29,6 @@
 #endif
 
 #include "version.h"
-#include "serial_msg.h"
+#include "ros2_to_mcu.h"
 
 #endif // MAVLINK_H

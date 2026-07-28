@@ -2,7 +2,7 @@ import geometry_msgs
 import rclpy
 from rclpy.node import Node
 from pymavlink import mavutil
-import gorur_gari_mavlink_msg
+import MAVLink_gorur_gari_mcu_to_ros2_msg_message
 from geometry_msgs.msg import Twist
 
 class MCUBridgeNode(Node):
