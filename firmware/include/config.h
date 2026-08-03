@@ -3,8 +3,7 @@
 
 //servo
 const int SERVO_FREQUENCY_HZ = 50;
-const int SERVO_ERROR = 20;
-const int STEERING_CENTER_ANGLE = 90 - SERVO_ERROR;
+const int STEERING_CENTER_ANGLE = 90;
 const int STEERING_MAX_ANGLE = 35; // how far the wheels swing either side of centre
 
 //motor

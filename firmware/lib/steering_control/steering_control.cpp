@@ -19,7 +19,7 @@ void SteeringController::to(int angle){
     if(angle < 0) angle = 0;
     if(angle > 180) angle = 180;
     steeringAngle = angle;
-    steer.write(steeringAngle);
+    steer.write(steeringAngle-servoCorrection);
 }
 
 uint8_t SteeringController::getAngle(){
