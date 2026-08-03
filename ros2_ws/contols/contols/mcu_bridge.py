@@ -9,7 +9,7 @@ from geometry_msgs.msg import Twist
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
-        self.port = '/dev/ttyUSB0' 
+        self.port = '/dev/ttyACM0' 
         self.baudrate = 115200
         self.get_logger().info(f'Connecting to MCU on {self.port} at {self.baudrate} baud.')
         self.mcu_connected = False;
