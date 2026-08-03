@@ -51,7 +51,7 @@ void loop(){
 
         if(mavlink_parse_char(MAVLINK_COMM_0, c, &received_msg, &status)){
             if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg){
-                uint8_t throttle = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_throttle(&received_msg);
+                int throttle = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_throttle(&received_msg);
                 motor.to(throttle);
                 uint8_t steering = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_steering(&received_msg);
                 steer.to(steering);
