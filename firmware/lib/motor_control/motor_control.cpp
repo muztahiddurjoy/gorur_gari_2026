@@ -30,21 +30,24 @@ void MotorController::hold(int inA, int inB, int duty){
 }
 
 void MotorController::to(int speed){
+    int mappedSpeed = map(speed, -maxSpeed, maxSpeed, -maxSpeed, maxSpeed);
     if(speed > maxSpeed) speed = maxSpeed;
     if(speed < -maxSpeed) speed = -maxSpeed;
-    motorSpeed = speed;
+    motorSpeed = mappedSpeed;
 
-    if(speed > 0) hold(HIGH, LOW, speed);
-    else if(speed < 0) hold(LOW, HIGH, -speed);
+    if(speed > 0) hold(HIGH, LOW, mappedSpeed);
+    else if(speed < 0) hold(LOW, HIGH, -mappedSpeed);
     else brake();
 }
 
 void MotorController::forward(int speed){
-    to(abs(speed));
+    int mappedSpeed = map(speed, 0, maxSpeed, 0, maxSpeed);
+    to(abs(mappedSpeed));
 }
 
 void MotorController::reverse(int speed){
-    to(-abs(speed));
+    int mappedSpeed = map(speed, 0, maxSpeed, 0, maxSpeed);
+    to(-abs(mappedSpeed));
 }
 
 // both direction pins high shorts the motor windings and stops it dead.

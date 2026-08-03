@@ -373,16 +373,16 @@ class MAVLink_gorur_gari_ros2_to_mcu_msg_message(MAVLink_message):
     msgname = "GORUR_GARI_ROS2_TO_MCU_MSG"
     fieldnames = ["throttle", "steering"]
     ordered_fieldnames = ["throttle", "steering"]
-    fieldtypes = ["uint8_t", "uint8_t"]
+    fieldtypes = ["int8_t", "uint8_t"]
     fielddisplays_by_name: Dict[str, str] = {}
     fieldenums_by_name: Dict[str, str] = {}
     fieldunits_by_name: Dict[str, str] = {}
-    native_format = bytearray(b"<BB")
+    native_format = bytearray(b"<bB")
     orders = [0, 1]
     lengths = [1, 1]
     array_lengths = [0, 0]
-    crc_extra = 154
-    unpacker = struct.Struct("<BB")
+    crc_extra = 194
+    unpacker = struct.Struct("<bB")
     instance_field = None
     instance_offset = -1
 
@@ -807,7 +807,7 @@ class MAVLink(object):
         """
         Gorur Gari ROS2 to MCU Serial Message
 
-        throttle                  : throttle (type:uint8_t)
+        throttle                  : throttle (type:int8_t)
         steering                  : steering (type:uint8_t)
 
         """
@@ -817,7 +817,7 @@ class MAVLink(object):
         """
         Gorur Gari ROS2 to MCU Serial Message
 
-        throttle                  : throttle (type:uint8_t)
+        throttle                  : throttle (type:int8_t)
         steering                  : steering (type:uint8_t)
 
         """

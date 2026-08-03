@@ -36,7 +36,7 @@ class MCUBridgeNode(Node):
             # if not self.mcu_connected: #handle the case where the MCU is not connected
             #     self.get_logger().error("MCU is not connected. cannot send command.")
             #     return;
-            throttle = int(max(0, min(255, msg.linear.x * 100)))  # Scale linear.x to 0-100
+            throttle = int(max(-128, min(127, msg.linear.x * 100)))  # Scale linear.x to -128-127
             steering = max(45, min(135, int(90+ msg.angular.z * 45)))  # Scale angular.z to 45-135 degrees
             self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
             if self.mcu_connected:

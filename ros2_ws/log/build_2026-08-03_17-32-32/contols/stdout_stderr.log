@@ -1,0 +1,22 @@
+running egg_info
+writing ../build/contols/contols.egg-info/PKG-INFO
+writing dependency_links to ../build/contols/contols.egg-info/dependency_links.txt
+writing entry points to ../build/contols/contols.egg-info/entry_points.txt
+writing requirements to ../build/contols/contols.egg-info/requires.txt
+writing top-level names to ../build/contols/contols.egg-info/top_level.txt
+reading manifest file '../build/contols/contols.egg-info/SOURCES.txt'
+writing manifest file '../build/contols/contols.egg-info/SOURCES.txt'
+running build
+running build_py
+copying contols/mcu_bridge.py -> /home/muz/gorur_gari/gorur_gari_2026/ros2_ws/build/contols/build/lib/contols
+running install
+running install_lib
+copying /home/muz/gorur_gari/gorur_gari_2026/ros2_ws/build/contols/build/lib/contols/mcu_bridge.py -> /home/muz/gorur_gari/gorur_gari_2026/ros2_ws/install/contols/lib/python3.10/site-packages/contols
+byte-compiling /home/muz/gorur_gari/gorur_gari_2026/ros2_ws/install/contols/lib/python3.10/site-packages/contols/mcu_bridge.py to mcu_bridge.cpython-310.pyc
+running install_data
+running install_egg_info
+removing '/home/muz/gorur_gari/gorur_gari_2026/ros2_ws/install/contols/lib/python3.10/site-packages/contols-0.0.0-py3.10.egg-info' (and everything under it)
+Copying ../build/contols/contols.egg-info to /home/muz/gorur_gari/gorur_gari_2026/ros2_ws/install/contols/lib/python3.10/site-packages/contols-0.0.0-py3.10.egg-info
+running install_scripts
+Installing mcu_bridge script to /home/muz/gorur_gari/gorur_gari_2026/ros2_ws/install/contols/lib/contols
+writing list of installed files to '/home/muz/gorur_gari/gorur_gari_2026/ros2_ws/build/contols/install.log'

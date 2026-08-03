@@ -5,7 +5,7 @@
 
 
 typedef struct __mavlink_gorur_gari_ros2_to_mcu_msg_t {
- uint8_t throttle; /*<  throttle*/
+ int8_t throttle; /*<  throttle*/
  uint8_t steering; /*<  steering*/
 } mavlink_gorur_gari_ros2_to_mcu_msg_t;
 
@@ -14,8 +14,8 @@ typedef struct __mavlink_gorur_gari_ros2_to_mcu_msg_t {
 #define MAVLINK_MSG_ID_50002_LEN 2
 #define MAVLINK_MSG_ID_50002_MIN_LEN 2
 
-#define MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_CRC 154
-#define MAVLINK_MSG_ID_50002_CRC 154
+#define MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_CRC 194
+#define MAVLINK_MSG_ID_50002_CRC 194
 
 
 
@@ -24,7 +24,7 @@ typedef struct __mavlink_gorur_gari_ros2_to_mcu_msg_t {
     50002, \
     "gorur_gari_ros2_to_mcu_msg", \
     2, \
-    {  { "throttle", NULL, MAVLINK_TYPE_UINT8_T, 0, 0, offsetof(mavlink_gorur_gari_ros2_to_mcu_msg_t, throttle) }, \
+    {  { "throttle", NULL, MAVLINK_TYPE_INT8_T, 0, 0, offsetof(mavlink_gorur_gari_ros2_to_mcu_msg_t, throttle) }, \
          { "steering", NULL, MAVLINK_TYPE_UINT8_T, 0, 1, offsetof(mavlink_gorur_gari_ros2_to_mcu_msg_t, steering) }, \
          } \
 }
@@ -32,7 +32,7 @@ typedef struct __mavlink_gorur_gari_ros2_to_mcu_msg_t {
 #define MAVLINK_MESSAGE_INFO_gorur_gari_ros2_to_mcu_msg { \
     "gorur_gari_ros2_to_mcu_msg", \
     2, \
-    {  { "throttle", NULL, MAVLINK_TYPE_UINT8_T, 0, 0, offsetof(mavlink_gorur_gari_ros2_to_mcu_msg_t, throttle) }, \
+    {  { "throttle", NULL, MAVLINK_TYPE_INT8_T, 0, 0, offsetof(mavlink_gorur_gari_ros2_to_mcu_msg_t, throttle) }, \
          { "steering", NULL, MAVLINK_TYPE_UINT8_T, 0, 1, offsetof(mavlink_gorur_gari_ros2_to_mcu_msg_t, steering) }, \
          } \
 }
@@ -49,11 +49,11 @@ typedef struct __mavlink_gorur_gari_ros2_to_mcu_msg_t {
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_pack(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
-                               uint8_t throttle, uint8_t steering)
+                               int8_t throttle, uint8_t steering)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN];
-    _mav_put_uint8_t(buf, 0, throttle);
+    _mav_put_int8_t(buf, 0, throttle);
     _mav_put_uint8_t(buf, 1, steering);
 
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), buf, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN);
@@ -81,11 +81,11 @@ static inline uint16_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_pack(uint8_t syste
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_pack_status(uint8_t system_id, uint8_t component_id, mavlink_status_t *_status, mavlink_message_t* msg,
-                               uint8_t throttle, uint8_t steering)
+                               int8_t throttle, uint8_t steering)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN];
-    _mav_put_uint8_t(buf, 0, throttle);
+    _mav_put_int8_t(buf, 0, throttle);
     _mav_put_uint8_t(buf, 1, steering);
 
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), buf, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN);
@@ -117,11 +117,11 @@ static inline uint16_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_pack_status(uint8_
  */
 static inline uint16_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_pack_chan(uint8_t system_id, uint8_t component_id, uint8_t chan,
                                mavlink_message_t* msg,
-                                   uint8_t throttle,uint8_t steering)
+                                   int8_t throttle,uint8_t steering)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN];
-    _mav_put_uint8_t(buf, 0, throttle);
+    _mav_put_int8_t(buf, 0, throttle);
     _mav_put_uint8_t(buf, 1, steering);
 
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), buf, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN);
@@ -187,11 +187,11 @@ static inline uint16_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_encode_status(uint
  */
 #ifdef MAVLINK_USE_CONVENIENCE_FUNCTIONS
 
-static inline void mavlink_msg_gorur_gari_ros2_to_mcu_msg_send(mavlink_channel_t chan, uint8_t throttle, uint8_t steering)
+static inline void mavlink_msg_gorur_gari_ros2_to_mcu_msg_send(mavlink_channel_t chan, int8_t throttle, uint8_t steering)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN];
-    _mav_put_uint8_t(buf, 0, throttle);
+    _mav_put_int8_t(buf, 0, throttle);
     _mav_put_uint8_t(buf, 1, steering);
 
     _mav_finalize_message_chan_send(chan, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg, buf, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_MIN_LEN, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_CRC);
@@ -226,11 +226,11 @@ static inline void mavlink_msg_gorur_gari_ros2_to_mcu_msg_send_struct(mavlink_ch
   is usually the receive buffer for the channel, and allows a reply to an
   incoming message with minimum stack space usage.
  */
-static inline void mavlink_msg_gorur_gari_ros2_to_mcu_msg_send_buf(mavlink_message_t *msgbuf, mavlink_channel_t chan,  uint8_t throttle, uint8_t steering)
+static inline void mavlink_msg_gorur_gari_ros2_to_mcu_msg_send_buf(mavlink_message_t *msgbuf, mavlink_channel_t chan,  int8_t throttle, uint8_t steering)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char *buf = (char *)msgbuf;
-    _mav_put_uint8_t(buf, 0, throttle);
+    _mav_put_int8_t(buf, 0, throttle);
     _mav_put_uint8_t(buf, 1, steering);
 
     _mav_finalize_message_chan_send(chan, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg, buf, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_MIN_LEN, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_LEN, MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg_CRC);
@@ -254,9 +254,9 @@ static inline void mavlink_msg_gorur_gari_ros2_to_mcu_msg_send_buf(mavlink_messa
  *
  * @return  throttle
  */
-static inline uint8_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_throttle(const mavlink_message_t* msg)
+static inline int8_t mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_throttle(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  0);
+    return _MAV_RETURN_int8_t(msg,  0);
 }
 
 /**

@@ -16,7 +16,7 @@ from builtins import object, range
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 WIRE_PROTOCOL_VERSION = "2.0"
-DIALECT = "generated_headers"
+DIALECT = "mcu_to_ros2"
 
 PROTOCOL_MARKER_V1 = 0xFE
 PROTOCOL_MARKER_V2 = 0xFD
