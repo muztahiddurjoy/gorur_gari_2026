@@ -15,4 +15,8 @@ const int MOTOR_MAX_SPEED = 255;
 const int ENCODER_COUNTS_PER_REV = 1320;   // 11 ppr * 4 edges * 30:1 gearbox, retune for your motor
 const int ENCODER_SAMPLE_INTERVAL_MS = 50;
 
+//I2C addresses
+const uint8_t OLED_ADDRESS = 0x3C; // I2C address for the OLED display
+const uint8_t BNO055_ADDRESS = 0x29; // I2C address for the BNO055 IMU
+
 #endif

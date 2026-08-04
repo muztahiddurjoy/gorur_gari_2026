@@ -2,6 +2,7 @@
 #include "steering_control.h"
 #include "motor_control.h"
 #include "encoder_reader.h"
+#include "display_control.h"
 #include "pins.h"
 #include "config.h"
 
@@ -10,9 +11,14 @@
 
 
 
+
+
+
+
 SteeringController steer(STEERING_SERVO_PIN);
 MotorController motor(PWM_THROTTLE_PIN, IN_A, IN_B, STANDBY_PIN);
 EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_COUNTS_PER_REV);
+DisplayController display;
 
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
@@ -24,13 +30,17 @@ void setup(){
     steer.to(STEERING_CENTER_ANGLE);
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
-
+    display.begin();
 }
 
 void loop(){
     encoder.update();
+    display.display();
     mavlink_message_t msg;
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+
+    display.displayText("Speed: " + String(motor.speed()), 0, 0, 1);
+    display.displayText("Encoder: " + String(encoder.count()), 0, 10, 1);
 
     // uint8_t current_speed = motor.speed();
     // uint8_t current_encoder_count = encoder.count();
@@ -61,3 +71,6 @@ void loop(){
 
 
 }
+
+
+
