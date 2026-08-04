@@ -20,6 +20,7 @@ class DisplayController{
         void clear();
         void displayText(const String& text, int x, int y, int textSize = 1);
         void display();
+        void updateScreen();
 };
 
 #endif

@@ -2,8 +2,9 @@
 #include "steering_control.h"
 #include "motor_control.h"
 #include "encoder_reader.h"
+#include "Wire.h"
 #include "display_control.h"
-#include "heading.h"
+// #include "heading.h"
 #include "pins.h"
 #include "config.h"
 
@@ -12,18 +13,11 @@
 
 
 
-
-
-
-
-
-
-
 SteeringController steer(STEERING_SERVO_PIN);
 MotorController motor(PWM_THROTTLE_PIN, IN_A, IN_B, STANDBY_PIN);
 EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_COUNTS_PER_REV);
 DisplayController display;
-Heading heading;
+// Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
 
@@ -36,36 +30,26 @@ void setup(){
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
     Wire.begin(I2C_SDA, I2C_SCL);
     display.begin();
-    heading.begin();
+    // heading.begin();
 
     
 }
 
 void loop(){
-    encoder.update();
-    display.display();
-    heading.update();
+     encoder.update();
+    // heading.update();
     mavlink_message_t msg;
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     
-    display.clear();
 
     display.displayText("Speed: " + String(motor.speed()), 0, 0, 1);
     display.displayText("Encoder: " + String(encoder.count()), 0, 10, 1);
     display.displayText("Steering: " + String(steer.getAngle()), 0, 20, 1);
-    display.displayText("Yaw: " + String(heading.getHeading()), 0, 30, 1);
+    // display.displayText("Yaw: " + String(heading.getHeading()), 0, 30, 1);
 
-    // uint8_t current_speed = motor.speed();
-    // uint8_t current_encoder_count = encoder.count();
-    // uint8_t servo_angle = steer.getAngle();
-    // uint8_t d1 = 0;
-    // uint8_t d2 = 0;
-    // uint8_t d3 = 0;
+    display.updateScreen();
 
-    // mavlink_msg_gorur_gari_serial_msg_pack(system_id, component_id, &msg, curren_speed, current_encoder_count, servo_angle, d1, d2, d3);
-    // uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    // Serial.write(buf, len);
-
+    
     if(Serial.available()>0){
         uint8_t c = Serial.read();
         

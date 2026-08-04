@@ -22,9 +22,12 @@ void DisplayController::displayText(const String& text, int x, int y, int textSi
     oled.setTextColor(SSD1306_WHITE);
     oled.setCursor(x, y);
     oled.println(text);
-    oled.display();
 }
 
 void DisplayController::display() {
+    oled.display();
+}
+
+void DisplayController::updateScreen() {
     oled.display();
 }
