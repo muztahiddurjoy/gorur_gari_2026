@@ -16,11 +16,13 @@
 class DisplayController{
     public:
         DisplayController();
-        void begin();
+        bool begin();
         void clear();
         void displayText(const String& text, int x, int y, int textSize = 1);
         void display();
         void updateScreen();
+    private:
+        Adafruit_SSD1306* oled;
 };
 
 #endif

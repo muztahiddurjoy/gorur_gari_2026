@@ -1,33 +1,36 @@
 #include "display_control.h"
 #include "pins.h"
 
-Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+DisplayController::DisplayController(): oled(nullptr){}
 
-DisplayController::DisplayController() {
-}
-
-void DisplayController::begin() {
-    if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
+bool DisplayController::begin() {
+    oled = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+    if (!oled->begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
         Serial.println("SSD1306 allocation failed");
+        return false;
     }
-    oled.clearDisplay();
+    oled->clearDisplay();
+    oled->display();
+    return true;
 }
 
 void DisplayController::clear() {
-    oled.clearDisplay();
+    oled->clearDisplay();
 }
 
 void DisplayController::displayText(const String& text, int x, int y, int textSize) {
-    oled.setTextSize(textSize);
-    oled.setTextColor(SSD1306_WHITE);
-    oled.setCursor(x, y);
-    oled.println(text);
+    if(!oled) return;
+    oled->setTextSize(textSize);
+    oled->setTextColor(SSD1306_WHITE);
+    oled->setCursor(x, y);
+    oled->println(text);
 }
 
 void DisplayController::display() {
-    oled.display();
+    oled->display();
 }
 
 void DisplayController::updateScreen() {
-    oled.display();
+
+    if(oled) oled->display();
 }

@@ -1,30 +1,24 @@
 #include "heading.h"
 
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BNO055.h>
-#include <utility/imumaths.h>
 
+Heading::Heading(): bno(nullptr), heading(0.0f){}
 
-
-Adafruit_BNO055 bno(55, BNO055_ADDRESS);
-
-Heading::Heading(){
-    heading = 0.0f;
-}
-
-void Heading::begin() {
-    if (!bno.begin()) {
+bool Heading::begin() {
+    bno = new Adafruit_BNO055(55, BNO055_ADDRESS);
+    if (!bno->begin()) {
         Serial.println("BNO055 NOT FOUND!");
+        return false;
     }
-
     delay(1000);
-    // bno.setExtCrystalUse(true);
+    // bno->setExtCrystalUse(true);
     Serial.println("BNO055 Ready");
+    return true;
 }
 
 void Heading::update() {
-    sensors_event_t event;
-    bno.getEvent(&event);
+   if(!bno) return;
+   sensors_event_t event;
+    bno->getEvent(&event);
     heading = event.orientation.x;
 }
 
