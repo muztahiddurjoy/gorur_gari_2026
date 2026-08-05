@@ -25,4 +25,8 @@ const uint8_t SONAR_RIGHT_ECHO_PIN = 39;
 const uint8_t SONAR_REAR_TRIG_PIN = 40;
 const uint8_t SONAR_REAR_ECHO_PIN = 41;
 
+// onboard ws2812, "Status LED 1" in pin-map.md. same pin the esp32-s3-devkitc-1
+// variant exposes as RGB_BUILTIN / PIN_NEOPIXEL.
+const uint8_t STATUS_LED_PIN = 48;
+
 #endif

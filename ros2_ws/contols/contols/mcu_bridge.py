@@ -27,6 +27,12 @@ WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
 # heading travels as centidegrees in a uint16_t, published as degrees 0..360
 HEADING_CDEG_PER_DEG = 100.0
 
+# how often the last command is repeated so the MCU knows the bridge is alive.
+# must be comfortably faster than LINK_TIMEOUT_MS in firmware/include/config.h
+KEEPALIVE_HZ = 5.0
+NEUTRAL_THROTTLE = 0
+NEUTRAL_STEERING = 90  # matches STEERING_CENTER_ANGLE in firmware/include/config.h
+
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
@@ -35,6 +41,9 @@ class MCUBridgeNode(Node):
         self.get_logger().info(f'Connecting to MCU on {self.port} at {self.baudrate} baud.')
         self.mcu_connected = False;
         self.encoder_total = 0
+        # last command sent, repeated by the keepalive so the link never looks idle
+        self.last_throttle = NEUTRAL_THROTTLE
+        self.last_steering = NEUTRAL_STEERING
 
         # override without editing code, e.g.
         #   ros2 run contols mcu_bridge --ros-args -p sonar_front_enabled:=true
@@ -84,6 +93,11 @@ class MCUBridgeNode(Node):
         self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
         # drain incoming sensor telemetry at 50 Hz
         self.mcu_poll_timer = self.create_timer(0.02, self.poll_mcu)
+        # Nothing is sent to the MCU unless /cmd_vel moves, so without this the
+        # board cannot tell "bridge running" from "usb cable plugged into a dead
+        # laptop" and its status led stays red. Re-sending the last command is
+        # idempotent, the MCU holds that command anyway.
+        self.keepalive_timer = self.create_timer(1.0 / KEEPALIVE_HZ, self.send_keepalive)
         # self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
 
 
@@ -95,6 +109,8 @@ class MCUBridgeNode(Node):
             throttle = int(max(-128, min(127, msg.linear.x * 100)))  # Scale linear.x to -128-127
             steering = max(45, min(135, int(90+ msg.angular.z * 45)))  # Scale angular.z to 45-135 degrees
             self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
+            self.last_throttle = throttle
+            self.last_steering = steering
             if self.mcu_connected:
                 self.mav_tx.gorur_gari_ros2_to_mcu_msg_send(
                     throttle=throttle,
@@ -105,6 +121,18 @@ class MCUBridgeNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error in handle_cmd_vel: {e}')
             return
+
+    def send_keepalive(self):
+        """Repeat the last command so the MCU can see the bridge is still here."""
+        if not self.mcu_connected:
+            return
+        try:
+            self.mav_tx.gorur_gari_ros2_to_mcu_msg_send(
+                throttle=self.last_throttle,
+                steering=self.last_steering
+            )
+        except Exception as e:
+            self.get_logger().error(f'Error sending keepalive: {e}')
 
     def poll_mcu(self):
         if not self.mcu_connected:
