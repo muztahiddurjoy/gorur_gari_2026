@@ -24,6 +24,9 @@ SONAR_ENABLED_DEFAULTS = {'front': False, 'left': False, 'right': False, 'rear':
 # encoder_direction on the wire: 0 = stopped, 1 = forward, 2 = reverse (see firmware/src/main.cpp)
 WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
 
+# heading travels as centidegrees in a uint16_t, published as degrees 0..360
+HEADING_CDEG_PER_DEG = 100.0
+
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
@@ -51,6 +54,7 @@ class MCUBridgeNode(Node):
         self.encoder_speed_pub = self.create_publisher(Float32, 'encoder/speed', 10)
         self.encoder_direction_pub = self.create_publisher(Int8, 'encoder/direction', 10)
         self.steering_angle_pub = self.create_publisher(UInt8, 'steering_angle', 10)
+        self.heading_pub = self.create_publisher(Float32, 'heading', 10)
 
         try:
             self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
@@ -151,6 +155,7 @@ class MCUBridgeNode(Node):
         self.encoder_speed_pub.publish(Float32(data=float(msg.encoder_speed)))
         self.encoder_direction_pub.publish(Int8(data=direction_sign))
         self.steering_angle_pub.publish(UInt8(data=msg.servo))
+        self.heading_pub.publish(Float32(data=msg.heading / HEADING_CDEG_PER_DEG))
 
     def send_heartbeat(self):
         msg = self.master.recv_match(blocking=False)

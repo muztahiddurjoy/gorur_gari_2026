@@ -5,6 +5,7 @@
 
 
 typedef struct __mavlink_gorur_gari_mcu_to_ros2_msg_t {
+ uint16_t heading; /*<  cdeg*/
  uint8_t encoder_count; /*<  count*/
  uint8_t encoder_speed; /*<  speed*/
  uint8_t encoder_direction; /*<  direction*/
@@ -15,13 +16,13 @@ typedef struct __mavlink_gorur_gari_mcu_to_ros2_msg_t {
  uint8_t sonar_4; /*<  cm*/
 } mavlink_gorur_gari_mcu_to_ros2_msg_t;
 
-#define MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN 8
-#define MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_MIN_LEN 8
-#define MAVLINK_MSG_ID_50001_LEN 8
-#define MAVLINK_MSG_ID_50001_MIN_LEN 8
+#define MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN 10
+#define MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_MIN_LEN 10
+#define MAVLINK_MSG_ID_50001_LEN 10
+#define MAVLINK_MSG_ID_50001_MIN_LEN 10
 
-#define MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_CRC 96
-#define MAVLINK_MSG_ID_50001_CRC 96
+#define MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_CRC 77
+#define MAVLINK_MSG_ID_50001_CRC 77
 
 
 
@@ -29,29 +30,31 @@ typedef struct __mavlink_gorur_gari_mcu_to_ros2_msg_t {
 #define MAVLINK_MESSAGE_INFO_gorur_gari_mcu_to_ros2_msg { \
     50001, \
     "gorur_gari_mcu_to_ros2_msg", \
-    8, \
-    {  { "encoder_count", NULL, MAVLINK_TYPE_UINT8_T, 0, 0, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_count) }, \
-         { "encoder_speed", NULL, MAVLINK_TYPE_UINT8_T, 0, 1, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_speed) }, \
-         { "encoder_direction", NULL, MAVLINK_TYPE_UINT8_T, 0, 2, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_direction) }, \
-         { "servo", NULL, MAVLINK_TYPE_UINT8_T, 0, 3, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, servo) }, \
-         { "sonar_1", NULL, MAVLINK_TYPE_UINT8_T, 0, 4, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_1) }, \
-         { "sonar_2", NULL, MAVLINK_TYPE_UINT8_T, 0, 5, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_2) }, \
-         { "sonar_3", NULL, MAVLINK_TYPE_UINT8_T, 0, 6, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_3) }, \
-         { "sonar_4", NULL, MAVLINK_TYPE_UINT8_T, 0, 7, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_4) }, \
+    9, \
+    {  { "encoder_count", NULL, MAVLINK_TYPE_UINT8_T, 0, 2, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_count) }, \
+         { "encoder_speed", NULL, MAVLINK_TYPE_UINT8_T, 0, 3, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_speed) }, \
+         { "encoder_direction", NULL, MAVLINK_TYPE_UINT8_T, 0, 4, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_direction) }, \
+         { "servo", NULL, MAVLINK_TYPE_UINT8_T, 0, 5, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, servo) }, \
+         { "heading", NULL, MAVLINK_TYPE_UINT16_T, 0, 0, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, heading) }, \
+         { "sonar_1", NULL, MAVLINK_TYPE_UINT8_T, 0, 6, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_1) }, \
+         { "sonar_2", NULL, MAVLINK_TYPE_UINT8_T, 0, 7, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_2) }, \
+         { "sonar_3", NULL, MAVLINK_TYPE_UINT8_T, 0, 8, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_3) }, \
+         { "sonar_4", NULL, MAVLINK_TYPE_UINT8_T, 0, 9, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_4) }, \
          } \
 }
 #else
 #define MAVLINK_MESSAGE_INFO_gorur_gari_mcu_to_ros2_msg { \
     "gorur_gari_mcu_to_ros2_msg", \
-    8, \
-    {  { "encoder_count", NULL, MAVLINK_TYPE_UINT8_T, 0, 0, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_count) }, \
-         { "encoder_speed", NULL, MAVLINK_TYPE_UINT8_T, 0, 1, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_speed) }, \
-         { "encoder_direction", NULL, MAVLINK_TYPE_UINT8_T, 0, 2, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_direction) }, \
-         { "servo", NULL, MAVLINK_TYPE_UINT8_T, 0, 3, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, servo) }, \
-         { "sonar_1", NULL, MAVLINK_TYPE_UINT8_T, 0, 4, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_1) }, \
-         { "sonar_2", NULL, MAVLINK_TYPE_UINT8_T, 0, 5, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_2) }, \
-         { "sonar_3", NULL, MAVLINK_TYPE_UINT8_T, 0, 6, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_3) }, \
-         { "sonar_4", NULL, MAVLINK_TYPE_UINT8_T, 0, 7, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_4) }, \
+    9, \
+    {  { "encoder_count", NULL, MAVLINK_TYPE_UINT8_T, 0, 2, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_count) }, \
+         { "encoder_speed", NULL, MAVLINK_TYPE_UINT8_T, 0, 3, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_speed) }, \
+         { "encoder_direction", NULL, MAVLINK_TYPE_UINT8_T, 0, 4, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, encoder_direction) }, \
+         { "servo", NULL, MAVLINK_TYPE_UINT8_T, 0, 5, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, servo) }, \
+         { "heading", NULL, MAVLINK_TYPE_UINT16_T, 0, 0, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, heading) }, \
+         { "sonar_1", NULL, MAVLINK_TYPE_UINT8_T, 0, 6, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_1) }, \
+         { "sonar_2", NULL, MAVLINK_TYPE_UINT8_T, 0, 7, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_2) }, \
+         { "sonar_3", NULL, MAVLINK_TYPE_UINT8_T, 0, 8, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_3) }, \
+         { "sonar_4", NULL, MAVLINK_TYPE_UINT8_T, 0, 9, offsetof(mavlink_gorur_gari_mcu_to_ros2_msg_t, sonar_4) }, \
          } \
 }
 #endif
@@ -66,6 +69,7 @@ typedef struct __mavlink_gorur_gari_mcu_to_ros2_msg_t {
  * @param encoder_speed  speed
  * @param encoder_direction  direction
  * @param servo  degree
+ * @param heading  cdeg
  * @param sonar_1  cm
  * @param sonar_2  cm
  * @param sonar_3  cm
@@ -73,22 +77,24 @@ typedef struct __mavlink_gorur_gari_mcu_to_ros2_msg_t {
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
-                               uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
+                               uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint16_t heading, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN];
-    _mav_put_uint8_t(buf, 0, encoder_count);
-    _mav_put_uint8_t(buf, 1, encoder_speed);
-    _mav_put_uint8_t(buf, 2, encoder_direction);
-    _mav_put_uint8_t(buf, 3, servo);
-    _mav_put_uint8_t(buf, 4, sonar_1);
-    _mav_put_uint8_t(buf, 5, sonar_2);
-    _mav_put_uint8_t(buf, 6, sonar_3);
-    _mav_put_uint8_t(buf, 7, sonar_4);
+    _mav_put_uint16_t(buf, 0, heading);
+    _mav_put_uint8_t(buf, 2, encoder_count);
+    _mav_put_uint8_t(buf, 3, encoder_speed);
+    _mav_put_uint8_t(buf, 4, encoder_direction);
+    _mav_put_uint8_t(buf, 5, servo);
+    _mav_put_uint8_t(buf, 6, sonar_1);
+    _mav_put_uint8_t(buf, 7, sonar_2);
+    _mav_put_uint8_t(buf, 8, sonar_3);
+    _mav_put_uint8_t(buf, 9, sonar_4);
 
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), buf, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN);
 #else
     mavlink_gorur_gari_mcu_to_ros2_msg_t packet;
+    packet.heading = heading;
     packet.encoder_count = encoder_count;
     packet.encoder_speed = encoder_speed;
     packet.encoder_direction = encoder_direction;
@@ -116,6 +122,7 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(uint8_t syste
  * @param encoder_speed  speed
  * @param encoder_direction  direction
  * @param servo  degree
+ * @param heading  cdeg
  * @param sonar_1  cm
  * @param sonar_2  cm
  * @param sonar_3  cm
@@ -123,22 +130,24 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(uint8_t syste
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_status(uint8_t system_id, uint8_t component_id, mavlink_status_t *_status, mavlink_message_t* msg,
-                               uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
+                               uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint16_t heading, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN];
-    _mav_put_uint8_t(buf, 0, encoder_count);
-    _mav_put_uint8_t(buf, 1, encoder_speed);
-    _mav_put_uint8_t(buf, 2, encoder_direction);
-    _mav_put_uint8_t(buf, 3, servo);
-    _mav_put_uint8_t(buf, 4, sonar_1);
-    _mav_put_uint8_t(buf, 5, sonar_2);
-    _mav_put_uint8_t(buf, 6, sonar_3);
-    _mav_put_uint8_t(buf, 7, sonar_4);
+    _mav_put_uint16_t(buf, 0, heading);
+    _mav_put_uint8_t(buf, 2, encoder_count);
+    _mav_put_uint8_t(buf, 3, encoder_speed);
+    _mav_put_uint8_t(buf, 4, encoder_direction);
+    _mav_put_uint8_t(buf, 5, servo);
+    _mav_put_uint8_t(buf, 6, sonar_1);
+    _mav_put_uint8_t(buf, 7, sonar_2);
+    _mav_put_uint8_t(buf, 8, sonar_3);
+    _mav_put_uint8_t(buf, 9, sonar_4);
 
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), buf, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN);
 #else
     mavlink_gorur_gari_mcu_to_ros2_msg_t packet;
+    packet.heading = heading;
     packet.encoder_count = encoder_count;
     packet.encoder_speed = encoder_speed;
     packet.encoder_direction = encoder_direction;
@@ -169,6 +178,7 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_status(uint8_
  * @param encoder_speed  speed
  * @param encoder_direction  direction
  * @param servo  degree
+ * @param heading  cdeg
  * @param sonar_1  cm
  * @param sonar_2  cm
  * @param sonar_3  cm
@@ -177,22 +187,24 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_status(uint8_
  */
 static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_chan(uint8_t system_id, uint8_t component_id, uint8_t chan,
                                mavlink_message_t* msg,
-                                   uint8_t encoder_count,uint8_t encoder_speed,uint8_t encoder_direction,uint8_t servo,uint8_t sonar_1,uint8_t sonar_2,uint8_t sonar_3,uint8_t sonar_4)
+                                   uint8_t encoder_count,uint8_t encoder_speed,uint8_t encoder_direction,uint8_t servo,uint16_t heading,uint8_t sonar_1,uint8_t sonar_2,uint8_t sonar_3,uint8_t sonar_4)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN];
-    _mav_put_uint8_t(buf, 0, encoder_count);
-    _mav_put_uint8_t(buf, 1, encoder_speed);
-    _mav_put_uint8_t(buf, 2, encoder_direction);
-    _mav_put_uint8_t(buf, 3, servo);
-    _mav_put_uint8_t(buf, 4, sonar_1);
-    _mav_put_uint8_t(buf, 5, sonar_2);
-    _mav_put_uint8_t(buf, 6, sonar_3);
-    _mav_put_uint8_t(buf, 7, sonar_4);
+    _mav_put_uint16_t(buf, 0, heading);
+    _mav_put_uint8_t(buf, 2, encoder_count);
+    _mav_put_uint8_t(buf, 3, encoder_speed);
+    _mav_put_uint8_t(buf, 4, encoder_direction);
+    _mav_put_uint8_t(buf, 5, servo);
+    _mav_put_uint8_t(buf, 6, sonar_1);
+    _mav_put_uint8_t(buf, 7, sonar_2);
+    _mav_put_uint8_t(buf, 8, sonar_3);
+    _mav_put_uint8_t(buf, 9, sonar_4);
 
         memcpy(_MAV_PAYLOAD_NON_CONST(msg), buf, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN);
 #else
     mavlink_gorur_gari_mcu_to_ros2_msg_t packet;
+    packet.heading = heading;
     packet.encoder_count = encoder_count;
     packet.encoder_speed = encoder_speed;
     packet.encoder_direction = encoder_direction;
@@ -219,7 +231,7 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_chan(uint8_t 
  */
 static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_encode(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg, const mavlink_gorur_gari_mcu_to_ros2_msg_t* gorur_gari_mcu_to_ros2_msg)
 {
-    return mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, msg, gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
+    return mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, msg, gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->heading, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
 }
 
 /**
@@ -233,7 +245,7 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_encode(uint8_t sys
  */
 static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_encode_chan(uint8_t system_id, uint8_t component_id, uint8_t chan, mavlink_message_t* msg, const mavlink_gorur_gari_mcu_to_ros2_msg_t* gorur_gari_mcu_to_ros2_msg)
 {
-    return mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_chan(system_id, component_id, chan, msg, gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
+    return mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_chan(system_id, component_id, chan, msg, gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->heading, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
 }
 
 /**
@@ -247,7 +259,7 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_encode_chan(uint8_
  */
 static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_encode_status(uint8_t system_id, uint8_t component_id, mavlink_status_t* _status, mavlink_message_t* msg, const mavlink_gorur_gari_mcu_to_ros2_msg_t* gorur_gari_mcu_to_ros2_msg)
 {
-    return mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_status(system_id, component_id, _status, msg,  gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
+    return mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_status(system_id, component_id, _status, msg,  gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->heading, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
 }
 
 /**
@@ -258,6 +270,7 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_encode_status(uint
  * @param encoder_speed  speed
  * @param encoder_direction  direction
  * @param servo  degree
+ * @param heading  cdeg
  * @param sonar_1  cm
  * @param sonar_2  cm
  * @param sonar_3  cm
@@ -265,22 +278,24 @@ static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_encode_status(uint
  */
 #ifdef MAVLINK_USE_CONVENIENCE_FUNCTIONS
 
-static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send(mavlink_channel_t chan, uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
+static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send(mavlink_channel_t chan, uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint16_t heading, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char buf[MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN];
-    _mav_put_uint8_t(buf, 0, encoder_count);
-    _mav_put_uint8_t(buf, 1, encoder_speed);
-    _mav_put_uint8_t(buf, 2, encoder_direction);
-    _mav_put_uint8_t(buf, 3, servo);
-    _mav_put_uint8_t(buf, 4, sonar_1);
-    _mav_put_uint8_t(buf, 5, sonar_2);
-    _mav_put_uint8_t(buf, 6, sonar_3);
-    _mav_put_uint8_t(buf, 7, sonar_4);
+    _mav_put_uint16_t(buf, 0, heading);
+    _mav_put_uint8_t(buf, 2, encoder_count);
+    _mav_put_uint8_t(buf, 3, encoder_speed);
+    _mav_put_uint8_t(buf, 4, encoder_direction);
+    _mav_put_uint8_t(buf, 5, servo);
+    _mav_put_uint8_t(buf, 6, sonar_1);
+    _mav_put_uint8_t(buf, 7, sonar_2);
+    _mav_put_uint8_t(buf, 8, sonar_3);
+    _mav_put_uint8_t(buf, 9, sonar_4);
 
     _mav_finalize_message_chan_send(chan, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg, buf, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_MIN_LEN, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_CRC);
 #else
     mavlink_gorur_gari_mcu_to_ros2_msg_t packet;
+    packet.heading = heading;
     packet.encoder_count = encoder_count;
     packet.encoder_speed = encoder_speed;
     packet.encoder_direction = encoder_direction;
@@ -302,7 +317,7 @@ static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send(mavlink_channel_t
 static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send_struct(mavlink_channel_t chan, const mavlink_gorur_gari_mcu_to_ros2_msg_t* gorur_gari_mcu_to_ros2_msg)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
-    mavlink_msg_gorur_gari_mcu_to_ros2_msg_send(chan, gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
+    mavlink_msg_gorur_gari_mcu_to_ros2_msg_send(chan, gorur_gari_mcu_to_ros2_msg->encoder_count, gorur_gari_mcu_to_ros2_msg->encoder_speed, gorur_gari_mcu_to_ros2_msg->encoder_direction, gorur_gari_mcu_to_ros2_msg->servo, gorur_gari_mcu_to_ros2_msg->heading, gorur_gari_mcu_to_ros2_msg->sonar_1, gorur_gari_mcu_to_ros2_msg->sonar_2, gorur_gari_mcu_to_ros2_msg->sonar_3, gorur_gari_mcu_to_ros2_msg->sonar_4);
 #else
     _mav_finalize_message_chan_send(chan, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg, (const char *)gorur_gari_mcu_to_ros2_msg, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_MIN_LEN, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_CRC);
 #endif
@@ -316,22 +331,24 @@ static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send_struct(mavlink_ch
   is usually the receive buffer for the channel, and allows a reply to an
   incoming message with minimum stack space usage.
  */
-static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send_buf(mavlink_message_t *msgbuf, mavlink_channel_t chan,  uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
+static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send_buf(mavlink_message_t *msgbuf, mavlink_channel_t chan,  uint8_t encoder_count, uint8_t encoder_speed, uint8_t encoder_direction, uint8_t servo, uint16_t heading, uint8_t sonar_1, uint8_t sonar_2, uint8_t sonar_3, uint8_t sonar_4)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
     char *buf = (char *)msgbuf;
-    _mav_put_uint8_t(buf, 0, encoder_count);
-    _mav_put_uint8_t(buf, 1, encoder_speed);
-    _mav_put_uint8_t(buf, 2, encoder_direction);
-    _mav_put_uint8_t(buf, 3, servo);
-    _mav_put_uint8_t(buf, 4, sonar_1);
-    _mav_put_uint8_t(buf, 5, sonar_2);
-    _mav_put_uint8_t(buf, 6, sonar_3);
-    _mav_put_uint8_t(buf, 7, sonar_4);
+    _mav_put_uint16_t(buf, 0, heading);
+    _mav_put_uint8_t(buf, 2, encoder_count);
+    _mav_put_uint8_t(buf, 3, encoder_speed);
+    _mav_put_uint8_t(buf, 4, encoder_direction);
+    _mav_put_uint8_t(buf, 5, servo);
+    _mav_put_uint8_t(buf, 6, sonar_1);
+    _mav_put_uint8_t(buf, 7, sonar_2);
+    _mav_put_uint8_t(buf, 8, sonar_3);
+    _mav_put_uint8_t(buf, 9, sonar_4);
 
     _mav_finalize_message_chan_send(chan, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg, buf, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_MIN_LEN, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_LEN, MAVLINK_MSG_ID_gorur_gari_mcu_to_ros2_msg_CRC);
 #else
     mavlink_gorur_gari_mcu_to_ros2_msg_t *packet = (mavlink_gorur_gari_mcu_to_ros2_msg_t *)msgbuf;
+    packet->heading = heading;
     packet->encoder_count = encoder_count;
     packet->encoder_speed = encoder_speed;
     packet->encoder_direction = encoder_direction;
@@ -358,7 +375,7 @@ static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_send_buf(mavlink_messa
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_count(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  0);
+    return _MAV_RETURN_uint8_t(msg,  2);
 }
 
 /**
@@ -368,7 +385,7 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_count(c
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_speed(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  1);
+    return _MAV_RETURN_uint8_t(msg,  3);
 }
 
 /**
@@ -378,7 +395,7 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_speed(c
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_direction(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  2);
+    return _MAV_RETURN_uint8_t(msg,  4);
 }
 
 /**
@@ -388,7 +405,17 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_directi
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_servo(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  3);
+    return _MAV_RETURN_uint8_t(msg,  5);
+}
+
+/**
+ * @brief Get field heading from gorur_gari_mcu_to_ros2_msg message
+ *
+ * @return  cdeg
+ */
+static inline uint16_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_heading(const mavlink_message_t* msg)
+{
+    return _MAV_RETURN_uint16_t(msg,  0);
 }
 
 /**
@@ -398,7 +425,7 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_servo(const mav
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_1(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  4);
+    return _MAV_RETURN_uint8_t(msg,  6);
 }
 
 /**
@@ -408,7 +435,7 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_1(const m
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_2(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  5);
+    return _MAV_RETURN_uint8_t(msg,  7);
 }
 
 /**
@@ -418,7 +445,7 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_2(const m
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_3(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  6);
+    return _MAV_RETURN_uint8_t(msg,  8);
 }
 
 /**
@@ -428,7 +455,7 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_3(const m
  */
 static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_4(const mavlink_message_t* msg)
 {
-    return _MAV_RETURN_uint8_t(msg,  7);
+    return _MAV_RETURN_uint8_t(msg,  9);
 }
 
 /**
@@ -440,6 +467,7 @@ static inline uint8_t mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_sonar_4(const m
 static inline void mavlink_msg_gorur_gari_mcu_to_ros2_msg_decode(const mavlink_message_t* msg, mavlink_gorur_gari_mcu_to_ros2_msg_t* gorur_gari_mcu_to_ros2_msg)
 {
 #if MAVLINK_NEED_BYTE_SWAP || !MAVLINK_ALIGNED_FIELDS
+    gorur_gari_mcu_to_ros2_msg->heading = mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_heading(msg);
     gorur_gari_mcu_to_ros2_msg->encoder_count = mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_count(msg);
     gorur_gari_mcu_to_ros2_msg->encoder_speed = mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_speed(msg);
     gorur_gari_mcu_to_ros2_msg->encoder_direction = mavlink_msg_gorur_gari_mcu_to_ros2_msg_get_encoder_direction(msg);

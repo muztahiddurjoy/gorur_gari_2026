@@ -37,10 +37,11 @@ static void mavlink_test_gorur_gari_mcu_to_ros2_msg(uint8_t system_id, uint8_t c
         uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
         uint16_t i;
     mavlink_gorur_gari_mcu_to_ros2_msg_t packet_in = {
-        5,72,139,206,17,84,151,218
+        17235,139,206,17,84,151,218,29,96
     };
     mavlink_gorur_gari_mcu_to_ros2_msg_t packet1, packet2;
         memset(&packet1, 0, sizeof(packet1));
+        packet1.heading = packet_in.heading;
         packet1.encoder_count = packet_in.encoder_count;
         packet1.encoder_speed = packet_in.encoder_speed;
         packet1.encoder_direction = packet_in.encoder_direction;
@@ -63,12 +64,12 @@ static void mavlink_test_gorur_gari_mcu_to_ros2_msg(uint8_t system_id, uint8_t c
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
         memset(&packet2, 0, sizeof(packet2));
-    mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, &msg , packet1.encoder_count , packet1.encoder_speed , packet1.encoder_direction , packet1.servo , packet1.sonar_1 , packet1.sonar_2 , packet1.sonar_3 , packet1.sonar_4 );
+    mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, &msg , packet1.encoder_count , packet1.encoder_speed , packet1.encoder_direction , packet1.servo , packet1.heading , packet1.sonar_1 , packet1.sonar_2 , packet1.sonar_3 , packet1.sonar_4 );
     mavlink_msg_gorur_gari_mcu_to_ros2_msg_decode(&msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
         memset(&packet2, 0, sizeof(packet2));
-    mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_chan(system_id, component_id, MAVLINK_COMM_0, &msg , packet1.encoder_count , packet1.encoder_speed , packet1.encoder_direction , packet1.servo , packet1.sonar_1 , packet1.sonar_2 , packet1.sonar_3 , packet1.sonar_4 );
+    mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack_chan(system_id, component_id, MAVLINK_COMM_0, &msg , packet1.encoder_count , packet1.encoder_speed , packet1.encoder_direction , packet1.servo , packet1.heading , packet1.sonar_1 , packet1.sonar_2 , packet1.sonar_3 , packet1.sonar_4 );
     mavlink_msg_gorur_gari_mcu_to_ros2_msg_decode(&msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 
@@ -81,7 +82,7 @@ static void mavlink_test_gorur_gari_mcu_to_ros2_msg(uint8_t system_id, uint8_t c
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
         
         memset(&packet2, 0, sizeof(packet2));
-    mavlink_msg_gorur_gari_mcu_to_ros2_msg_send(MAVLINK_COMM_1 , packet1.encoder_count , packet1.encoder_speed , packet1.encoder_direction , packet1.servo , packet1.sonar_1 , packet1.sonar_2 , packet1.sonar_3 , packet1.sonar_4 );
+    mavlink_msg_gorur_gari_mcu_to_ros2_msg_send(MAVLINK_COMM_1 , packet1.encoder_count , packet1.encoder_speed , packet1.encoder_direction , packet1.servo , packet1.heading , packet1.sonar_1 , packet1.sonar_2 , packet1.sonar_3 , packet1.sonar_4 );
     mavlink_msg_gorur_gari_mcu_to_ros2_msg_decode(last_msg, &packet2);
         MAVLINK_ASSERT(memcmp(&packet1, &packet2, sizeof(packet1)) == 0);
 

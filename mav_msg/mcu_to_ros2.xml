@@ -8,6 +8,7 @@
             <field type="uint8_t" name="encoder_speed">speed</field>
             <field type="uint8_t" name="encoder_direction">direction</field>
             <field type="uint8_t" name="servo">degree</field>
+            <field type="uint16_t" name="heading">cdeg</field>
 
             <field type="uint8_t" name="sonar_1">cm</field>
             <field type="uint8_t" name="sonar_2">cm</field>

@@ -124,11 +124,13 @@ void setup(){
 void loop(){
      encoder.update();
 
+     float headingDeg = 0.0f;
      if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
         shared.speedText = "Speed: " + String(motor.speed());
         shared.encoderText = "Encoder: " + String(encoder.count());
         shared.steeringText = "Steering: " + String(steer.getAngle());
-        // shared.heading is written by the I2C task, we just read it if needed
+        // written by the I2C task on the other core, so only read it in here
+        headingDeg = shared.heading;
         xSemaphoreGive(sharedMutex);
     }
 
@@ -148,7 +150,7 @@ void loop(){
     }
     sonarIndex = (sonarIndex + 1) % 4;
 
-    // --- Send encoder/steering/sonar telemetry to ROS2 ---
+    // --- Send encoder/steering/heading/sonar telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
     static long lastSentEncoderCount = 0;
     unsigned long nowMs = millis();
@@ -169,11 +171,17 @@ void loop(){
         if (encoder.direction() > 0) encoderDirectionField = 1;      // forward
         else if (encoder.direction() < 0) encoderDirectionField = 2; // reverse
 
+        // yaw goes out in centidegrees so the whole 0..360 turn fits a uint16_t
+        // with room to spare. wrap first, a stale imu read can sit outside it.
+        float yaw = fmodf(headingDeg, 360.0f);
+        if (yaw < 0.0f) yaw += 360.0f;
+        uint16_t headingField = (uint16_t)constrain(lroundf(yaw * 100.0f), 0L, 35999L);
+
         mavlink_message_t txMsg;
         uint8_t txBuf[MAVLINK_MAX_PACKET_LEN];
         mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, &txMsg,
             encoderCountField, encoderSpeedField, encoderDirectionField, steer.getAngle(),
-            sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3]);
+            headingField, sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3]);
         uint16_t txLen = mavlink_msg_to_send_buffer(txBuf, &txMsg);
         Serial.write(txBuf, txLen);
     }
