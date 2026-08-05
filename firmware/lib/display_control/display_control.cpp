@@ -1,12 +1,13 @@
 #include "display_control.h"
 #include "pins.h"
+#include "debug_serial.h"
 
 DisplayController::DisplayController(): oled(nullptr){}
 
 bool DisplayController::begin() {
     oled = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
     if (!oled->begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
-        Serial.println("SSD1306 allocation failed");
+        DEBUG_SERIAL.println("SSD1306 allocation failed");
         return false;
     }
     oled->clearDisplay();

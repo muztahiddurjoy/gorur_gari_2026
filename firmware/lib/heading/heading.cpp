@@ -1,4 +1,5 @@
 #include "heading.h"
+#include "debug_serial.h"
 
 
 Heading::Heading(): bno(nullptr), heading(0.0f){}
@@ -6,12 +7,12 @@ Heading::Heading(): bno(nullptr), heading(0.0f){}
 bool Heading::begin() {
     bno = new Adafruit_BNO055(55, BNO055_ADDRESS);
     if (!bno->begin()) {
-        Serial.println("BNO055 NOT FOUND!");
+        DEBUG_SERIAL.println("BNO055 NOT FOUND!");
         return false;
     }
     delay(1000);
     // bno->setExtCrystalUse(true);
-    Serial.println("BNO055 Ready");
+    DEBUG_SERIAL.println("BNO055 Ready");
     return true;
 }
 

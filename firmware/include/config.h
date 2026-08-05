@@ -19,4 +19,14 @@ const int ENCODER_SAMPLE_INTERVAL_MS = 50;
 const uint8_t OLED_ADDRESS = 0x3C; // I2C address for the OLED display
 const uint8_t BNO055_ADDRESS = 0x29; // I2C address for the BNO055 IMU
 
+//sonar
+// 255 cm is the furthest the uint8_t "cm" wire field can carry, and that round
+// trip is 255*58 = 14790 us. Waiting longer than that only buys readings we
+// would clamp to 255 anyway, while every timed out sonar stalls loop() for the
+// full duration and delays the next throttle/steering command.
+const unsigned long SONAR_ECHO_TIMEOUT_US = 15000;
+
+//ROS2 telemetry
+const unsigned long SENSOR_TX_INTERVAL_MS = 50; // how often the mcu_to_ros2 sensor message is sent
+
 #endif
