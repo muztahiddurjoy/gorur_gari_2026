@@ -12,7 +12,7 @@ class JoyToCmdVel(Node):
         self.linear_axis  = 1      # index of forward/backward axis
         self.angular_axis = 3      # index of rotation axis
         self.linear_scale  = 3   # max speed (m/s)
-        self.angular_scale = 40   # max rotation (rad/s)
+        self.angular_scale = 3   # max rotation (rad/s)
         # =======================================
 
         self.subscription = self.create_subscription(

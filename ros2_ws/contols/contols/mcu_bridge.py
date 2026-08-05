@@ -9,10 +9,17 @@ from sensor_msgs.msg import Range
 from std_msgs.msg import Int32, Int8, UInt8, Float32
 
 # sonar_1..4 on the wire map to these sensors in this order, see firmware/pin-map.md
+SONAR_NAMES = ['front', 'left', 'right', 'rear']
 SONAR_FRAME_IDS = ['sonar_front_link', 'sonar_left_link', 'sonar_right_link', 'sonar_rear_link']
 SONAR_TOPICS = ['sonar/front', 'sonar/left', 'sonar/right', 'sonar/rear']
 SONAR_MAX_RANGE_M = 2.55  # wire field is uint8_t cm, capped at 255
 SONAR_FIELD_OF_VIEW_RAD = 0.26  # ~15 degrees, typical HC-SR04 beam angle
+SONAR_NO_READING_CM = 255  # disabled sonar, or no echo before the timeout
+
+# a sonar that is not plugged in gets no publisher and is never published. keep
+# these defaults in step with the SONAR_*_ENABLED flags in firmware/include/config.h
+# (the firmware decides what is actually measured, this decides what is exposed).
+SONAR_ENABLED_DEFAULTS = {'front': False, 'left': False, 'right': False, 'rear': False}
 
 # encoder_direction on the wire: 0 = stopped, 1 = forward, 2 = reverse (see firmware/src/main.cpp)
 WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
@@ -26,7 +33,20 @@ class MCUBridgeNode(Node):
         self.mcu_connected = False;
         self.encoder_total = 0
 
-        self.sonar_pubs = [self.create_publisher(Range, topic, 10) for topic in SONAR_TOPICS]
+        # override without editing code, e.g.
+        #   ros2 run contols mcu_bridge --ros-args -p sonar_front_enabled:=true
+        self.sonar_enabled = []
+        for name in SONAR_NAMES:
+            param = f'sonar_{name}_enabled'
+            self.declare_parameter(param, SONAR_ENABLED_DEFAULTS[name])
+            self.sonar_enabled.append(bool(self.get_parameter(param).value))
+
+        self.sonar_pubs = [
+            self.create_publisher(Range, topic, 10) if on else None
+            for topic, on in zip(SONAR_TOPICS, self.sonar_enabled)
+        ]
+        live = [n for n, on in zip(SONAR_NAMES, self.sonar_enabled) if on]
+        self.get_logger().info(f'Sonars enabled: {", ".join(live) if live else "none"}')
         self.encoder_count_pub = self.create_publisher(Int32, 'encoder/count', 10)
         self.encoder_speed_pub = self.create_publisher(Float32, 'encoder/speed', 10)
         self.encoder_direction_pub = self.create_publisher(Int8, 'encoder/direction', 10)
@@ -107,6 +127,9 @@ class MCUBridgeNode(Node):
             self.sonar_pubs,
             SONAR_FRAME_IDS,
         ):
+            if topic_pub is None:
+                continue  # sonar not plugged in, nothing to report
+
             range_msg = Range()
             range_msg.header.stamp = now
             range_msg.header.frame_id = frame_id
@@ -115,7 +138,10 @@ class MCUBridgeNode(Node):
             range_msg.min_range = 0.02
             range_msg.max_range = SONAR_MAX_RANGE_M
             # 255 means "no echo within timeout" -> report max range, not a false reading
-            range_msg.range = SONAR_MAX_RANGE_M if cm >= 255 else cm / 100.0
+            if cm >= SONAR_NO_READING_CM:
+                range_msg.range = SONAR_MAX_RANGE_M
+            else:
+                range_msg.range = cm / 100.0
             topic_pub.publish(range_msg)
 
         direction_sign = WIRE_DIRECTION_TO_SIGN.get(msg.encoder_direction, 0)

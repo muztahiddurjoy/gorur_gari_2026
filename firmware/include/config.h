@@ -20,6 +20,15 @@ const uint8_t OLED_ADDRESS = 0x3C; // I2C address for the OLED display
 const uint8_t BNO055_ADDRESS = 0x29; // I2C address for the BNO055 IMU
 
 //sonar
+// flip one of these to true once that sonar is physically wired up. a disabled
+// sonar never has its pins configured and is never pulsed, so it costs nothing
+// and always reports SONAR_NO_READING_CM. keep these in step with the
+// sonar_*_enabled parameters in ros2_ws/contols/contols/mcu_bridge.py.
+const bool SONAR_FRONT_ENABLED = false;
+const bool SONAR_LEFT_ENABLED = false;
+const bool SONAR_RIGHT_ENABLED = false;
+const bool SONAR_REAR_ENABLED = false;
+
 // 255 cm is the furthest the uint8_t "cm" wire field can carry, and that round
 // trip is 255*58 = 14790 us. Waiting longer than that only buys readings we
 // would clamp to 255 anyway, while every timed out sonar stalls loop() for the

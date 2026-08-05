@@ -26,10 +26,10 @@
 SteeringController steer(STEERING_SERVO_PIN);
 MotorController motor(PWM_THROTTLE_PIN, IN_A, IN_B, STANDBY_PIN);
 EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_COUNTS_PER_REV);
-SonarReader sonarFront(SONAR_FRONT_TRIG_PIN, SONAR_FRONT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US);
-SonarReader sonarLeft(SONAR_LEFT_TRIG_PIN, SONAR_LEFT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US);
-SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US);
-SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US);
+SonarReader sonarFront(SONAR_FRONT_TRIG_PIN, SONAR_FRONT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_FRONT_ENABLED);
+SonarReader sonarLeft(SONAR_LEFT_TRIG_PIN, SONAR_LEFT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_LEFT_ENABLED);
+SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_RIGHT_ENABLED);
+SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_REAR_ENABLED);
 // Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
@@ -133,9 +133,12 @@ void loop(){
     }
 
 
-    // --- Sonars: one sensor per loop() call so a pulseIn timeout never
-    // blocks the loop for more than ~25 ms at a time ---
-    static uint8_t sonarCm[4] = {255, 255, 255, 255};
+    // --- Sonars: one sensor per loop() call so a pulseIn timeout never blocks
+    // the loop for more than SONAR_ECHO_TIMEOUT_US at a time. readCm() returns
+    // straight away for a sonar disabled in config.h, so unplugged sensors cost
+    // nothing and simply keep reporting SONAR_NO_READING_CM ---
+    static uint8_t sonarCm[4] = {SONAR_NO_READING_CM, SONAR_NO_READING_CM,
+                                 SONAR_NO_READING_CM, SONAR_NO_READING_CM};
     static uint8_t sonarIndex = 0;
     switch (sonarIndex) {
         case 0: sonarCm[0] = sonarFront.readCm(); break; // sonar_1
