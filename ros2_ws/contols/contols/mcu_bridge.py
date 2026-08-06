@@ -30,7 +30,7 @@ HEADING_CDEG_PER_DEG = 100.0
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
-        self.port = '/dev/ttyACM0'
+        self.port = '/dev/esp32_s3'
         self.baudrate = 115200
         self.get_logger().info(f'Connecting to MCU on {self.port} at {self.baudrate} baud.')
         self.mcu_connected = False;
