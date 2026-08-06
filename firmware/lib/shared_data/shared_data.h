@@ -12,6 +12,7 @@ struct SharedData {
     String encoderText;
     String steeringText;
     String yawText;          // to be filled by I2C task with heading
+    String vel_data;
 
     // Sensor values (written by I2C task, read by control task if needed)
     float heading;           // yaw angle in degrees

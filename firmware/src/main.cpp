@@ -78,11 +78,12 @@ void i2cTask(void *pvParameters) {
             lastDisplayUpdate = now;
 
             // Read display strings from shared struct
-            String speed, encoder, steering;
+            String speed, encoder, steering, velData;
             if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
                 speed = shared.speedText;
                 encoder = shared.encoderText;
                 steering = shared.steeringText;
+                velData = shared.vel_data;
                 // Optionally read heading to display as well:
                 // String yawText = "Yaw: " + String(shared.heading);
                 xSemaphoreGive(sharedMutex);
@@ -94,6 +95,7 @@ void i2cTask(void *pvParameters) {
             display.displayText(encoder, 0, 10, 1);
             display.displayText(steering, 0, 20, 1);
             display.displayText("Yaw: " + String(shared.heading), 0, 30, 1);
+            display.displayText(velData, 0, 40, 1);
             display.updateScreen();    // single I2C transfer
         }
 
@@ -186,7 +188,7 @@ void loop(){
         Serial.write(txBuf, txLen);
     }
 
-    if(Serial.available()>0){
+    while(Serial.available()>0){
         uint8_t c = Serial.read();
         
         mavlink_message_t received_msg;
@@ -198,6 +200,11 @@ void loop(){
                 motor.to(throttle);
                 uint8_t steering = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_steering(&received_msg);
                 steer.to(steering);
+
+                if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
+                    shared.vel_data = "cmd: x: " + String(throttle) + " z: " + String(steering);
+                    xSemaphoreGive(sharedMutex);
+                }
             }
         }
     }
