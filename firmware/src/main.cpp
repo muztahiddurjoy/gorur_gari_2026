@@ -3,7 +3,6 @@
 #include "motor_control.h"
 #include "encoder_reader.h"
 #include "sonar_reader.h"
-#include "status_led.h"
 #include "Wire.h"
 #include "display_control.h"
 #include "heading.h"
@@ -31,7 +30,6 @@ SonarReader sonarFront(SONAR_FRONT_TRIG_PIN, SONAR_FRONT_ECHO_PIN, SONAR_ECHO_TI
 SonarReader sonarLeft(SONAR_LEFT_TRIG_PIN, SONAR_LEFT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_LEFT_ENABLED);
 SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_RIGHT_ENABLED);
 SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_REAR_ENABLED);
-StatusLed statusLed(STATUS_LED_PIN, STATUS_LED_BRIGHTNESS);
 // Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
@@ -105,11 +103,6 @@ void i2cTask(void *pvParameters) {
 
 
 void setup(){
-    // first thing that happens, so the board shows "up but nothing attached"
-    // for the whole of the rest of the boot
-    statusLed.begin();
-    statusLed.green();
-
     Serial.begin(115200);        // native USB CDC, binary MAVLink only
     DEBUG_SERIAL.begin(DEBUG_SERIAL_BAUD); // UART0, human readable logs
     steer.begin(SERVO_FREQUENCY_HZ);
@@ -161,16 +154,6 @@ void loop(){
     static unsigned long lastSensorTxMs = 0;
     static long lastSentEncoderCount = 0;
     unsigned long nowMs = millis();
-
-    // --- Link indicator: green while the serial port is connected, red once
-    // it's not ---
-    static unsigned long lastLinkCheckMs = 0;
-    if (nowMs - lastLinkCheckMs >= LINK_CHECK_INTERVAL_MS) {
-        lastLinkCheckMs = nowMs;
-        if (Serial) statusLed.green();
-        else statusLed.green();
-    }
-
     if (nowMs - lastSensorTxMs >= SENSOR_TX_INTERVAL_MS) {
         lastSensorTxMs = nowMs;
 

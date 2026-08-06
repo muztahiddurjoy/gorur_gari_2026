@@ -35,10 +35,6 @@ const bool SONAR_REAR_ENABLED = false;
 // full duration and delays the next throttle/steering command.
 const unsigned long SONAR_ECHO_TIMEOUT_US = 15000;
 
-//status led
-const uint8_t STATUS_LED_BRIGHTNESS = 32; // out of 255, the ws2812 is glaring at full scale
-const unsigned long LINK_CHECK_INTERVAL_MS = 100; // how often `if (Serial)` is re-checked
-
 //ROS2 telemetry
 const unsigned long SENSOR_TX_INTERVAL_MS = 50; // how often the mcu_to_ros2 sensor message is sent
 
