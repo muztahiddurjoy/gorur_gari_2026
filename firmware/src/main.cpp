@@ -123,6 +123,7 @@ void setup(){
     xTaskCreatePinnedToCore(i2cTask,"I2C Task", 8192, NULL, 1, &i2cTaskHandle, 0);
 }
 
+
 void loop(){
      encoder.update();
 
