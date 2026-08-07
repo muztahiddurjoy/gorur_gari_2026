@@ -24,9 +24,6 @@ SONAR_ENABLED_DEFAULTS = {'front': False, 'left': False, 'right': False, 'rear':
 # encoder_direction on the wire: 0 = stopped, 1 = forward, 2 = reverse (see firmware/src/main.cpp)
 WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
 
-# heading travels as centidegrees in a uint16_t, published as degrees 0..360
-HEADING_CDEG_PER_DEG = 100.0
-
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
@@ -34,7 +31,6 @@ class MCUBridgeNode(Node):
         self.baudrate = 115200
         self.get_logger().info(f'Connecting to MCU on {self.port} at {self.baudrate} baud.')
         self.mcu_connected = False;
-        self.encoder_total = 0
 
         # override without editing code, e.g.
         #   ros2 run contols mcu_bridge --ros-args -p sonar_front_enabled:=true
@@ -149,13 +145,14 @@ class MCUBridgeNode(Node):
             topic_pub.publish(range_msg)
 
         direction_sign = WIRE_DIRECTION_TO_SIGN.get(msg.encoder_direction, 0)
-        self.encoder_total += direction_sign * msg.encoder_count
 
-        self.encoder_count_pub.publish(Int32(data=self.encoder_total))
+        # encoder_count and heading now travel raw (same values the MCU's
+        # OLED prints), no reconstruction needed on this end.
+        self.encoder_count_pub.publish(Int32(data=msg.encoder_count))
         self.encoder_speed_pub.publish(Float32(data=float(msg.encoder_speed)))
         self.encoder_direction_pub.publish(Int8(data=direction_sign))
         self.steering_angle_pub.publish(UInt8(data=msg.servo))
-        self.heading_pub.publish(Float32(data=msg.heading / HEADING_CDEG_PER_DEG))
+        self.heading_pub.publish(Float32(data=msg.heading))
 
     def send_heartbeat(self):
         msg = self.master.recv_match(blocking=False)

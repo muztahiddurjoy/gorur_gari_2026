@@ -10,7 +10,7 @@
     #error Wrong include order: MAVLINK_MCU_TO_ROS2.H MUST NOT BE DIRECTLY USED. Include mavlink.h from the same directory instead or set ALL AND EVERY defines from MAVLINK.H manually accordingly, including the #define MAVLINK_H call.
 #endif
 
-#define MAVLINK_MCU_TO_ROS2_XML_HASH 2857532852287719520
+#define MAVLINK_MCU_TO_ROS2_XML_HASH 1198058976967318344
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 #ifndef MAVLINK_MESSAGE_CRCS
-#define MAVLINK_MESSAGE_CRCS {{50001, 77, 10, 10, 0, 0, 0}}
+#define MAVLINK_MESSAGE_CRCS {{50001, 181, 15, 15, 0, 0, 0}}
 #endif
 
 #include "../protocol.h"

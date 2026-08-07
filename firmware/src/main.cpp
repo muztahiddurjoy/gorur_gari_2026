@@ -155,30 +155,23 @@ void loop(){
 
     // --- Send encoder/steering/heading/sonar telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
-    static long lastSentEncoderCount = 0;
     unsigned long nowMs = millis();
     if (nowMs - lastSensorTxMs >= SENSOR_TX_INTERVAL_MS) {
         lastSensorTxMs = nowMs;
 
-        long currentCount = encoder.count();
-        long delta = currentCount - lastSentEncoderCount; // ticks since last send
-        lastSentEncoderCount = currentCount;
-        long deltaMagnitude = delta < 0 ? -delta : delta;
+        // raw cumulative tick count, the same value the OLED prints
+        int32_t encoderCountField = (int32_t)encoder.count();
 
         float rpm = encoder.rpm();
         float rpmMagnitude = rpm < 0 ? -rpm : rpm;
 
-        uint8_t encoderCountField = (uint8_t)constrain(deltaMagnitude, 0L, 255L);
         uint8_t encoderSpeedField = (uint8_t)constrain((long)rpmMagnitude, 0L, 255L);
         uint8_t encoderDirectionField = 0; // 0 = stopped
         if (encoder.direction() > 0) encoderDirectionField = 1;      // forward
         else if (encoder.direction() < 0) encoderDirectionField = 2; // reverse
 
-        // yaw goes out in centidegrees so the whole 0..360 turn fits a uint16_t
-        // with room to spare. wrap first, a stale imu read can sit outside it.
-        float yaw = fmodf(headingDeg, 360.0f);
-        if (yaw < 0.0f) yaw += 360.0f;
-        uint16_t headingField = (uint16_t)constrain(lroundf(yaw * 100.0f), 0L, 35999L);
+        // raw heading, the same value the OLED prints (unwrapped degrees)
+        float headingField = headingDeg;
 
         mavlink_message_t txMsg;
         uint8_t txBuf[MAVLINK_MAX_PACKET_LEN];
@@ -201,11 +194,6 @@ void loop(){
                 motor.to(throttle);
                 uint8_t steering = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_steering(&received_msg);
                 steer.to(steering);
-
-                if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
-                    shared.vel_data = "cmd: x: " + String(throttle) + " z: " + String(steering);
-                    xSemaphoreGive(sharedMutex);
-                }
             }
         }
     }

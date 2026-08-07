@@ -28,7 +28,8 @@ setup(
     entry_points={
         'console_scripts': [
             'encoder_odometry = sensors_processing.encoder_odometry:main',
-            'disparity_extender = sensors_processing.disparity_extender:main'
+            'disparity_extender = sensors_processing.disparity_extender:main',
+            'vector_odom = sensors_processing.vector_odom:main',
         ],
     },
 )

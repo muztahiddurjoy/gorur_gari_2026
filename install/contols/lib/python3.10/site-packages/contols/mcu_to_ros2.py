@@ -372,21 +372,21 @@ class MAVLink_gorur_gari_mcu_to_ros2_msg_message(MAVLink_message):
     id = MAVLINK_MSG_ID_GORUR_GARI_MCU_TO_ROS2_MSG
     msgname = "GORUR_GARI_MCU_TO_ROS2_MSG"
     fieldnames = ["encoder_count", "encoder_speed", "encoder_direction", "servo", "heading", "sonar_1", "sonar_2", "sonar_3", "sonar_4"]
-    ordered_fieldnames = ["heading", "encoder_count", "encoder_speed", "encoder_direction", "servo", "sonar_1", "sonar_2", "sonar_3", "sonar_4"]
-    fieldtypes = ["uint8_t", "uint8_t", "uint8_t", "uint8_t", "uint16_t", "uint8_t", "uint8_t", "uint8_t", "uint8_t"]
+    ordered_fieldnames = ["encoder_count", "heading", "encoder_speed", "encoder_direction", "servo", "sonar_1", "sonar_2", "sonar_3", "sonar_4"]
+    fieldtypes = ["int32_t", "uint8_t", "uint8_t", "uint8_t", "float", "uint8_t", "uint8_t", "uint8_t", "uint8_t"]
     fielddisplays_by_name: Dict[str, str] = {}
     fieldenums_by_name: Dict[str, str] = {}
     fieldunits_by_name: Dict[str, str] = {}
-    native_format = bytearray(b"<HBBBBBBBB")
-    orders = [1, 2, 3, 4, 0, 5, 6, 7, 8]
+    native_format = bytearray(b"<ifBBBBBBB")
+    orders = [0, 2, 3, 4, 1, 5, 6, 7, 8]
     lengths = [1, 1, 1, 1, 1, 1, 1, 1, 1]
     array_lengths = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    crc_extra = 77
-    unpacker = struct.Struct("<HBBBBBBBB")
+    crc_extra = 181
+    unpacker = struct.Struct("<ifBBBBBBB")
     instance_field = None
     instance_offset = -1
 
-    def __init__(self, encoder_count: int, encoder_speed: int, encoder_direction: int, servo: int, heading: int, sonar_1: int, sonar_2: int, sonar_3: int, sonar_4: int):
+    def __init__(self, encoder_count: int, encoder_speed: int, encoder_direction: int, servo: int, heading: float, sonar_1: int, sonar_2: int, sonar_3: int, sonar_4: int):
         MAVLink_message.__init__(self, MAVLink_gorur_gari_mcu_to_ros2_msg_message.id, MAVLink_gorur_gari_mcu_to_ros2_msg_message.msgname)
         self._fieldnames = MAVLink_gorur_gari_mcu_to_ros2_msg_message.fieldnames
         self._instance_field = MAVLink_gorur_gari_mcu_to_ros2_msg_message.instance_field
@@ -402,7 +402,7 @@ class MAVLink_gorur_gari_mcu_to_ros2_msg_message(MAVLink_message):
         self.sonar_4 = sonar_4
 
     def pack(self, mav: "MAVLink", force_mavlink1: bool = False) -> bytes:
-        return self._pack(mav, self.crc_extra, self.unpacker.pack(self.heading, self.encoder_count, self.encoder_speed, self.encoder_direction, self.servo, self.sonar_1, self.sonar_2, self.sonar_3, self.sonar_4), force_mavlink1=force_mavlink1)
+        return self._pack(mav, self.crc_extra, self.unpacker.pack(self.encoder_count, self.heading, self.encoder_speed, self.encoder_direction, self.servo, self.sonar_1, self.sonar_2, self.sonar_3, self.sonar_4), force_mavlink1=force_mavlink1)
 
 
 # Define name on the class for backwards compatibility (it is now msgname).
@@ -810,15 +810,15 @@ class MAVLink(object):
         m._header = MAVLink_header(msgId, incompat_flags, compat_flags, mlen, seq, srcSystem, srcComponent)
         return m
 
-    def gorur_gari_mcu_to_ros2_msg_encode(self, encoder_count: int, encoder_speed: int, encoder_direction: int, servo: int, heading: int, sonar_1: int, sonar_2: int, sonar_3: int, sonar_4: int) -> MAVLink_gorur_gari_mcu_to_ros2_msg_message:
+    def gorur_gari_mcu_to_ros2_msg_encode(self, encoder_count: int, encoder_speed: int, encoder_direction: int, servo: int, heading: float, sonar_1: int, sonar_2: int, sonar_3: int, sonar_4: int) -> MAVLink_gorur_gari_mcu_to_ros2_msg_message:
         """
         Gorur Gari MCU to ROS2 Serial Message
 
-        encoder_count             : count (type:uint8_t)
+        encoder_count             : raw cumulative ticks (type:int32_t)
         encoder_speed             : speed (type:uint8_t)
         encoder_direction         : direction (type:uint8_t)
         servo                     : degree (type:uint8_t)
-        heading                   : cdeg (type:uint16_t)
+        heading                   : deg (type:float)
         sonar_1                   : cm (type:uint8_t)
         sonar_2                   : cm (type:uint8_t)
         sonar_3                   : cm (type:uint8_t)
@@ -827,15 +827,15 @@ class MAVLink(object):
         """
         return MAVLink_gorur_gari_mcu_to_ros2_msg_message(encoder_count, encoder_speed, encoder_direction, servo, heading, sonar_1, sonar_2, sonar_3, sonar_4)
 
-    def gorur_gari_mcu_to_ros2_msg_send(self, encoder_count: int, encoder_speed: int, encoder_direction: int, servo: int, heading: int, sonar_1: int, sonar_2: int, sonar_3: int, sonar_4: int, force_mavlink1: bool = False) -> None:
+    def gorur_gari_mcu_to_ros2_msg_send(self, encoder_count: int, encoder_speed: int, encoder_direction: int, servo: int, heading: float, sonar_1: int, sonar_2: int, sonar_3: int, sonar_4: int, force_mavlink1: bool = False) -> None:
         """
         Gorur Gari MCU to ROS2 Serial Message
 
-        encoder_count             : count (type:uint8_t)
+        encoder_count             : raw cumulative ticks (type:int32_t)
         encoder_speed             : speed (type:uint8_t)
         encoder_direction         : direction (type:uint8_t)
         servo                     : degree (type:uint8_t)
-        heading                   : cdeg (type:uint16_t)
+        heading                   : deg (type:float)
         sonar_1                   : cm (type:uint8_t)
         sonar_2                   : cm (type:uint8_t)
         sonar_3                   : cm (type:uint8_t)

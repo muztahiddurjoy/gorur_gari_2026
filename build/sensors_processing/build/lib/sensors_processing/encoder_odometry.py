@@ -15,8 +15,8 @@ from rclpy.node import Node
 from std_msgs.msg import Float32, Int32
 from tf2_ros import TransformBroadcaster
 
-# The encoder tick counter is a signed 32 bit accumulator on the bridge side and
-# restarts at 0 whenever mcu_bridge restarts. A jump larger than this many ticks
+# The encoder tick counter is the MCU's raw signed 32 bit accumulator and
+# restarts at 0 whenever the MCU reboots. A jump larger than this many ticks
 # in one message is treated as a counter restart rather than real motion.
 COUNT_JUMP_REJECT_TICKS = 100000
 
