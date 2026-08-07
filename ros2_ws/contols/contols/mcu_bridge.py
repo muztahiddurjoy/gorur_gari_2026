@@ -175,6 +175,7 @@ class MCUBridgeNode(Node):
             self.get_logger().info('Heartbeat sent to MCU.')
         except Exception as e:
             self.get_logger().error(f'Failed to send heartbeat: {e}')
+    def odom
 
 def main(args=None):
     rclpy.init(args=args)
