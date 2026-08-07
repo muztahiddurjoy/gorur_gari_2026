@@ -80,8 +80,14 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('danger_angle_min', 25.0)
         self.declare_parameter('danger_angle_max', 90.0)
 
+        # ── Master Controls ────────────────────────────────────────────
+        self.declare_parameter('enable_auto_steering', True)
+
         # ── Steering ─────────────────────────────────────────────────
         self.declare_parameter('str_ang_thresh', 60.0)
+
+        # ── Game Modes ───────────────────────────────────────────────
+        self.declare_parameter('chase_tower_mode', True)
 
         # ── Topics ────────────────────────────────────────────────────
         self.declare_parameter('scan_topic', '/scan')
@@ -89,6 +95,8 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('cmd_vel_topic', '/cmd_vel')
 
         # Load all parameters
+        self.enable_auto_steering = bool(self.get_parameter('enable_auto_steering').value)
+
         self.cast_range_min = float(self.get_parameter('cast_range_min').value)
         self.cast_range_max = float(self.get_parameter('cast_range_max').value)
         self.cast_precision = int(self.get_parameter('cast_precision').value)
@@ -113,6 +121,8 @@ class DisparityExtenderNode(Node):
         self.danger_angle_max = float(self.get_parameter('danger_angle_max').value)
 
         self.str_ang_thresh = float(self.get_parameter('str_ang_thresh').value)
+
+        self.chase_tower_mode = bool(self.get_parameter('chase_tower_mode').value)
 
         scan_topic = self.get_parameter('scan_topic').value
         odom_topic = self.get_parameter('odom_topic').value
@@ -161,7 +171,7 @@ class DisparityExtenderNode(Node):
             f'[LazyGo Disparity Extender] Initialized | '
             f'Cast: [{self.cast_range_min:.2f}m – {self.cast_range_max:.2f}m] | '
             f'FOV: ±{math.degrees(self.look_range_rad):.0f}° | '
-            f'Speed: [{self.speed_cap_corner:.2f} – {self.speed_cap_straight:.2f}] m/s'
+            f'Chase Mode: {self.chase_tower_mode}'
         )
 
     # ══════════════════════════════════════════════════════════════════
@@ -194,6 +204,9 @@ class DisparityExtenderNode(Node):
 
     def control_loop(self):
         """Publish motor commands at a fixed rate."""
+        if not bool(self.get_parameter('enable_auto_steering').value):
+            return
+
         cmd = Twist()
         capped_speed = clamp(self.speed * self.speed_boost, -self.speed_cap * self.speed_boost,
                              self.speed_cap * self.speed_boost)
@@ -494,6 +507,11 @@ class DisparityExtenderNode(Node):
 
             # 4. Find best path (max safe distance with WRO color override)
             max_d, t_ang = self.get_max_d(self.detected_towers)
+
+            # --- GAME MODE: Chase the Tower ---
+            if self.chase_tower_mode and self.detected_towers:
+                t_ang = self.detected_towers[0]["ang"]
+                max_d = self.detected_towers[0]["dst"]
 
             # 5. Smooth target angle (LazyGo's dual lerp)
             delta = abs(t_ang - self.target_ang)

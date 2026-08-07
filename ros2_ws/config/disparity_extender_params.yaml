@@ -28,8 +28,14 @@ disparity_extender_node:
     danger_angle_min: 25.0      # Start of side danger zone (degrees)
     danger_angle_max: 90.0      # End of side danger zone (degrees)
 
+    # ── Master Controls ────────────────────────────────────────────
+    enable_auto_steering: false  # Set to false to disable scan feed from directing steering/cmd_vel
+
     # ── Steering ───────────────────────────────────────────────────
     str_ang_thresh: 60.0        # Max physical steering angle (degrees)
+
+    # ── Game Modes ─────────────────────────────────────────────────
+    chase_tower_mode: false     # If true, the bot steers TOWARDS detected towers instead of avoiding them
 
     # ── Topics ─────────────────────────────────────────────────────
     scan_topic: "/scan"
