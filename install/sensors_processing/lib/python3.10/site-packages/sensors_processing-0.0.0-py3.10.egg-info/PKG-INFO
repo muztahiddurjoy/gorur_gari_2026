@@ -1,0 +1,13 @@
+Metadata-Version: 2.1
+Name: sensors-processing
+Version: 0.0.0
+Summary: Turns raw MCU sensor topics into higher level ROS2 messages (wheel odometry).
+Home-page: UNKNOWN
+Maintainer: muz
+Maintainer-email: muztahiddurjoy99@gmail.com
+License: TODO: License declaration
+Platform: UNKNOWN
+Provides-Extra: test
+
+UNKNOWN
+

@@ -1,0 +1,46 @@
+[0.464s] Invoking command in '/home/muz/gorur_gari/gorur_gari_2026/ros2_ws/sensors_processing': AMENT_PREFIX_PATH=/home/muz/gorur_gari/gorur_gari_2026/install/contols:${AMENT_PREFIX_PATH} PYTHONPATH=/home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages:/home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/sensors_processing build --build-base /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build install --record /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/install.log --single-version-externally-managed install_data
+[0.631s] running egg_info
+[0.631s] creating ../../build/sensors_processing/sensors_processing.egg-info
+[0.632s] writing ../../build/sensors_processing/sensors_processing.egg-info/PKG-INFO
+[0.632s] writing dependency_links to ../../build/sensors_processing/sensors_processing.egg-info/dependency_links.txt
+[0.632s] writing entry points to ../../build/sensors_processing/sensors_processing.egg-info/entry_points.txt
+[0.632s] writing requirements to ../../build/sensors_processing/sensors_processing.egg-info/requires.txt
+[0.632s] writing top-level names to ../../build/sensors_processing/sensors_processing.egg-info/top_level.txt
+[0.633s] writing manifest file '../../build/sensors_processing/sensors_processing.egg-info/SOURCES.txt'
+[0.634s] reading manifest file '../../build/sensors_processing/sensors_processing.egg-info/SOURCES.txt'
+[0.634s] writing manifest file '../../build/sensors_processing/sensors_processing.egg-info/SOURCES.txt'
+[0.634s] running build
+[0.634s] running build_py
+[0.635s] creating /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build
+[0.635s] creating /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib
+[0.635s] creating /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing
+[0.635s] copying sensors_processing/encoder_odometry.py -> /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing
+[0.635s] copying sensors_processing/__init__.py -> /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing
+[0.635s] copying sensors_processing/vector_odom.py -> /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing
+[0.635s] copying sensors_processing/disparity_extender.py -> /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing
+[0.635s] running install
+[0.635s] running install_lib
+[0.635s] creating /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing
+[0.636s] copying /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing/encoder_odometry.py -> /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing
+[0.636s] copying /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing/__init__.py -> /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing
+[0.636s] copying /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing/vector_odom.py -> /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing
+[0.636s] copying /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build/lib/sensors_processing/disparity_extender.py -> /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing
+[0.636s] byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing/encoder_odometry.py to encoder_odometry.cpython-310.pyc
+[0.637s] byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing/__init__.py to __init__.cpython-310.pyc
+[0.637s] byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing/vector_odom.py to vector_odom.cpython-310.pyc
+[0.637s] byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing/disparity_extender.py to disparity_extender.cpython-310.pyc
+[0.639s] running install_data
+[0.639s] creating /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/share/ament_index
+[0.639s] creating /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/share/ament_index/resource_index
+[0.639s] creating /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/share/ament_index/resource_index/packages
+[0.640s] copying resource/sensors_processing -> /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/share/ament_index/resource_index/packages
+[0.640s] copying package.xml -> /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/share/sensors_processing
+[0.640s] creating /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/share/sensors_processing/launch
+[0.640s] copying launch/bringup.launch.py -> /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/share/sensors_processing/launch
+[0.640s] running install_egg_info
+[0.641s] Copying ../../build/sensors_processing/sensors_processing.egg-info to /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages/sensors_processing-0.0.0-py3.10.egg-info
+[0.641s] running install_scripts
+[0.654s] Installing disparity_extender script to /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/sensors_processing
+[0.654s] Installing encoder_odometry script to /home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/sensors_processing
+[0.654s] writing list of installed files to '/home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/install.log'
+[0.673s] Invoked command in '/home/muz/gorur_gari/gorur_gari_2026/ros2_ws/sensors_processing' returned '0': AMENT_PREFIX_PATH=/home/muz/gorur_gari/gorur_gari_2026/install/contols:${AMENT_PREFIX_PATH} PYTHONPATH=/home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/muz/gorur_gari/gorur_gari_2026/install/sensors_processing/lib/python3.10/site-packages:/home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/sensors_processing build --build-base /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/build install --record /home/muz/gorur_gari/gorur_gari_2026/build/sensors_processing/install.log --single-version-externally-managed install_data

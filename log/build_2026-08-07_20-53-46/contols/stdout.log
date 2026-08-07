@@ -1,0 +1,41 @@
+running egg_info
+creating ../../build/contols/contols.egg-info
+writing ../../build/contols/contols.egg-info/PKG-INFO
+writing dependency_links to ../../build/contols/contols.egg-info/dependency_links.txt
+writing entry points to ../../build/contols/contols.egg-info/entry_points.txt
+writing requirements to ../../build/contols/contols.egg-info/requires.txt
+writing top-level names to ../../build/contols/contols.egg-info/top_level.txt
+writing manifest file '../../build/contols/contols.egg-info/SOURCES.txt'
+reading manifest file '../../build/contols/contols.egg-info/SOURCES.txt'
+writing manifest file '../../build/contols/contols.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/muz/gorur_gari/gorur_gari_2026/build/contols/build
+creating /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib
+creating /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols
+copying contols/ros2_to_mcu.py -> /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols
+copying contols/__init__.py -> /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols
+copying contols/mcu_to_ros2.py -> /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols
+copying contols/mcu_bridge.py -> /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols
+running install
+running install_lib
+creating /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols
+copying /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols/ros2_to_mcu.py -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols
+copying /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols/__init__.py -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols
+copying /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols/mcu_to_ros2.py -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols
+copying /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols/mcu_bridge.py -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols
+byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols/ros2_to_mcu.py to ros2_to_mcu.cpython-310.pyc
+byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols/__init__.py to __init__.cpython-310.pyc
+byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols/mcu_to_ros2.py to mcu_to_ros2.cpython-310.pyc
+byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols/mcu_bridge.py to mcu_bridge.cpython-310.pyc
+running install_data
+creating /home/muz/gorur_gari/gorur_gari_2026/install/contols/share/ament_index
+creating /home/muz/gorur_gari/gorur_gari_2026/install/contols/share/ament_index/resource_index
+creating /home/muz/gorur_gari/gorur_gari_2026/install/contols/share/ament_index/resource_index/packages
+copying resource/contols -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/share/ament_index/resource_index/packages
+copying package.xml -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/share/contols
+running install_egg_info
+Copying ../../build/contols/contols.egg-info to /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols-0.0.0-py3.10.egg-info
+running install_scripts
+Installing mcu_bridge script to /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/contols
+writing list of installed files to '/home/muz/gorur_gari/gorur_gari_2026/build/contols/install.log'
