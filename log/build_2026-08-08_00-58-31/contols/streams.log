@@ -1,0 +1,27 @@
+[0.453s] Invoking command in '/home/muz/gorur_gari/gorur_gari_2026/ros2_ws/contols': PYTHONPATH=/home/muz/gorur_gari/gorur_gari_2026/build/contols/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/contols build --build-base /home/muz/gorur_gari/gorur_gari_2026/build/contols/build install --record /home/muz/gorur_gari/gorur_gari_2026/build/contols/install.log --single-version-externally-managed install_data
+[0.614s] running egg_info
+[0.614s] writing ../../build/contols/contols.egg-info/PKG-INFO
+[0.614s] writing dependency_links to ../../build/contols/contols.egg-info/dependency_links.txt
+[0.614s] writing entry points to ../../build/contols/contols.egg-info/entry_points.txt
+[0.614s] writing requirements to ../../build/contols/contols.egg-info/requires.txt
+[0.614s] writing top-level names to ../../build/contols/contols.egg-info/top_level.txt
+[0.616s] reading manifest file '../../build/contols/contols.egg-info/SOURCES.txt'
+[0.616s] writing manifest file '../../build/contols/contols.egg-info/SOURCES.txt'
+[0.616s] running build
+[0.617s] running build_py
+[0.617s] copying contols/mcu_to_ros2.py -> /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols
+[0.617s] copying contols/mcu_bridge.py -> /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols
+[0.617s] running install
+[0.617s] running install_lib
+[0.617s] copying /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols/mcu_to_ros2.py -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols
+[0.618s] copying /home/muz/gorur_gari/gorur_gari_2026/build/contols/build/lib/contols/mcu_bridge.py -> /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols
+[0.618s] byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols/mcu_to_ros2.py to mcu_to_ros2.cpython-310.pyc
+[0.622s] byte-compiling /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols/mcu_bridge.py to mcu_bridge.cpython-310.pyc
+[0.622s] running install_data
+[0.622s] running install_egg_info
+[0.623s] removing '/home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols-0.0.0-py3.10.egg-info' (and everything under it)
+[0.624s] Copying ../../build/contols/contols.egg-info to /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages/contols-0.0.0-py3.10.egg-info
+[0.624s] running install_scripts
+[0.637s] Installing mcu_bridge script to /home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/contols
+[0.637s] writing list of installed files to '/home/muz/gorur_gari/gorur_gari_2026/build/contols/install.log'
+[0.653s] Invoked command in '/home/muz/gorur_gari/gorur_gari_2026/ros2_ws/contols' returned '0': PYTHONPATH=/home/muz/gorur_gari/gorur_gari_2026/build/contols/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/muz/gorur_gari/gorur_gari_2026/install/contols/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/contols build --build-base /home/muz/gorur_gari/gorur_gari_2026/build/contols/build install --record /home/muz/gorur_gari/gorur_gari_2026/build/contols/install.log --single-version-externally-managed install_data

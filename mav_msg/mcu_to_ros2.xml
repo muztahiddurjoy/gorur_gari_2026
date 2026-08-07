@@ -4,11 +4,11 @@
     <messages>
         <message id="50001" name="gorur_gari_mcu_to_ros2_msg">
             <description>Gorur Gari MCU to ROS2 Serial Message</description>
-            <field type="uint8_t" name="encoder_count">count</field>
+            <field type="int32_t" name="encoder_count">raw cumulative ticks</field>
             <field type="uint8_t" name="encoder_speed">speed</field>
             <field type="uint8_t" name="encoder_direction">direction</field>
             <field type="uint8_t" name="servo">degree</field>
-            <field type="uint16_t" name="heading">cdeg</field>
+            <field type="float" name="heading">deg</field>
 
             <field type="uint8_t" name="sonar_1">cm</field>
             <field type="uint8_t" name="sonar_2">cm</field>
