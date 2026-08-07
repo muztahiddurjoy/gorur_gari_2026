@@ -1,2 +1,10 @@
-/ros2_ws/build
-/ros2_ws/install
+# ROS 2 Build, Install, and Log Directories
+/ros2_ws/build/
+/ros2_ws/install/
+/ros2_ws/log/
+
+# Python cache & compiled files
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/

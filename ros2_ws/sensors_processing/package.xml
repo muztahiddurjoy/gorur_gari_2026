@@ -9,8 +9,10 @@
 
   <depend>rclpy</depend>
   <depend>nav_msgs</depend>
-  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>tf2_ros</depend>
 
   <!-- bringup.launch.py starts the mcu_bridge node from contols alongside ours -->

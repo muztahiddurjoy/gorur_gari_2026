@@ -1,0 +1,84 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Raw LiDAR Scan1
+        - /Processed Disparity Scan1
+        - /Target Path Arrow1
+      Splitter Ratio: 0.5
+    Tree Height: 557
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Value: true
+      Cell Size: 1
+      Color: 160; 160; 160
+      Normal Cell Count: 0
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: laser
+    - Class: rviz_default_plugins/LaserScan
+      Name: Raw LiDAR Scan
+      Value: true
+      Topic:
+        Value: /scan
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+      Color: 255; 0; 0
+      Size (m): 0.05
+      Style: Points
+      Selectable: true
+    - Class: rviz_default_plugins/LaserScan
+      Name: Processed Disparity Scan
+      Value: true
+      Topic:
+        Value: /scan_processed
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+      Color: 0; 255; 0
+      Size (m): 0.04
+      Style: Points
+      Selectable: true
+    - Class: rviz_default_plugins/Marker
+      Name: Target Path Arrow
+      Value: true
+      Topic:
+        Value: /disparity/target_marker
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+      Namespaces:
+        disparity_target: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: laser
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 6.0
+      Focal Point: 0; 0; 0
+      Name: Current View
+      Pitch: 0.6
+      Value: Orbit (rviz_default)
+      Yaw: 3.14
+Window Geometry:
+  Width: 1280
+  Height: 720
