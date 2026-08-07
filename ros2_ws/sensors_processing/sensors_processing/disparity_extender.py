@@ -19,7 +19,7 @@ Reference: https://github.com/A-N-M-Noor/LazyGo_WRO2025
 
 import math
 import time
-from threading import Thread
+from threading import Lock, Thread
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -56,7 +56,7 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('cast_range_min', 0.13)
         self.declare_parameter('cast_range_max', 0.16)
         self.declare_parameter('cast_precision', 81)
-        self.declare_parameter('cast_skip', 2)
+        self.declare_parameter('cast_skip', 4)
         self.declare_parameter('cast_skip_fine', 1)
 
         # ── FOV ───────────────────────────────────────────────────────
@@ -81,13 +81,13 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('danger_angle_max', 90.0)
 
         # ── Master Controls ────────────────────────────────────────────
-        self.declare_parameter('enable_auto_steering', True)
+        self.declare_parameter('enable_auto_steering', False)
 
         # ── Steering ─────────────────────────────────────────────────
         self.declare_parameter('str_ang_thresh', 60.0)
 
         # ── Game Modes ───────────────────────────────────────────────
-        self.declare_parameter('chase_tower_mode', True)
+        self.declare_parameter('chase_tower_mode', False)
 
         # ── Topics ────────────────────────────────────────────────────
         self.declare_parameter('scan_topic', '/scan')
@@ -135,6 +135,7 @@ class DisparityExtenderNode(Node):
         self.ranges = []
         self.intensities = []
         self.new_lidar_val = False
+        self._scan_lock = Lock()  # Guards shared LiDAR state between callback and calc thread
 
         # ── Navigation State ─────────────────────────────────────────
         self.current_speed = 0.0
@@ -160,12 +161,13 @@ class DisparityExtenderNode(Node):
         self.marker_pub = self.create_publisher(Marker, '/disparity/target_marker', 10)
         self.tower_pub = self.create_publisher(Float32MultiArray, '/tower_detections', 10)
 
+        self.last_color_time = 0.0
+
         # ── Control Loop Timer (40 Hz) ────────────────────────────────
         self.create_timer(0.025, self.control_loop)
 
-        # ── Background LiDAR Processing Thread ────────────────────────
-        self.calc_thread = Thread(target=self.calc_lidar, daemon=True)
-        self.calc_thread.start()
+        # ── LiDAR Processing Timer (20 Hz) ────────────────────────────
+        self.create_timer(0.05, self.calc_lidar_step)
 
         self.get_logger().info(
             f'[LazyGo Disparity Extender] Initialized | '
@@ -185,22 +187,24 @@ class DisparityExtenderNode(Node):
         self.current_speed = math.hypot(vx, vy)
 
     def color_callback(self, msg: String):
-        """Receive closest tower color from camera node."""
+        """Update the active WRO color override (R, G, N)."""
         self.closest_color = msg.data.strip().upper()
+        self.last_color_time = time.time()
         if self.closest_color not in ("R", "G"):
             self.closest_color = "N"
 
     def lidar_callback(self, msg: LaserScan):
         """Buffer incoming LaserScan data for the background thread."""
-        self.ang_min = msg.angle_min
-        self.ang_max = msg.angle_max
-        self.ang_inc = msg.angle_increment
-        self.ranges = list(msg.ranges)
-        self.intensities = list(msg.intensities) if msg.intensities else [1.0] * len(msg.ranges)
-        self.range_min = msg.range_min
-        self.range_max = msg.range_max
-        self.scan_header = msg.header
-        self.new_lidar_val = True
+        with self._scan_lock:
+            self.ang_min = msg.angle_min
+            self.ang_max = msg.angle_max
+            self.ang_inc = msg.angle_increment
+            self.ranges = list(msg.ranges)
+            self.intensities = list(msg.intensities) if msg.intensities else [1.0] * len(msg.ranges)
+            self.range_min = msg.range_min
+            self.range_max = msg.range_max
+            self.scan_header = msg.header
+            self.new_lidar_val = True
 
     def control_loop(self):
         """Publish motor commands at a fixed rate."""
@@ -275,7 +279,8 @@ class DisparityExtenderNode(Node):
             last = n - 1
 
         # Validate neighbors
-        if self.intensities[first] <= 0.05 or self.intensities[last] <= 0.05:
+        if (self.intensities[first] <= 0.05 or self.ranges[first] > 4.0 or
+            self.intensities[last] <= 0.05 or self.ranges[last] > 4.0):
             return 0.0
         if first == last:
             return self.ranges[first]
@@ -469,111 +474,132 @@ class DisparityExtenderNode(Node):
         return target_ang_deg
 
     # ══════════════════════════════════════════════════════════════════
-    # Main Background LiDAR Processing (LazyGo's calc_lidar)
+    # Main LiDAR Processing Timer (LazyGo's calc_lidar)
     # ══════════════════════════════════════════════════════════════════
 
-    def calc_lidar(self):
+    def calc_lidar_step(self):
         """
-        Background thread: runs the full navigation pipeline on each new scan.
+        Timer callback: runs the full navigation pipeline on each new scan.
         """
-        while rclpy.ok():
-            if not self.new_lidar_val:
-                time.sleep(0.01)
-                continue
+        if not self.new_lidar_val:
+            return
 
-            dt = time.time() - self.last_time
-            self.last_time = time.time()
-            dt = max(dt, 0.001)  # Prevent division by zero
-
-            n = len(self.ranges)
-            if n == 0:
-                self.new_lidar_val = False
-                continue
-
-            # 1. Dynamic Cast Radius (robot width expands with speed)
-            speed_ratio = self.current_speed / self.max_speed if self.max_speed > 0 else 0.0
-            self.cast_r = remap(speed_ratio, 0.45, 1.0, self.cast_range_min, self.cast_range_max)
-
-            # 2. Fix missing/invalid rays
-            self.fix_all_missing()
-
-            # 3. Detect towers
-            self.detected_towers = self.find_towers()
-
-            # Publish tower angles
-            tower_msg = Float32MultiArray()
-            tower_msg.data = [float(t["ang"]) for t in self.detected_towers]
-            self.tower_pub.publish(tower_msg)
-
-            # 4. Find best path (max safe distance with WRO color override)
-            max_d, t_ang = self.get_max_d(self.detected_towers)
-
-            # --- GAME MODE: Chase the Tower ---
-            if self.chase_tower_mode and self.detected_towers:
-                t_ang = self.detected_towers[0]["ang"]
-                max_d = self.detected_towers[0]["dst"]
-
-            # 5. Smooth target angle (LazyGo's dual lerp)
-            delta = abs(t_ang - self.target_ang)
-            if delta > 0.5:
-                self.target_ang = t_ang
-            else:
-                self.target_ang = lerp(self.target_ang, t_ang, min(35 * dt, 1.0))
-            self.target_ang = lerp(self.target_ang, t_ang, 0.1)
-            self.target_dist = max_d
-
-            # Convert to degrees for steering
-            target_deg = math.degrees(self.target_ang)
-
-            # 6. Emergency danger sense
-            target_deg = self.danger_sense(target_deg)
-
-            # 7. Speed boosting on clear straights
-            self.speed_boost = 1.0
-            boost_idx = self.a2i(math.radians(target_deg))
-            if 0 <= boost_idx < n:
-                marching_hit = self.marching(boost_idx, radius=self.cast_r / 2.0)
-                hit_d = marching_hit["dst"]
-                if abs(target_deg) < self.boost_angle_thresh and hit_d > self.boost_dist_thresh:
-                    self.speed_boost = self.boost_max
-
-            # 8. Map target angle to steering range [-1, 1]
-            s_ang = remap(target_deg, -self.str_ang_thresh, self.str_ang_thresh, -1.0, 1.0)
-            self.str_angle = s_ang
-
-            # 9. Calculate speed based on distance
-            mult = remap(max_d, 1.0, 2.0, 0.65, 1.0)
-            self.speed = self.max_speed * mult * self.speed_boost
-
-            # 10. Dynamic speed cap (instant decel, smooth accel)
-            self.target_cap = self.speed_cap_straight
-            # Could add corner position detection here; for now use steering magnitude
-            if abs(target_deg) > 40.0:
-                self.target_cap = self.speed_cap_corner
-
-            if self.target_cap < self.speed_cap:
-                self.speed_cap = self.target_cap
-            else:
-                self.speed_cap = lerp(self.speed_cap, self.target_cap, min(dt * 5, 1.0))
-
-            # 11. Throttled terminal feedback
-            self.get_logger().info(
-                f'[NAV] Target: {target_deg:+6.1f}° | '
-                f'Dist: {max_d:4.2f}m | '
-                f'CastR: {self.cast_r:.3f}m | '
-                f'Boost: {self.speed_boost:.2f}x | '
-                f'Towers: {len(self.detected_towers)} | '
-                f'Color: {self.closest_color}',
-                throttle_duration_sec=0.5
-            )
-
-            # 12. Publish debug scan (ranges after fix_missing)
-            self.publish_debug_scan()
-
-            # 13. Publish target arrow marker
-            self.publish_target_marker()
-
+        # Atomically copy LiDAR data under lock, then process outside lock
+        with self._scan_lock:
             self.new_lidar_val = False
+            ranges_copy = self.ranges.copy()
+            intensities_copy = self.intensities.copy()
+
+        self.ranges = ranges_copy
+        self.intensities = intensities_copy
+
+        dt = time.time() - self.last_time
+        self.last_time = time.time()
+        dt = max(dt, 0.001)  # Prevent division by zero
+
+        n = len(self.ranges)
+        if n == 0:
+            return
+
+        # --- Color Decay ---
+        if time.time() - self.last_color_time > 1.0:
+            self.closest_color = "N"
+
+        # 1. Dynamic Cast Radius (robot width expands with speed)
+        speed_ratio = self.current_speed / self.max_speed if self.max_speed > 0 else 0.0
+        self.cast_r = remap(speed_ratio, 0.45, 1.0, self.cast_range_min, self.cast_range_max)
+
+        # 2. Fix missing/invalid rays
+        self.fix_all_missing()
+
+        # 3. Detect towers
+        self.detected_towers = self.find_towers()
+
+        # Publish tower angles
+        tower_msg = Float32MultiArray()
+        tower_msg.data = [float(t["ang"]) for t in self.detected_towers]
+        self.tower_pub.publish(tower_msg)
+
+        # 4. Find best path (max safe distance with WRO color override)
+        max_d, t_ang = self.get_max_d(self.detected_towers)
+
+        # --- Minimum Safe Distance Floor ---
+        if max_d < 0.15:
+            self.target_dist = 0.0
+            self.target_ang = 0.0
+            self.speed = 0.0
+            self.speed_boost = 1.0
+            self.str_angle = 0.0
+            self.publish_debug_scan()
+            self.publish_target_marker()
+            return
+
+        # --- GAME MODE: Chase the Tower ---
+        if self.chase_tower_mode and self.detected_towers:
+            t_ang = self.detected_towers[0]["ang"]
+            max_d = self.detected_towers[0]["dst"]
+
+        # 5. Smooth target angle (LazyGo's dual lerp)
+        delta = abs(t_ang - self.target_ang)
+        if delta > 0.5:
+            self.target_ang = t_ang
+        else:
+            self.target_ang = lerp(self.target_ang, t_ang, min(35 * dt, 1.0))
+        self.target_ang = lerp(self.target_ang, t_ang, 0.1)
+        self.target_dist = max_d
+
+        # Convert to degrees for steering
+        target_deg = math.degrees(self.target_ang)
+
+        # 6. Emergency danger sense
+        target_deg = self.danger_sense(target_deg)
+
+        # 7. Speed boosting on clear straights
+        self.speed_boost = 1.0
+        boost_idx = self.a2i(math.radians(target_deg))
+        if 0 <= boost_idx < n:
+            marching_hit = self.marching(boost_idx, radius=self.cast_r / 2.0)
+            hit_d = marching_hit["dst"]
+            if abs(target_deg) < self.boost_angle_thresh and hit_d > self.boost_dist_thresh:
+                self.speed_boost = self.boost_max
+
+        # 8. Map target angle to steering range [-1, 1]
+        s_ang = remap(target_deg, -self.str_ang_thresh, self.str_ang_thresh, -1.0, 1.0)
+        self.str_angle = s_ang
+
+        # 9. Calculate speed based on distance
+        mult = remap(max_d, 1.0, 2.0, 0.65, 1.0)
+        self.speed = self.max_speed * mult * self.speed_boost
+
+        # 10. Dynamic speed cap (instant decel, smooth accel)
+        self.target_cap = self.speed_cap_straight
+        # Could add corner position detection here; for now use steering magnitude
+        if abs(target_deg) > 40.0:
+            self.target_cap = self.speed_cap_corner
+
+        if self.target_cap < self.speed_cap:
+            self.speed_cap = self.target_cap
+        else:
+            self.speed_cap = lerp(self.speed_cap, self.target_cap, min(dt * 5, 1.0))
+
+        # 11. Throttled terminal feedback
+        self.get_logger().info(
+            f'[NAV] Target: {target_deg:+6.1f}° | '
+            f'Dist: {max_d:4.2f}m | '
+            f'CastR: {self.cast_r:.3f}m | '
+            f'Boost: {self.speed_boost:.2f}x | '
+            f'Towers: {len(self.detected_towers)} | '
+            f'Color: {self.closest_color}',
+            throttle_duration_sec=0.5
+        )
+
+        # 12. Publish debug scan (ranges after fix_missing)
+        self.publish_debug_scan()
+
+        # 13. Publish target arrow marker
+        self.publish_target_marker()
+
+
 
     # ══════════════════════════════════════════════════════════════════
     # Visualization Publishers

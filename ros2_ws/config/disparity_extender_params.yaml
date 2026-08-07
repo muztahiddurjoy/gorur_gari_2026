@@ -4,7 +4,7 @@ disparity_extender_node:
     cast_range_min: 0.13        # Min robot half-width at low speed (m)
     cast_range_max: 0.16        # Max robot half-width at high speed (m)
     cast_precision: 81          # Neighbor window size (indices) for marching
-    cast_skip: 2                # Skip factor for coarse FOV scan
+    cast_skip: 4                # Skip factor for coarse FOV scan
     cast_skip_fine: 1           # Skip factor for fine marching neighbors
 
     # ── Field of View ──────────────────────────────────────────────
