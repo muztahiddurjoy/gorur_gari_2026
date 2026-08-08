@@ -33,7 +33,7 @@ SonarReader sonarLeft(SONAR_LEFT_TRIG_PIN, SONAR_LEFT_ECHO_PIN, SONAR_ECHO_TIMEO
 SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_RIGHT_ENABLED);
 SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_REAR_ENABLED);
 ButtonHandler button(BUTTON_PIN);
-StatusLed status_led;
+StatusLed status_led(STATUS_LED_PIN);
 // Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
@@ -116,9 +116,9 @@ void setup(){
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
     button.begin();
+    // stays off until the ROS2 bridge announces itself over serial, see the
+    // connect message handling in loop()
     status_led.begin();
-    status_led.setBrightness(100);
-    //status_led.setColor(0, 255, 0);
     Wire.begin(I2C_SDA, I2C_SCL);
     
     sharedMutex = xSemaphoreCreateMutex();
@@ -216,6 +216,14 @@ void loop(){
                 motor.to(throttle);
                 uint8_t steering = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_steering(&received_msg);
                 steer.to(steering);
+            }
+            // mcu_bridge sends this once, right after it opens the port. it is the
+            // only announcement we get that a ROS2 side actually exists, so it is
+            // what drives the status LED.
+            else if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_connect_msg){
+                uint8_t connected = mavlink_msg_gorur_gari_ros2_to_mcu_connect_msg_get_connected(&received_msg);
+                status_led.set(connected != 0);
+                DEBUG_SERIAL.println(connected ? "ROS2 bridge connected" : "ROS2 bridge disconnected");
             }
         }
     }

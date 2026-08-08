@@ -24,6 +24,10 @@ SONAR_ENABLED_DEFAULTS = {'front': False, 'left': False, 'right': False, 'rear':
 # encoder_direction on the wire: 0 = stopped, 1 = forward, 2 = reverse (see firmware/src/main.cpp)
 WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
 
+# how long to wait after opening the port before announcing ourselves to the MCU.
+# long enough for the esp32 to clear its bootloader if opening the port reset it.
+MCU_CONNECT_NOTICE_DELAY_S = 1.0
+
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
@@ -79,10 +83,27 @@ class MCUBridgeNode(Node):
             # rclpy.shutdown()
             # return
         self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
+        # tell the MCU we are here, exactly once. it lights its status LED on this
+        # and nothing else, so this is the one announcement that matters. fired off
+        # a timer rather than inline because opening the port toggles DTR, which can
+        # reset the esp32 - a frame sent right now would land in the bootloader.
+        self.connect_notice_timer = self.create_timer(
+            MCU_CONNECT_NOTICE_DELAY_S, self.send_connect_notice)
         # drain incoming sensor telemetry at 50 Hz
         self.mcu_poll_timer = self.create_timer(0.02, self.poll_mcu)
         # self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
 
+
+    def send_connect_notice(self):
+        # one shot: whether or not the frame gets through, we never send it again
+        self.connect_notice_timer.cancel()
+        if not self.mcu_connected:
+            return
+        try:
+            self.mav_tx.gorur_gari_ros2_to_mcu_connect_msg_send(connected=1)
+            self.get_logger().info('Announced connection to MCU (status LED on).')
+        except Exception as e:
+            self.get_logger().error(f'Failed to announce connection to MCU: {e}')
 
     def handle_cmd_vel(self,msg:Twist):
         try:

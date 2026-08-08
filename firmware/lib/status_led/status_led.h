@@ -2,24 +2,28 @@
 #define STATUS_LED_H
 
 #include <Arduino.h>
-#include <Adafruit_NeoPixel.h>
 
+// A plain single colour LED, not the devkit's onboard WS2812 on GPIO48.
+// Wiring is active high: GPIO -> resistor (220-470R) -> LED anode, cathode to GND.
+// It goes high once the ROS2 bridge announces itself over serial, so a glance at
+// the board tells you whether anything is actually talking to the MCU.
 class StatusLed {
 private:
     uint8_t ledPin;
-    uint8_t numPixels;
-    Adafruit_NeoPixel strip; // Encapsulate the strip object within the class
+    bool state;
 
 public:
-    // Constructor defaults to standard ESP32-S3 DevKitC parameters (pin 48, 1 pixel)
-    StatusLed(uint8_t pin = 48, uint8_t count = 1);
-    
+    explicit StatusLed(uint8_t pin);
+
+    // configures the pin and starts with the LED off, so "lit" always means
+    // the link came up after this boot
     void begin();
-    
-    // Helper methods to make controlling the LED easier in your main code
-    void setColor(uint8_t r, uint8_t g, uint8_t b);
-    void setBrightness(uint8_t brightness);
-    void turnOff();
+
+    void on();
+    void off();
+    void set(bool lit);
+    void toggle();
+    bool isOn() const { return state; }
 };
 
 #endif

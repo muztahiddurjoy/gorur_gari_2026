@@ -26,5 +26,10 @@
 |                        | ECHO      | **41**         |
 | **Push Button 1**      | Input     | **42**         |
 | **Push Button 2**      | Input     | **47**         |
-| **Status LED 1**       | Output    | **48**         |
+| **Status LED 1**       | Output    | **36**         |
 | **Status LED 2**       | Output    | **35**         |
+
+Status LED 1 is a plain LED (GPIO -> 220-470R -> anode, cathode to GND), not the
+devkit's onboard WS2812 on GPIO48. It is off from boot and goes high when the
+ROS2 bridge sends `gorur_gari_ros2_to_mcu_connect_msg` on opening the serial
+link, so a lit LED means ROS2 is connected to this MCU.
