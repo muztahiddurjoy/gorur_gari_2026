@@ -116,11 +116,8 @@ void setup(){
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
     button.begin();
-    // status_led.begin();
-    // status_led.setBrightness(100);
-    pinMode(NEOPIXEL_POWER_PIN, OUTPUT); // You must check your board's schematic for this pin number
-    digitalWrite(NEOPIXEL_POWER_PIN, HIGH); // Turn on physical power to the LED
-    neopixelWrite(RGB_BUILTIN, 0, 50, 0);
+    status_led.begin();
+    status_led.setBrightness(100);
     //status_led.setColor(0, 255, 0);
     Wire.begin(I2C_SDA, I2C_SCL);
     
@@ -164,7 +161,16 @@ void loop(){
     }
     sonarIndex = (sonarIndex + 1) % 4;
 
-    // --- Send encoder/steering/heading/sonar telemetry to ROS2 ---
+    // --- Button: poll every loop, but telemetry only goes out every
+    // SENSOR_TX_INTERVAL_MS. Latch the press edge so a tap shorter than that
+    // interval still reaches ROS2 instead of falling between two frames ---
+    static bool buttonPressLatch = false;
+    if (button.isPressed()) {
+        buttonPressLatch = true;
+        DEBUG_SERIAL.println("Button pressed!");
+    }
+
+    // --- Send encoder/steering/heading/sonar/button telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
     unsigned long nowMs = millis();
     if (nowMs - lastSensorTxMs >= SENSOR_TX_INTERVAL_MS) {
@@ -184,19 +190,20 @@ void loop(){
         // raw heading, the same value the OLED prints (unwrapped degrees)
         float headingField = headingDeg;
 
+        // held down right now, or tapped since the last frame went out
+        uint8_t buttonField = (button.isDown() || buttonPressLatch) ? 1 : 0;
+        buttonPressLatch = false;
+
         mavlink_message_t txMsg;
         uint8_t txBuf[MAVLINK_MAX_PACKET_LEN];
         mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, &txMsg,
             encoderCountField, encoderSpeedField, encoderDirectionField, steer.getAngle(),
-            headingField, sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3]);
+            headingField, sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3], buttonField);
         uint16_t txLen = mavlink_msg_to_send_buffer(txBuf, &txMsg);
         Serial.write(txBuf, txLen);
     }
 
 
-    if(button.isPressed()) {
-      DEBUG_SERIAL.println("Button pressed!");
-    } 
     while(Serial.available()>0){
         uint8_t c = Serial.read();
         

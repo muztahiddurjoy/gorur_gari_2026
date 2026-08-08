@@ -6,7 +6,7 @@ from contols import mcu_to_ros2
 from contols import ros2_to_mcu
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Range
-from std_msgs.msg import Int32, Int8, UInt8, Float32
+from std_msgs.msg import Bool, Int32, Int8, UInt8, Float32
 
 # sonar_1..4 on the wire map to these sensors in this order, see firmware/pin-map.md
 SONAR_NAMES = ['front', 'left', 'right', 'rear']
@@ -51,6 +51,7 @@ class MCUBridgeNode(Node):
         self.encoder_direction_pub = self.create_publisher(Int8, 'encoder/direction', 10)
         self.steering_angle_pub = self.create_publisher(UInt8, 'steering_angle', 10)
         self.heading_pub = self.create_publisher(Float32, 'heading', 10)
+        self.button_pub = self.create_publisher(Bool, '/button_status', 10)
 
         try:
             self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
@@ -153,6 +154,8 @@ class MCUBridgeNode(Node):
         self.encoder_direction_pub.publish(Int8(data=direction_sign))
         self.steering_angle_pub.publish(UInt8(data=msg.servo))
         self.heading_pub.publish(Float32(data=msg.heading))
+        # 1 = held down, or tapped since the MCU's last frame (see firmware/src/main.cpp)
+        self.button_pub.publish(Bool(data=bool(msg.button)))
 
     def send_heartbeat(self):
         msg = self.master.recv_match(blocking=False)

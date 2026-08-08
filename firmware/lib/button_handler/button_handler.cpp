@@ -26,3 +26,8 @@ bool ButtonHandler::isPressed() {
     lastButtonState = reading;
     return false;
 }
+
+bool ButtonHandler::isDown() const {
+    // wired INPUT_PULLUP, so a closed switch reads LOW
+    return buttonState == LOW;
+}
