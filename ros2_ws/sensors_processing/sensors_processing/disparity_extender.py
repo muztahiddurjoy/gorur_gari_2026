@@ -28,6 +28,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float32MultiArray, String
 from visualization_msgs.msg import Marker
+from sensors_processing.steering_stabilizer import SteeringStabilizer
 
 
 def clamp(val, mini, maxi):
@@ -85,6 +86,14 @@ class DisparityExtenderNode(Node):
 
         # ── Steering ─────────────────────────────────────────────────
         self.declare_parameter('str_ang_thresh', 60.0)
+        self.declare_parameter('forward_bias_factor', 0.25)
+        self.declare_parameter('steering_kd', 0.01)
+
+        # ── Direction & Wall Hugging ─────────────────────────────────
+        self.declare_parameter('wall_hug_margin', 0.05)
+        self.declare_parameter('wall_hug_bias', 1.5)
+        self.declare_parameter('turn_detect_time', 0.5)
+        self.declare_parameter('turn_detect_thresh', 30.0)
 
         # ── Game Modes ───────────────────────────────────────────────
         self.declare_parameter('chase_tower_mode', False)
@@ -121,6 +130,13 @@ class DisparityExtenderNode(Node):
         self.danger_angle_max = float(self.get_parameter('danger_angle_max').value)
 
         self.str_ang_thresh = float(self.get_parameter('str_ang_thresh').value)
+        self.forward_bias_factor = float(self.get_parameter('forward_bias_factor').value)
+        self.steering_kd = float(self.get_parameter('steering_kd').value)
+
+        self.wall_hug_margin = float(self.get_parameter('wall_hug_margin').value)
+        self.wall_hug_bias = float(self.get_parameter('wall_hug_bias').value)
+        self.turn_detect_time = float(self.get_parameter('turn_detect_time').value)
+        self.turn_detect_thresh = float(self.get_parameter('turn_detect_thresh').value)
 
         self.chase_tower_mode = bool(self.get_parameter('chase_tower_mode').value)
 
@@ -150,6 +166,17 @@ class DisparityExtenderNode(Node):
         self.closest_color = "N"  # "R", "G", or "N"
         self.detected_towers = []
         self.last_time = time.time()
+        
+        # ── Steering Stabilizer ───────────────────────────────────────
+        self.stabilizer = SteeringStabilizer(
+            kp=1.0 / self.str_ang_thresh,
+            kd=self.steering_kd,
+            max_steer=1.0,
+            tolerance_deg=2.0
+        )
+        
+        self.lap_direction = "UNKNOWN"
+        self.turn_timer = 0.0
 
         # ── Subscriptions & Publishers ────────────────────────────────
         self.scan_sub = self.create_subscription(LaserScan, scan_topic, self.lidar_callback, 1)
@@ -417,6 +444,7 @@ class DisparityExtenderNode(Node):
         restrict the search range to enforce the correct side.
         """
         best = {"dst": 0.0, "ang": 0.0}
+        best_score = -1.0
         chk = self.ind_range(-self.look_range_rad, self.look_range_rad)
         n = len(self.ranges)
 
@@ -440,11 +468,36 @@ class DisparityExtenderNode(Node):
             if self.ranges[i] <= 0.0 or self.ranges[i] > 3.0:
                 continue
 
-            # Circle-cast marching
-            dt = self.marching(i)
+            # ── WALL HUG MARGIN ──
+            # Determine effective safety radius based on side and lap direction
+            eff_radius = self.cast_r
+            ang = self.i2a(i)
+            is_inner_side = False
+            
+            if self.lap_direction == "LEFT" and ang > 0:
+                eff_radius += self.wall_hug_margin
+                is_inner_side = True
+            elif self.lap_direction == "RIGHT" and ang < 0:
+                eff_radius += self.wall_hug_margin
+                is_inner_side = True
 
-            if dt["dst"] > best["dst"]:
-                best = dt
+            # Circle-cast marching with effective radius
+            dt_hit = self.marching(i, radius=eff_radius)
+
+            # Forward-Bias Weighting: Penalize paths that require extreme steering.
+            # Normalizes angle [0, look_range_rad] to [0, 1]
+            angle_penalty = abs(dt_hit["ang"]) / self.look_range_rad
+            # Subtract up to X% of the safe distance based on how far it is from center.
+            # This makes the car prefer looking straight ahead unless a turn offers significantly more room.
+            score = dt_hit["dst"] * (1.0 - (self.forward_bias_factor * angle_penalty))
+
+            # Apply Wall Hug Bias for inner-side rays
+            if is_inner_side:
+                score *= self.wall_hug_bias
+
+            if score > best_score:
+                best_score = score
+                best = dt_hit
 
         return best["dst"], best["ang"]
 
@@ -539,17 +592,27 @@ class DisparityExtenderNode(Node):
             t_ang = self.detected_towers[0]["ang"]
             max_d = self.detected_towers[0]["dst"]
 
-        # 5. Smooth target angle (LazyGo's dual lerp)
-        delta = abs(t_ang - self.target_ang)
-        if delta > 0.5:
-            self.target_ang = t_ang
-        else:
-            self.target_ang = lerp(self.target_ang, t_ang, min(35 * dt, 1.0))
-        self.target_ang = lerp(self.target_ang, t_ang, 0.1)
+        # 5. Set target angle (smoothing is now handled by SteeringStabilizer PD loop)
+        self.target_ang = t_ang
         self.target_dist = max_d
 
         # Convert to degrees for steering
         target_deg = math.degrees(self.target_ang)
+
+        # ── DIRECTION DETECTION ──
+        if self.lap_direction == "UNKNOWN":
+            if target_deg > self.turn_detect_thresh:  # Left turn (CCW)
+                self.turn_timer += dt
+                if self.turn_timer >= self.turn_detect_time:
+                    self.lap_direction = "LEFT"
+                    self.get_logger().info('>>> LOCKED LAP DIRECTION: LEFT (CCW) <<<')
+            elif target_deg < -self.turn_detect_thresh: # Right turn (CW)
+                self.turn_timer += dt
+                if self.turn_timer >= self.turn_detect_time:
+                    self.lap_direction = "RIGHT"
+                    self.get_logger().info('>>> LOCKED LAP DIRECTION: RIGHT (CW) <<<')
+            else:
+                self.turn_timer = 0.0
 
         # 6. Emergency danger sense
         target_deg = self.danger_sense(target_deg)
@@ -563,8 +626,14 @@ class DisparityExtenderNode(Node):
             if abs(target_deg) < self.boost_angle_thresh and hit_d > self.boost_dist_thresh:
                 self.speed_boost = self.boost_max
 
-        # 8. Map target angle to steering range [-1, 1]
-        s_ang = remap(target_deg, -self.str_ang_thresh, self.str_ang_thresh, -1.0, 1.0)
+        # 8. Stable PD Steering Function (Proportional-Derivative) via SteeringStabilizer
+        # We negate the output because the stabilizer outputs negative steering for positive error,
+        # but our robot requires positive steering for positive (left) target angles.
+        s_ang = -self.stabilizer.compute_steering(
+            current_heading_deg=0.0,
+            target_heading_deg=target_deg,
+            dt=dt
+        )
         self.str_angle = s_ang
 
         # 9. Calculate speed based on distance
@@ -588,8 +657,7 @@ class DisparityExtenderNode(Node):
             f'Dist: {max_d:4.2f}m | '
             f'CastR: {self.cast_r:.3f}m | '
             f'Boost: {self.speed_boost:.2f}x | '
-            f'Towers: {len(self.detected_towers)} | '
-            f'Color: {self.closest_color}',
+            f'Dir: {self.lap_direction}',
             throttle_duration_sec=0.5
         )
 

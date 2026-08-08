@@ -29,7 +29,7 @@ disparity_extender_node:
     danger_angle_max: 90.0      # End of side danger zone (degrees)
 
     # ── Master Controls ────────────────────────────────────────────
-    enable_auto_steering: false  # Set to false to disable scan feed from directing steering/cmd_vel
+    enable_auto_steering: true  # Set to false to disable scan feed from directing steering/cmd_vel
 
     # ── Steering ───────────────────────────────────────────────────
     str_ang_thresh: 60.0        # Max physical steering angle (degrees)
