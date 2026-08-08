@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from math import pi, sin, cos
 from std_msgs.msg import Float32,Int32
+from geometry_msgs.msg import Vector3,Twist
 
 class VectorOdometryNode(Node):
     def __init__(self):
@@ -10,6 +11,8 @@ class VectorOdometryNode(Node):
         self.tick_sub = self.create_subscription(Int32, 'encoder/count', self.tick_callback, 10)
         self.heading_sub = self.create_subscription(Float32, 'heading', self.heading_callback, 10)
         self.current_tick = 0;
+        self.global_x = 0.0
+        self.global_y = 0.0
         self.current_yaw = 0.0;
         # odom states
         self.last_local_x = 0.0
@@ -22,6 +25,12 @@ class VectorOdometryNode(Node):
         self.wheel_diameter = 65
         self.counts_per_rev = 1000
         self.gear_ratio = 1.0
+
+        self.pos = Vector3()
+        self.pos.x = self.global_x
+        self.pos.y = self.global_y
+
+        self.odom_pub = self.create_publisher(Vector3, 'odom_vector', 10)
     
         
 
@@ -31,11 +40,16 @@ class VectorOdometryNode(Node):
         self.current_tick = msg.data
         del_tick = self.current_tick - self.last_local_x
         del_distance = del_tick * ((pi * self.wheel_diameter) / (self.counts_per_rev* self.gear_ratio))
+        self.global_x += del_distance * cos(self.current_yaw)
+        self.global_y += del_distance * sin(self.current_yaw)
+        self.pos.x = self.global_x
+        self.pos.y = self.global_y
+        self.get_logger().info(f'Updated position: x={self.pos.x:.3f}, y={self.pos.y:.3f}, yaw={self.current_yaw:.3f}')
+        self.odom_pub.publish(self.pos)
         
     def heading_callback(self, msg: Float32):
         self.current_yaw = int(msg.data)*(pi/180.0)  # Convert degrees to radians
-        self.get_logger().info(f'Received yaw: {self.current_yaw} radians')
-
+        
 def main(args=None):
     rclpy.init(args=args)
     vector_odom_node = VectorOdometryNode()
