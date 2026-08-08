@@ -15,6 +15,10 @@ const uint8_t ENCODER_B_PIN = 2;
 const uint8_t I2C_SDA = 8;
 const uint8_t I2C_SCL = 9;
 
+
+//button pin
+const uint8_t BUTTON_PIN = 42;
+
 // sonar pins (HC-SR04 style), see firmware/pin-map.md
 const uint8_t SONAR_FRONT_TRIG_PIN = 16;
 const uint8_t SONAR_FRONT_ECHO_PIN = 17;

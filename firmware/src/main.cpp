@@ -10,6 +10,8 @@
 #include "config.h"
 #include "debug_serial.h"
 #include "shared_data.h"
+#include "button_handler.h"
+#include "status_led.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -30,6 +32,8 @@ SonarReader sonarFront(SONAR_FRONT_TRIG_PIN, SONAR_FRONT_ECHO_PIN, SONAR_ECHO_TI
 SonarReader sonarLeft(SONAR_LEFT_TRIG_PIN, SONAR_LEFT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_LEFT_ENABLED);
 SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_RIGHT_ENABLED);
 SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_REAR_ENABLED);
+ButtonHandler button(BUTTON_PIN);
+StatusLed status_led;
 // Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
@@ -111,6 +115,13 @@ void setup(){
     steer.to(STEERING_CENTER_ANGLE);
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
+    button.begin();
+    // status_led.begin();
+    // status_led.setBrightness(100);
+    pinMode(NEOPIXEL_POWER_PIN, OUTPUT); // You must check your board's schematic for this pin number
+    digitalWrite(NEOPIXEL_POWER_PIN, HIGH); // Turn on physical power to the LED
+    neopixelWrite(RGB_BUILTIN, 0, 50, 0);
+    //status_led.setColor(0, 255, 0);
     Wire.begin(I2C_SDA, I2C_SCL);
     
     sharedMutex = xSemaphoreCreateMutex();
@@ -182,6 +193,10 @@ void loop(){
         Serial.write(txBuf, txLen);
     }
 
+
+    if(button.isPressed()) {
+      DEBUG_SERIAL.println("Button pressed!");
+    } 
     while(Serial.available()>0){
         uint8_t c = Serial.read();
         

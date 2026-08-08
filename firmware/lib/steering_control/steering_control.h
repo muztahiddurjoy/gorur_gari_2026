@@ -8,7 +8,7 @@ class SteeringController {
 private:
     Servo steer;
     int servoPin;
-    int servoCorrection = 25; // Correction factor for servo angle
+    int servoCorrection = 23; // Correction factor for servo angle
     int steeringAngle;
 public:
     SteeringController(int pin);
