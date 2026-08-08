@@ -1,0 +1,23 @@
+vision_node:
+  ros__parameters:
+    # ── Topics ──
+    camera_topic: "/camera/image_raw"
+    obstacles_topic: "/closest_obj"
+    publish_debug_image: true
+
+    # ── Region of Interest & Filtering ──
+    roi_top_crop: 0.40           # Fraction of top frame to ignore (e.g. 0.4 means keep bottom 60%)
+    min_contour_area: 250        # Minimum pixel area to consider a block valid
+
+    # ── HSV Color Thresholds (OpenCV Scale: H=0-180, S=0-255, V=0-255) ──
+    
+    # Green Pillar
+    green_lower: [35, 80, 0]
+    green_upper: [85, 255, 255]
+
+    # Red Pillar (Requires two ranges due to hue wrap-around at 0/180)
+    red_lower_1: [0, 95, 50]
+    red_upper_1: [12, 255, 255]
+    
+    red_lower_2: [165, 95, 50]
+    red_upper_2: [180, 255, 255]
