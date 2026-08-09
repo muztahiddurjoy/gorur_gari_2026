@@ -1,8 +1,8 @@
 disparity_extender_node:
   ros__parameters:
     # ── Vehicle Geometry (Circle Cast) ──────────────────────────────
-    cast_range_min: 0.18        # Min robot half-width at low speed (m)
-    cast_range_max: 0.21        # Max robot half-width at high speed (m)
+    cast_range_min: 0.26        # Min robot half-width at low speed (m)
+    cast_range_max: 0.30        # Max robot half-width at high speed (m)
     cast_precision: 81          # Neighbor window size (indices) for marching
     cast_skip: 4                # Skip factor for coarse FOV scan
     cast_skip_fine: 1           # Skip factor for fine marching neighbors
@@ -11,12 +11,12 @@ disparity_extender_node:
     look_range_deg: 80.0        # Forward FOV half-angle (degrees)
 
     # ── Speed ──────────────────────────────────────────────────────
-    max_speed: 1.2             # Maximum linear velocity (m/s)
+    max_speed: 1.5             # Maximum linear velocity (m/s)
     speed_cap_corner: 0.8      # Speed cap when cornering (m/s)
-    speed_cap_straight: 1.5    # Speed cap on straights (m/s)
+    speed_cap_straight: 1.2    # Speed cap on straights (m/s)
     boost_max: 1.155             # Speed boost multiplier on clear straights
-    boost_angle_thresh: 7.5     # Max steering angle to allow boost (degrees)
-    boost_dist_thresh: 0.90     # Min clear distance to allow boost (m)
+    boost_angle_thresh: 10.0     # Max steering angle to allow boost (degrees)
+    boost_dist_thresh: 1.5     # Min clear distance to allow boost (m)
 
     # ── Tower Detection ────────────────────────────────────────────
     edge_slope_thresh: 0.25     # Min LiDAR slope to detect an edge (m)
@@ -24,8 +24,8 @@ disparity_extender_node:
     tower_width_max: 0.10       # Max physical width to classify as tower (m)
 
     # ── Safety ─────────────────────────────────────────────────────
-    danger_dist: 0.25           # Emergency avoidance trigger distance (m)
-    danger_angle_min: 25.0      # Start of side danger zone (degrees)
+    danger_dist: 0.50           # Emergency avoidance trigger distance (m)
+    danger_angle_min: 15.0      # Start of side danger zone (degrees)
     danger_angle_max: 90.0      # End of side danger zone (degrees)
 
     # ── Master Controls ────────────────────────────────────────────

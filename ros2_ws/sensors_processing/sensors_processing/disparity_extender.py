@@ -26,7 +26,7 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Float32MultiArray, String
+from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from sensors_processing.steering_stabilizer import SteeringStabilizer
 
@@ -163,7 +163,6 @@ class DisparityExtenderNode(Node):
         self.target_ang = 0.0
         self.target_dist = 0.0
         self.cast_r = self.cast_range_min
-        self.closest_color = "N"  # "R", "G", or "N"
         self.detected_towers = []
         self.last_time = time.time()
         
@@ -181,15 +180,12 @@ class DisparityExtenderNode(Node):
         # ── Subscriptions & Publishers ────────────────────────────────
         self.scan_sub = self.create_subscription(LaserScan, scan_topic, self.lidar_callback, 1)
         self.odom_sub = self.create_subscription(Odometry, odom_topic, self.odom_callback, 10)
-        self.color_sub = self.create_subscription(String, '/closest_obj', self.color_callback, 1)
 
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.debug_scan_pub = self.create_publisher(LaserScan, '/scan_processed', 10)
         self.marker_pub = self.create_publisher(Marker, '/disparity/target_marker', 10)
         self.pillar_marker_pub = self.create_publisher(MarkerArray, '/disparity/pillar_markers', 10)
         self.tower_pub = self.create_publisher(Float32MultiArray, '/tower_detections', 10)
-
-        self.last_color_time = 0.0
 
         # ── Control Loop Timer (40 Hz) ────────────────────────────────
         self.create_timer(0.025, self.control_loop)
@@ -213,13 +209,6 @@ class DisparityExtenderNode(Node):
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         self.current_speed = math.hypot(vx, vy)
-
-    def color_callback(self, msg: String):
-        """Update the active WRO color override (R, G, N)."""
-        self.closest_color = msg.data.strip().upper()
-        self.last_color_time = time.time()
-        if self.closest_color not in ("R", "G"):
-            self.closest_color = "N"
 
     def lidar_callback(self, msg: LaserScan):
         """Buffer incoming LaserScan data for the background thread."""
@@ -441,21 +430,11 @@ class DisparityExtenderNode(Node):
         Scan all rays in the forward FOV, compute safe distance via marching,
         and return the direction with the maximum safe distance.
 
-        If a tower color override is active (Green → pass left, Red → pass right),
-        restrict the search range to enforce the correct side.
         """
         best = {"dst": 0.0, "ang": 0.0}
         best_score = -1.0
         chk = self.ind_range(-self.look_range_rad, self.look_range_rad)
         n = len(self.ranges)
-
-        # WRO Color Override: restrict search range
-        if towers and self.closest_color == "G":
-            # Green → only search rays LEFT of the closest tower (force pass left)
-            chk[0] = towers[0]["index"]
-        elif towers and self.closest_color == "R":
-            # Red → only search rays RIGHT of the closest tower (force pass right)
-            chk[1] = towers[0]["index"]
 
         for i in range(chk[0], chk[1], self.cast_skip):
             if i < 0 or i >= n:
@@ -485,12 +464,8 @@ class DisparityExtenderNode(Node):
             # Circle-cast marching with effective radius
             dt_hit = self.marching(i, radius=eff_radius)
 
-            # Forward-Bias Weighting: Penalize paths that require extreme steering.
-            # Normalizes angle [0, look_range_rad] to [0, 1]
-            angle_penalty = abs(dt_hit["ang"]) / self.look_range_rad
-            # Subtract up to X% of the safe distance based on how far it is from center.
-            # This makes the car prefer looking straight ahead unless a turn offers significantly more room.
-            score = dt_hit["dst"] * (1.0 - (self.forward_bias_factor * angle_penalty))
+            # Remove forward-bias (user request): Strictly choose longest clear sight.
+            score = dt_hit["dst"]
 
             # Apply Wall Hug Bias for inner-side rays
             if is_inner_side:
@@ -554,10 +529,6 @@ class DisparityExtenderNode(Node):
         n = len(self.ranges)
         if n == 0:
             return
-
-        # --- Color Decay ---
-        if time.time() - self.last_color_time > 1.0:
-            self.closest_color = "N"
 
         # 1. Dynamic Cast Radius (robot width expands with speed)
         speed_ratio = self.current_speed / self.max_speed if self.max_speed > 0 else 0.0
@@ -752,21 +723,11 @@ class DisparityExtenderNode(Node):
             marker.scale.y = 0.05
             marker.scale.z = 0.10
             
-            # Color logic: The closest tower (index 0) gets the camera color
+            # Color logic: Default to gray since camera feed is disabled
             marker.color.a = 1.0
-            if i == 0 and self.closest_color == "R":
-                marker.color.r = 1.0
-                marker.color.g = 0.0
-                marker.color.b = 0.0
-            elif i == 0 and self.closest_color == "G":
-                marker.color.r = 0.0
-                marker.color.g = 1.0
-                marker.color.b = 0.0
-            else:
-                # Gray for unknown/distant towers
-                marker.color.r = 0.5
-                marker.color.g = 0.5
-                marker.color.b = 0.5
+            marker.color.r = 0.5
+            marker.color.g = 0.5
+            marker.color.b = 0.5
                 
             marker_array.markers.append(marker)
             
