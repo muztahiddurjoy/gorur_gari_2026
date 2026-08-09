@@ -2,14 +2,15 @@ import rclpy
 from rclpy.node import Node
 from math import pi, sin, cos
 from std_msgs.msg import Float32, Int32
-from geometry_msgs.msg import Vector3,Twist
+from geometry_msgs.msg import Vector3, Twist
+from sensors_processing.steering_stabilizer import SteeringStabilizer
 
 class BoxLapTestNode(Node):
     def __init__(self):
         super().__init__('box_lap_test')
         self.get_logger().info('Box Lap Test node initialized.')
         self.sub = self.create_subscription(Vector3, 'odom', self.odom_callback, 10)
-        self.heading = self.create_subscription(Float32, 'heading', self.heading_callback, 10)
+        self.heading_sub = self.create_subscription(Float32, 'heading', self.heading_callback, 10)
         self.box_h = 95/100  # metres, 95cm box
         self.box_w = 50/100  # metres, 65cm box
 
@@ -20,6 +21,9 @@ class BoxLapTestNode(Node):
         self.heading_tolerance = 2  # degrees (error below is computed in degrees)
         self.vel_msg = Twist()
         self.pub = self.create_publisher(Twist, 'cmd_vel', 10)
+
+        # Steering Stabilizer interface
+        self.stabilizer = SteeringStabilizer(kp=0.03, max_steer=0.3, tolerance_deg=2.0)
     def odom_callback(self, msg:Vector3):
        # self.get_logger().info(f'odom: x={msg.x:.3f} y={msg.y:.3f} distance={msg.z:.3f}')
         
@@ -50,31 +54,15 @@ class BoxLapTestNode(Node):
             self.expected_heading = 0.0
             self.vel_msg.linear.x = 0.0
             self.vel_msg.angular.z = 0.0
-        # self.get_logger().info(f'cmd_vel: linear.x={self.vel_msg.linear.x:.3f} angular.z={self.vel_msg.angular.z:.3f}')
-        self.stabilize_steer()
+        # Calculate stabilized steering output
+        self.vel_msg.angular.z = self.stabilizer.compute_steering(
+            current_heading_deg=self.heading,
+            target_heading_deg=self.expected_heading
+        )
         self.pub.publish(self.vel_msg)
 
     def heading_callback(self, msg:Float32):
         self.heading = msg.data
-       # self.get_logger().info(f'heading: {self.heading:.3f}')
-
-    def stabilize_steer(self):
-        # signed error, positive = need to turn heading up toward expected
-        error = self.expected_heading - self.heading
-        # wrap to [-180, 180] so 350° vs 10° reads as +20°, not -340°
-        error = (error + 180) % 360 - 180
-
-        if abs(error) < self.heading_tolerance:
-            self.vel_msg.angular.z = 0.0
-            return
-
-        kp = 0.03  # tune this: angular.z output per degree of heading error
-        angular_z = kp * error
-
-        max_angular_z = 0.3  # cap so stabilization doesn't yank full steering lock
-        angular_z = max(-max_angular_z, min(max_angular_z, angular_z))
-
-        self.vel_msg.angular.z = -angular_z
         
 def main(args=None):
     rclpy.init(args=args)

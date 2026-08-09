@@ -26,8 +26,9 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Float32MultiArray, String
-from visualization_msgs.msg import Marker
+from std_msgs.msg import Float32MultiArray
+from visualization_msgs.msg import Marker, MarkerArray
+from sensors_processing.steering_stabilizer import SteeringStabilizer
 
 
 def clamp(val, mini, maxi):
@@ -63,9 +64,9 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('look_range_deg', 80.0)
 
         # ── Speed ─────────────────────────────────────────────────────
-        self.declare_parameter('max_speed', 0.60)
+        self.declare_parameter('max_speed', 1.2)
         self.declare_parameter('speed_cap_corner', 0.30)
-        self.declare_parameter('speed_cap_straight', 0.45)
+        self.declare_parameter('speed_cap_straight', 1.1)
         self.declare_parameter('boost_max', 1.35)
         self.declare_parameter('boost_angle_thresh', 7.5)
         self.declare_parameter('boost_dist_thresh', 1.10)
@@ -81,10 +82,18 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('danger_angle_max', 90.0)
 
         # ── Master Controls ────────────────────────────────────────────
-        self.declare_parameter('enable_auto_steering', False)
+        self.declare_parameter('enable_auto_steering', True)
 
         # ── Steering ─────────────────────────────────────────────────
         self.declare_parameter('str_ang_thresh', 60.0)
+        self.declare_parameter('forward_bias_factor', 0.25)
+        self.declare_parameter('steering_kd', 0.01)
+
+        # ── Direction & Wall Hugging ─────────────────────────────────
+        self.declare_parameter('wall_hug_margin', 0.05)
+        self.declare_parameter('wall_hug_bias', 1.5)
+        self.declare_parameter('turn_detect_time', 0.5)
+        self.declare_parameter('turn_detect_thresh', 30.0)
 
         # ── Game Modes ───────────────────────────────────────────────
         self.declare_parameter('chase_tower_mode', False)
@@ -108,7 +117,7 @@ class DisparityExtenderNode(Node):
         self.max_speed = float(self.get_parameter('max_speed').value)
         self.speed_cap_corner = float(self.get_parameter('speed_cap_corner').value)
         self.speed_cap_straight = float(self.get_parameter('speed_cap_straight').value)
-        self.boost_max = float(self.get_parameter('boost_max').value)
+        self.boost_max = float(self.get_parameter('boost_max').value * 2)
         self.boost_angle_thresh = float(self.get_parameter('boost_angle_thresh').value)
         self.boost_dist_thresh = float(self.get_parameter('boost_dist_thresh').value)
 
@@ -121,6 +130,13 @@ class DisparityExtenderNode(Node):
         self.danger_angle_max = float(self.get_parameter('danger_angle_max').value)
 
         self.str_ang_thresh = float(self.get_parameter('str_ang_thresh').value)
+        self.forward_bias_factor = float(self.get_parameter('forward_bias_factor').value)
+        self.steering_kd = float(self.get_parameter('steering_kd').value)
+
+        self.wall_hug_margin = float(self.get_parameter('wall_hug_margin').value)
+        self.wall_hug_bias = float(self.get_parameter('wall_hug_bias').value)
+        self.turn_detect_time = float(self.get_parameter('turn_detect_time').value)
+        self.turn_detect_thresh = float(self.get_parameter('turn_detect_thresh').value)
 
         self.chase_tower_mode = bool(self.get_parameter('chase_tower_mode').value)
 
@@ -147,21 +163,29 @@ class DisparityExtenderNode(Node):
         self.target_ang = 0.0
         self.target_dist = 0.0
         self.cast_r = self.cast_range_min
-        self.closest_color = "N"  # "R", "G", or "N"
         self.detected_towers = []
         self.last_time = time.time()
+        
+        # ── Steering Stabilizer ───────────────────────────────────────
+        self.stabilizer = SteeringStabilizer(
+            kp=1.0 / self.str_ang_thresh,
+            kd=self.steering_kd,
+            max_steer=1.0,
+            tolerance_deg=2.0
+        )
+        
+        self.lap_direction = "UNKNOWN"
+        self.turn_timer = 0.0
 
         # ── Subscriptions & Publishers ────────────────────────────────
         self.scan_sub = self.create_subscription(LaserScan, scan_topic, self.lidar_callback, 1)
         self.odom_sub = self.create_subscription(Odometry, odom_topic, self.odom_callback, 10)
-        self.color_sub = self.create_subscription(String, '/closest_obj', self.color_callback, 1)
 
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.debug_scan_pub = self.create_publisher(LaserScan, '/scan_processed', 10)
         self.marker_pub = self.create_publisher(Marker, '/disparity/target_marker', 10)
+        self.pillar_marker_pub = self.create_publisher(MarkerArray, '/disparity/pillar_markers', 10)
         self.tower_pub = self.create_publisher(Float32MultiArray, '/tower_detections', 10)
-
-        self.last_color_time = 0.0
 
         # ── Control Loop Timer (40 Hz) ────────────────────────────────
         self.create_timer(0.025, self.control_loop)
@@ -185,13 +209,6 @@ class DisparityExtenderNode(Node):
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         self.current_speed = math.hypot(vx, vy)
-
-    def color_callback(self, msg: String):
-        """Update the active WRO color override (R, G, N)."""
-        self.closest_color = msg.data.strip().upper()
-        self.last_color_time = time.time()
-        if self.closest_color not in ("R", "G"):
-            self.closest_color = "N"
 
     def lidar_callback(self, msg: LaserScan):
         """Buffer incoming LaserScan data for the background thread."""
@@ -413,20 +430,11 @@ class DisparityExtenderNode(Node):
         Scan all rays in the forward FOV, compute safe distance via marching,
         and return the direction with the maximum safe distance.
 
-        If a tower color override is active (Green → pass left, Red → pass right),
-        restrict the search range to enforce the correct side.
         """
         best = {"dst": 0.0, "ang": 0.0}
+        best_score = -1.0
         chk = self.ind_range(-self.look_range_rad, self.look_range_rad)
         n = len(self.ranges)
-
-        # WRO Color Override: restrict search range
-        if towers and self.closest_color == "G":
-            # Green → only search rays LEFT of the closest tower (force pass left)
-            chk[0] = towers[0]["index"]
-        elif towers and self.closest_color == "R":
-            # Red → only search rays RIGHT of the closest tower (force pass right)
-            chk[1] = towers[0]["index"]
 
         for i in range(chk[0], chk[1], self.cast_skip):
             if i < 0 or i >= n:
@@ -440,11 +448,32 @@ class DisparityExtenderNode(Node):
             if self.ranges[i] <= 0.0 or self.ranges[i] > 3.0:
                 continue
 
-            # Circle-cast marching
-            dt = self.marching(i)
+            # ── WALL HUG MARGIN ──
+            # Determine effective safety radius based on side and lap direction
+            eff_radius = self.cast_r
+            ang = self.i2a(i)
+            is_inner_side = False
+            
+            if self.lap_direction == "LEFT" and ang > 0:
+                eff_radius += self.wall_hug_margin
+                is_inner_side = True
+            elif self.lap_direction == "RIGHT" and ang < 0:
+                eff_radius += self.wall_hug_margin
+                is_inner_side = True
 
-            if dt["dst"] > best["dst"]:
-                best = dt
+            # Circle-cast marching with effective radius
+            dt_hit = self.marching(i, radius=eff_radius)
+
+            # Remove forward-bias (user request): Strictly choose longest clear sight.
+            score = dt_hit["dst"]
+
+            # Apply Wall Hug Bias for inner-side rays
+            if is_inner_side:
+                score *= self.wall_hug_bias
+
+            if score > best_score:
+                best_score = score
+                best = dt_hit
 
         return best["dst"], best["ang"]
 
@@ -501,10 +530,6 @@ class DisparityExtenderNode(Node):
         if n == 0:
             return
 
-        # --- Color Decay ---
-        if time.time() - self.last_color_time > 1.0:
-            self.closest_color = "N"
-
         # 1. Dynamic Cast Radius (robot width expands with speed)
         speed_ratio = self.current_speed / self.max_speed if self.max_speed > 0 else 0.0
         self.cast_r = remap(speed_ratio, 0.45, 1.0, self.cast_range_min, self.cast_range_max)
@@ -539,17 +564,27 @@ class DisparityExtenderNode(Node):
             t_ang = self.detected_towers[0]["ang"]
             max_d = self.detected_towers[0]["dst"]
 
-        # 5. Smooth target angle (LazyGo's dual lerp)
-        delta = abs(t_ang - self.target_ang)
-        if delta > 0.5:
-            self.target_ang = t_ang
-        else:
-            self.target_ang = lerp(self.target_ang, t_ang, min(35 * dt, 1.0))
-        self.target_ang = lerp(self.target_ang, t_ang, 0.1)
+        # 5. Set target angle (smoothing is now handled by SteeringStabilizer PD loop)
+        self.target_ang = t_ang
         self.target_dist = max_d
 
         # Convert to degrees for steering
         target_deg = math.degrees(self.target_ang)
+
+        # ── DIRECTION DETECTION ──
+        if self.lap_direction == "UNKNOWN":
+            if target_deg > self.turn_detect_thresh:  # Left turn (CCW)
+                self.turn_timer += dt
+                if self.turn_timer >= self.turn_detect_time:
+                    self.lap_direction = "LEFT"
+                    self.get_logger().info('>>> LOCKED LAP DIRECTION: LEFT (CCW) <<<')
+            elif target_deg < -self.turn_detect_thresh: # Right turn (CW)
+                self.turn_timer += dt
+                if self.turn_timer >= self.turn_detect_time:
+                    self.lap_direction = "RIGHT"
+                    self.get_logger().info('>>> LOCKED LAP DIRECTION: RIGHT (CW) <<<')
+            else:
+                self.turn_timer = 0.0
 
         # 6. Emergency danger sense
         target_deg = self.danger_sense(target_deg)
@@ -563,8 +598,17 @@ class DisparityExtenderNode(Node):
             if abs(target_deg) < self.boost_angle_thresh and hit_d > self.boost_dist_thresh:
                 self.speed_boost = self.boost_max
 
-        # 8. Map target angle to steering range [-1, 1]
-        s_ang = remap(target_deg, -self.str_ang_thresh, self.str_ang_thresh, -1.0, 1.0)
+        # 8. Stable PD Steering Function (Proportional-Derivative) via SteeringStabilizer
+        # Commented out by user request. Reverting to raw direct steering mapping.
+        # s_ang = -self.stabilizer.compute_steering(
+        #     current_heading_deg=0.0,
+        #     target_heading_deg=target_deg,
+        #     dt=dt
+        # )
+        
+        # RAW Direct Steering (Normalizes the target degree by the max physical threshold)
+        s_ang = target_deg / self.str_ang_thresh
+        
         self.str_angle = s_ang
 
         # 9. Calculate speed based on distance
@@ -588,8 +632,7 @@ class DisparityExtenderNode(Node):
             f'Dist: {max_d:4.2f}m | '
             f'CastR: {self.cast_r:.3f}m | '
             f'Boost: {self.speed_boost:.2f}x | '
-            f'Towers: {len(self.detected_towers)} | '
-            f'Color: {self.closest_color}',
+            f'Dir: {self.lap_direction}',
             throttle_duration_sec=0.5
         )
 
@@ -598,6 +641,9 @@ class DisparityExtenderNode(Node):
 
         # 13. Publish target arrow marker
         self.publish_target_marker()
+        
+        # 14. Publish 3D pillars combined from LiDAR + Webcam
+        self.publish_pillars_marker_array()
 
 
 
@@ -644,6 +690,48 @@ class DisparityExtenderNode(Node):
         marker.color.b = 0.0
         marker.color.a = 0.9
         self.marker_pub.publish(marker)
+
+    def publish_pillars_marker_array(self):
+        """Combine LiDAR distance and Webcam color to draw 3D pillars in RViz2."""
+        if not hasattr(self, 'scan_header'):
+            return
+            
+        marker_array = MarkerArray()
+        
+        # A single 'delete all' marker to clear previous frame's pillars
+        del_marker = Marker()
+        del_marker.action = 3  # Marker.DELETEALL is 3
+        marker_array.markers.append(del_marker)
+        
+        for i, tower in enumerate(self.detected_towers):
+            marker = Marker()
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.header.frame_id = self.scan_header.frame_id if self.scan_header.frame_id else 'laser'
+            marker.ns = "pillars"
+            marker.id = i + 1
+            marker.type = Marker.CUBE
+            marker.action = Marker.ADD
+            
+            # Position from LiDAR
+            marker.pose.position.x = float(tower["x"])
+            marker.pose.position.y = float(tower["y"])
+            marker.pose.position.z = 0.05  # Half of 10cm height
+            marker.pose.orientation.w = 1.0
+            
+            # WRO Pillar approximate size (5x5x10cm)
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.10
+            
+            # Color logic: Default to gray since camera feed is disabled
+            marker.color.a = 1.0
+            marker.color.r = 0.5
+            marker.color.g = 0.5
+            marker.color.b = 0.5
+                
+            marker_array.markers.append(marker)
+            
+        self.pillar_marker_pub.publish(marker_array)
 
 
 def main(args=None):
