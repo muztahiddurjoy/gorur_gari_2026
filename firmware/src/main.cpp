@@ -46,26 +46,54 @@ TaskHandle_t i2cTaskHandle = nullptr;
 void i2cTask(void *pvParameters) {
     // Create display and IMU objects locally – they own the I2C bus
     DisplayController display;
-    if (!display.begin()) {
-        DEBUG_SERIAL.println("Display init failed");
-    }
-
     Heading heading;
-    if (!heading.begin()) {
-        DEBUG_SERIAL.println("IMU init failed");
-    }
 
     TickType_t lastDisplayUpdate = xTaskGetTickCount();
-    const TickType_t displayInterval = pdMS_TO_TICKS(50);   // 50 ms refresh
-    const TickType_t imuInterval = pdMS_TO_TICKS(10);        // IMU read every 10 ms
+    const TickType_t displayInterval = pdMS_TO_TICKS(DISPLAY_REFRESH_INTERVAL_MS);
+    const TickType_t imuInterval = pdMS_TO_TICKS(IMU_SAMPLE_INTERVAL_MS);
+    const TickType_t initRetryInterval = pdMS_TO_TICKS(I2C_INIT_RETRY_INTERVAL_MS);
+    const TickType_t healthCheckInterval = pdMS_TO_TICKS(I2C_HEALTH_CHECK_INTERVAL_MS);
 
     TickType_t lastIMUUpdate = xTaskGetTickCount();
+    TickType_t lastHealthCheck = xTaskGetTickCount();
+    // one interval back, so both devices get their first attempt straight away
+    TickType_t lastDisplayInit = xTaskGetTickCount() - initRetryInterval;
+    TickType_t lastIMUInit = lastDisplayInit;
 
     while (true) {
         TickType_t now = xTaskGetTickCount();
 
-        // --- Update IMU (every 10 ms) ---
-        if (now - lastIMUUpdate >= imuInterval) {
+        // --- Bring up whatever is not up yet. On a cold boot the panel and the
+        // BNO055 may still be in their own power on reset, so a failed attempt
+        // means "not yet", never "give up" ---
+        if (!display.isReady() && now - lastDisplayInit >= initRetryInterval) {
+            lastDisplayInit = now;
+            if (display.begin()) {
+                DEBUG_SERIAL.println("Display ready");
+            }
+        }
+        if (!heading.isReady() && now - lastIMUInit >= initRetryInterval) {
+            lastIMUInit = now;
+            heading.begin();  // logs its own outcome
+        }
+
+        // --- Watch for a device dropping off the bus mid run (brownout when the
+        // motor kicks in, a loose jumper). Marking it lost hands it back to the
+        // retry path above, so it recovers without a reboot ---
+        if (now - lastHealthCheck >= healthCheckInterval) {
+            lastHealthCheck = now;
+            if (display.isReady() && !display.isResponding()) {
+                DEBUG_SERIAL.println("Display stopped responding, re-initialising");
+                display.markLost();
+            }
+            if (heading.isReady() && !heading.isResponding()) {
+                DEBUG_SERIAL.println("BNO055 stopped responding, re-initialising");
+                heading.markLost();
+            }
+        }
+
+        // --- Update IMU (every IMU_SAMPLE_INTERVAL_MS) ---
+        if (heading.isReady() && now - lastIMUUpdate >= imuInterval) {
             lastIMUUpdate = now;
             heading.update();
             float yaw = heading.getHeading();
@@ -77,19 +105,21 @@ void i2cTask(void *pvParameters) {
             }
         }
 
-        // --- Update Display (every 50 ms) ---
-        if (now - lastDisplayUpdate >= displayInterval) {
+        // --- Update Display (every DISPLAY_REFRESH_INTERVAL_MS) ---
+        if (display.isReady() && now - lastDisplayUpdate >= displayInterval) {
             lastDisplayUpdate = now;
 
             // Read display strings from shared struct
             String speed, encoder, steering, velData;
+            float yaw = 0.0f;
             if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
                 speed = shared.speedText;
                 encoder = shared.encoderText;
                 steering = shared.steeringText;
                 velData = shared.vel_data;
-                // Optionally read heading to display as well:
-                // String yawText = "Yaw: " + String(shared.heading);
+                // taken under the same lock as the strings, so the screen never
+                // shows a half written float
+                yaw = shared.heading;
                 xSemaphoreGive(sharedMutex);
             }
 
@@ -98,7 +128,7 @@ void i2cTask(void *pvParameters) {
             display.displayText(speed, 0, 0, 1);
             display.displayText(encoder, 0, 10, 1);
             display.displayText(steering, 0, 20, 1);
-            display.displayText("Yaw: " + String(shared.heading), 0, 30, 1);
+            display.displayText("Yaw: " + String(yaw), 0, 30, 1);
             display.displayText(velData, 0, 40, 1);
             display.updateScreen();    // single I2C transfer
         }
