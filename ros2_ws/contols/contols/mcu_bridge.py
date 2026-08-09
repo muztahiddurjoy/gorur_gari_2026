@@ -6,7 +6,7 @@ from contols import mcu_to_ros2
 from contols import ros2_to_mcu
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Range
-from std_msgs.msg import Int32, Int8, UInt8, Float32
+from std_msgs.msg import Bool, Int32, Int8, UInt8, Float32
 
 # sonar_1..4 on the wire map to these sensors in this order, see firmware/pin-map.md
 SONAR_NAMES = ['front', 'left', 'right', 'rear']
@@ -23,6 +23,10 @@ SONAR_ENABLED_DEFAULTS = {'front': False, 'left': False, 'right': False, 'rear':
 
 # encoder_direction on the wire: 0 = stopped, 1 = forward, 2 = reverse (see firmware/src/main.cpp)
 WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
+
+# how long to wait after opening the port before announcing ourselves to the MCU.
+# long enough for the esp32 to clear its bootloader if opening the port reset it.
+MCU_CONNECT_NOTICE_DELAY_S = 1.0
 
 class MCUBridgeNode(Node):
     def __init__(self):
@@ -51,6 +55,7 @@ class MCUBridgeNode(Node):
         self.encoder_direction_pub = self.create_publisher(Int8, 'encoder/direction', 10)
         self.steering_angle_pub = self.create_publisher(UInt8, 'steering_angle', 10)
         self.heading_pub = self.create_publisher(Float32, 'heading', 10)
+        self.button_pub = self.create_publisher(Bool, '/button_status', 10)
 
         try:
             self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
@@ -78,10 +83,27 @@ class MCUBridgeNode(Node):
             # rclpy.shutdown()
             # return
         self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
+        # tell the MCU we are here, exactly once. it lights its status LED on this
+        # and nothing else, so this is the one announcement that matters. fired off
+        # a timer rather than inline because opening the port toggles DTR, which can
+        # reset the esp32 - a frame sent right now would land in the bootloader.
+        self.connect_notice_timer = self.create_timer(
+            MCU_CONNECT_NOTICE_DELAY_S, self.send_connect_notice)
         # drain incoming sensor telemetry at 50 Hz
         self.mcu_poll_timer = self.create_timer(0.02, self.poll_mcu)
         # self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
 
+
+    def send_connect_notice(self):
+        # one shot: whether or not the frame gets through, we never send it again
+        self.connect_notice_timer.cancel()
+        if not self.mcu_connected:
+            return
+        try:
+            self.mav_tx.gorur_gari_ros2_to_mcu_connect_msg_send(connected=1)
+            self.get_logger().info('Announced connection to MCU (status LED on).')
+        except Exception as e:
+            self.get_logger().error(f'Failed to announce connection to MCU: {e}')
 
     def handle_cmd_vel(self,msg:Twist):
         try:
@@ -153,6 +175,8 @@ class MCUBridgeNode(Node):
         self.encoder_direction_pub.publish(Int8(data=direction_sign))
         self.steering_angle_pub.publish(UInt8(data=msg.servo))
         self.heading_pub.publish(Float32(data=msg.heading))
+        # 1 = held down, or tapped since the MCU's last frame (see firmware/src/main.cpp)
+        self.button_pub.publish(Bool(data=bool(msg.button)))
 
     def send_heartbeat(self):
         msg = self.master.recv_match(blocking=False)

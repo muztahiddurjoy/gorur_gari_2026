@@ -362,6 +362,7 @@ enums: Dict[str, Enum] = {}
 MAVLINK_MSG_ID_BAD_DATA = -1
 MAVLINK_MSG_ID_UNKNOWN = -2
 MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_MSG = 50002
+MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG = 50003
 
 
 class MAVLink_gorur_gari_ros2_to_mcu_msg_message(MAVLink_message):
@@ -403,8 +404,48 @@ class MAVLink_gorur_gari_ros2_to_mcu_msg_message(MAVLink_message):
 setattr(MAVLink_gorur_gari_ros2_to_mcu_msg_message, "name", mavlink_msg_deprecated_name_property())
 
 
+class MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message(MAVLink_message):
+    """
+    Sent once by mcu_bridge when it opens the serial link, so the MCU
+    can show on the status LED that ROS2 is talking to it
+    """
+
+    id = MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG
+    msgname = "GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG"
+    fieldnames = ["connected"]
+    ordered_fieldnames = ["connected"]
+    fieldtypes = ["uint8_t"]
+    fielddisplays_by_name: Dict[str, str] = {}
+    fieldenums_by_name: Dict[str, str] = {}
+    fieldunits_by_name: Dict[str, str] = {}
+    native_format = bytearray(b"<B")
+    orders = [0]
+    lengths = [1]
+    array_lengths = [0]
+    crc_extra = 149
+    unpacker = struct.Struct("<B")
+    instance_field = None
+    instance_offset = -1
+
+    def __init__(self, connected: int):
+        MAVLink_message.__init__(self, MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message.id, MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message.msgname)
+        self._fieldnames = MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message.fieldnames
+        self._instance_field = MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message.instance_field
+        self._instance_offset = MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message.instance_offset
+        self.connected = connected
+
+    def pack(self, mav: "MAVLink", force_mavlink1: bool = False) -> bytes:
+        return self._pack(mav, self.crc_extra, self.unpacker.pack(self.connected), force_mavlink1=force_mavlink1)
+
+
+# Define name on the class for backwards compatibility (it is now msgname).
+# Done with setattr to hide the class variable from mypy.
+setattr(MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message, "name", mavlink_msg_deprecated_name_property())
+
+
 mavlink_map: Dict[int, Type[MAVLink_message]] = {
     MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_MSG: MAVLink_gorur_gari_ros2_to_mcu_msg_message,
+    MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG: MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message,
 }
 
 
@@ -822,3 +863,23 @@ class MAVLink(object):
 
         """
         self.send(self.gorur_gari_ros2_to_mcu_msg_encode(throttle, steering), force_mavlink1=force_mavlink1)
+
+    def gorur_gari_ros2_to_mcu_connect_msg_encode(self, connected: int) -> MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message:
+        """
+        Sent once by mcu_bridge when it opens the serial link, so the MCU can
+        show on the status LED that ROS2 is talking to it
+
+        connected                 : 1 = link established, 0 = link going down (type:uint8_t)
+
+        """
+        return MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message(connected)
+
+    def gorur_gari_ros2_to_mcu_connect_msg_send(self, connected: int, force_mavlink1: bool = False) -> None:
+        """
+        Sent once by mcu_bridge when it opens the serial link, so the MCU can
+        show on the status LED that ROS2 is talking to it
+
+        connected                 : 1 = link established, 0 = link going down (type:uint8_t)
+
+        """
+        self.send(self.gorur_gari_ros2_to_mcu_connect_msg_encode(connected), force_mavlink1=force_mavlink1)

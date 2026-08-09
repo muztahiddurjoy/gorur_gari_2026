@@ -10,6 +10,8 @@
 #include "config.h"
 #include "debug_serial.h"
 #include "shared_data.h"
+#include "button_handler.h"
+#include "status_led.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -30,6 +32,8 @@ SonarReader sonarFront(SONAR_FRONT_TRIG_PIN, SONAR_FRONT_ECHO_PIN, SONAR_ECHO_TI
 SonarReader sonarLeft(SONAR_LEFT_TRIG_PIN, SONAR_LEFT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_LEFT_ENABLED);
 SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_RIGHT_ENABLED);
 SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_REAR_ENABLED);
+ButtonHandler button(BUTTON_PIN);
+StatusLed status_led(STATUS_LED_PIN);
 // Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
@@ -42,26 +46,54 @@ TaskHandle_t i2cTaskHandle = nullptr;
 void i2cTask(void *pvParameters) {
     // Create display and IMU objects locally – they own the I2C bus
     DisplayController display;
-    if (!display.begin()) {
-        DEBUG_SERIAL.println("Display init failed");
-    }
-
     Heading heading;
-    if (!heading.begin()) {
-        DEBUG_SERIAL.println("IMU init failed");
-    }
 
     TickType_t lastDisplayUpdate = xTaskGetTickCount();
-    const TickType_t displayInterval = pdMS_TO_TICKS(50);   // 50 ms refresh
-    const TickType_t imuInterval = pdMS_TO_TICKS(10);        // IMU read every 10 ms
+    const TickType_t displayInterval = pdMS_TO_TICKS(DISPLAY_REFRESH_INTERVAL_MS);
+    const TickType_t imuInterval = pdMS_TO_TICKS(IMU_SAMPLE_INTERVAL_MS);
+    const TickType_t initRetryInterval = pdMS_TO_TICKS(I2C_INIT_RETRY_INTERVAL_MS);
+    const TickType_t healthCheckInterval = pdMS_TO_TICKS(I2C_HEALTH_CHECK_INTERVAL_MS);
 
     TickType_t lastIMUUpdate = xTaskGetTickCount();
+    TickType_t lastHealthCheck = xTaskGetTickCount();
+    // one interval back, so both devices get their first attempt straight away
+    TickType_t lastDisplayInit = xTaskGetTickCount() - initRetryInterval;
+    TickType_t lastIMUInit = lastDisplayInit;
 
     while (true) {
         TickType_t now = xTaskGetTickCount();
 
-        // --- Update IMU (every 10 ms) ---
-        if (now - lastIMUUpdate >= imuInterval) {
+        // --- Bring up whatever is not up yet. On a cold boot the panel and the
+        // BNO055 may still be in their own power on reset, so a failed attempt
+        // means "not yet", never "give up" ---
+        if (!display.isReady() && now - lastDisplayInit >= initRetryInterval) {
+            lastDisplayInit = now;
+            if (display.begin()) {
+                DEBUG_SERIAL.println("Display ready");
+            }
+        }
+        if (!heading.isReady() && now - lastIMUInit >= initRetryInterval) {
+            lastIMUInit = now;
+            heading.begin();  // logs its own outcome
+        }
+
+        // --- Watch for a device dropping off the bus mid run (brownout when the
+        // motor kicks in, a loose jumper). Marking it lost hands it back to the
+        // retry path above, so it recovers without a reboot ---
+        if (now - lastHealthCheck >= healthCheckInterval) {
+            lastHealthCheck = now;
+            if (display.isReady() && !display.isResponding()) {
+                DEBUG_SERIAL.println("Display stopped responding, re-initialising");
+                display.markLost();
+            }
+            if (heading.isReady() && !heading.isResponding()) {
+                DEBUG_SERIAL.println("BNO055 stopped responding, re-initialising");
+                heading.markLost();
+            }
+        }
+
+        // --- Update IMU (every IMU_SAMPLE_INTERVAL_MS) ---
+        if (heading.isReady() && now - lastIMUUpdate >= imuInterval) {
             lastIMUUpdate = now;
             heading.update();
             float yaw = heading.getHeading();
@@ -73,19 +105,21 @@ void i2cTask(void *pvParameters) {
             }
         }
 
-        // --- Update Display (every 50 ms) ---
-        if (now - lastDisplayUpdate >= displayInterval) {
+        // --- Update Display (every DISPLAY_REFRESH_INTERVAL_MS) ---
+        if (display.isReady() && now - lastDisplayUpdate >= displayInterval) {
             lastDisplayUpdate = now;
 
             // Read display strings from shared struct
             String speed, encoder, steering, velData;
+            float yaw = 0.0f;
             if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
                 speed = shared.speedText;
                 encoder = shared.encoderText;
                 steering = shared.steeringText;
                 velData = shared.vel_data;
-                // Optionally read heading to display as well:
-                // String yawText = "Yaw: " + String(shared.heading);
+                // taken under the same lock as the strings, so the screen never
+                // shows a half written float
+                yaw = shared.heading;
                 xSemaphoreGive(sharedMutex);
             }
 
@@ -94,7 +128,7 @@ void i2cTask(void *pvParameters) {
             display.displayText(speed, 0, 0, 1);
             display.displayText(encoder, 0, 10, 1);
             display.displayText(steering, 0, 20, 1);
-            display.displayText("Yaw: " + String(shared.heading), 0, 30, 1);
+            display.displayText("Yaw: " + String(yaw), 0, 30, 1);
             display.displayText(velData, 0, 40, 1);
             display.updateScreen();    // single I2C transfer
         }
@@ -111,6 +145,10 @@ void setup(){
     steer.to(STEERING_CENTER_ANGLE);
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
+    button.begin();
+    // stays off until the ROS2 bridge announces itself over serial, see the
+    // connect message handling in loop()
+    status_led.begin();
     Wire.begin(I2C_SDA, I2C_SCL);
     
     sharedMutex = xSemaphoreCreateMutex();
@@ -153,7 +191,16 @@ void loop(){
     }
     sonarIndex = (sonarIndex + 1) % 4;
 
-    // --- Send encoder/steering/heading/sonar telemetry to ROS2 ---
+    // --- Button: poll every loop, but telemetry only goes out every
+    // SENSOR_TX_INTERVAL_MS. Latch the press edge so a tap shorter than that
+    // interval still reaches ROS2 instead of falling between two frames ---
+    static bool buttonPressLatch = false;
+    if (button.isPressed()) {
+        buttonPressLatch = true;
+        DEBUG_SERIAL.println("Button pressed!");
+    }
+
+    // --- Send encoder/steering/heading/sonar/button telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
     unsigned long nowMs = millis();
     if (nowMs - lastSensorTxMs >= SENSOR_TX_INTERVAL_MS) {
@@ -173,14 +220,19 @@ void loop(){
         // raw heading, the same value the OLED prints (unwrapped degrees)
         float headingField = headingDeg;
 
+        // held down right now, or tapped since the last frame went out
+        uint8_t buttonField = (button.isDown() || buttonPressLatch) ? 1 : 0;
+        buttonPressLatch = false;
+
         mavlink_message_t txMsg;
         uint8_t txBuf[MAVLINK_MAX_PACKET_LEN];
         mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, &txMsg,
             encoderCountField, encoderSpeedField, encoderDirectionField, steer.getAngle(),
-            headingField, sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3]);
+            headingField, sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3], buttonField);
         uint16_t txLen = mavlink_msg_to_send_buffer(txBuf, &txMsg);
         Serial.write(txBuf, txLen);
     }
+
 
     while(Serial.available()>0){
         uint8_t c = Serial.read();
@@ -194,6 +246,14 @@ void loop(){
                 motor.to(throttle);
                 uint8_t steering = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_steering(&received_msg);
                 steer.to(steering);
+            }
+            // mcu_bridge sends this once, right after it opens the port. it is the
+            // only announcement we get that a ROS2 side actually exists, so it is
+            // what drives the status LED.
+            else if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_connect_msg){
+                uint8_t connected = mavlink_msg_gorur_gari_ros2_to_mcu_connect_msg_get_connected(&received_msg);
+                status_led.set(connected != 0);
+                DEBUG_SERIAL.println(connected ? "ROS2 bridge connected" : "ROS2 bridge disconnected");
             }
         }
     }

@@ -7,5 +7,9 @@
             <field type="int8_t" name="throttle">throttle</field>
             <field type="uint8_t" name="steering">steering</field>
         </message>
+        <message id="50003" name="gorur_gari_ros2_to_mcu_connect_msg">
+            <description>Sent once by mcu_bridge when it opens the serial link, so the MCU can show on the status LED that ROS2 is talking to it</description>
+            <field type="uint8_t" name="connected">1 = link established, 0 = link going down</field>
+        </message>
     </messages>
 </mavlink>

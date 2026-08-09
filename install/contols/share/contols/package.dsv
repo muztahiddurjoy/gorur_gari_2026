@@ -1,6 +1,0 @@
-source;share/contols/hook/pythonpath.ps1
-source;share/contols/hook/pythonpath.dsv
-source;share/contols/hook/pythonpath.sh
-source;share/contols/hook/ament_prefix_path.ps1
-source;share/contols/hook/ament_prefix_path.dsv
-source;share/contols/hook/ament_prefix_path.sh

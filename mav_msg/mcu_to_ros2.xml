@@ -14,6 +14,8 @@
             <field type="uint8_t" name="sonar_2">cm</field>
             <field type="uint8_t" name="sonar_3">cm</field>
             <field type="uint8_t" name="sonar_4">cm</field>
+
+            <field type="uint8_t" name="button">0 = released, 1 = pressed</field>
         </message>
     </messages>
 </mavlink>

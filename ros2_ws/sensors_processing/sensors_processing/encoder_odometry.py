@@ -54,9 +54,16 @@ class EncoderOdometryNode(Node):
         # ROS wants yaw growing counter clockwise (REP-103). Flip this if the
         # robot turns the wrong way in RViz.
         self.declare_parameter('heading_clockwise', True)
-        # Start at yaw 0 instead of whatever direction the car happens to face,
-        # so the odom frame lines up with the robot at startup.
-        self.declare_parameter('zero_heading_on_start', True)
+        # Added to the raw heading to get the direction the car actually
+        # drives. The BNO055 is mounted at the rear facing BACKWARD, but that
+        # does NOT make this 180: its Euler yaw is referenced to the sensor's
+        # own attitude at power-on, so a constant mounting rotation about z
+        # cancels. Must match vector_odom and goto_controller.
+        self.declare_parameter('heading_offset_deg', 0.0)
+        # Keep False so the yaw always matches the MCU's heading (the OLED
+        # value, just sign flipped into REP-103), and restarting this node
+        # does not move the odom frame. True re-zeroes yaw at node start.
+        self.declare_parameter('zero_heading_on_start', False)
 
         self.wheel_diameter = self.get_parameter('wheel_diameter_m').value
         self.counts_per_rev = self.get_parameter('encoder_counts_per_rev').value
@@ -64,6 +71,7 @@ class EncoderOdometryNode(Node):
         self.base_frame = self.get_parameter('base_frame').value
         self.publish_tf = self.get_parameter('publish_tf').value
         self.heading_clockwise = self.get_parameter('heading_clockwise').value
+        self.heading_offset_deg = float(self.get_parameter('heading_offset_deg').value)
         self.zero_heading_on_start = self.get_parameter('zero_heading_on_start').value
 
         if self.counts_per_rev <= 0:
@@ -94,7 +102,8 @@ class EncoderOdometryNode(Node):
 
     def handle_heading(self, msg):
         """Cache the IMU heading, converted into a ROS yaw in radians."""
-        yaw = math.radians(msg.data)
+        # offset undoes the backward IMU mounting
+        yaw = math.radians(msg.data + self.heading_offset_deg)
         if self.heading_clockwise:
             yaw = -yaw
         if self.heading_offset is None:
