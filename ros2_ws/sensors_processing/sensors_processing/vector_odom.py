@@ -62,6 +62,11 @@ class VectorOdometryNode(Node):
         # The BNO055 reports a compass style heading that grows clockwise, while
         # ROS wants yaw growing counter clockwise (REP-103).
         self.declare_parameter('heading_clockwise', True)
+        # The BNO055 is mounted at the rear of the car facing BACKWARD, so it
+        # reports the direction the tail points. Added to the raw heading to
+        # get the direction the car actually drives. Every /heading consumer
+        # that turns it into a yaw must use the same value.
+        self.declare_parameter('heading_offset_deg', 180.0)
         # Keep False so the yaw always matches the MCU's heading (the OLED
         # value, just sign flipped into REP-103), and restarting this node
         # does not move the odom frame. True re-zeroes yaw at node start.
@@ -73,6 +78,7 @@ class VectorOdometryNode(Node):
         self.output_units = self.get_parameter('output_units').value
         self.log_period_sec = self.get_parameter('log_period_sec').value
         self.heading_clockwise = self.get_parameter('heading_clockwise').value
+        self.heading_offset_deg = float(self.get_parameter('heading_offset_deg').value)
         self.zero_heading_on_start = self.get_parameter('zero_heading_on_start').value
 
         if counts_per_rev <= 0:
@@ -172,7 +178,8 @@ class VectorOdometryNode(Node):
     def heading_callback(self, msg: Float32):
         """Cache the IMU heading, converted into a ROS yaw in radians."""
         self.mcu_heading_deg = msg.data
-        yaw = math.radians(msg.data)
+        # offset undoes the backward IMU mounting; the log keeps the raw value
+        yaw = math.radians(msg.data + self.heading_offset_deg)
         if self.heading_clockwise:
             yaw = -yaw
         if self.heading_offset is None:

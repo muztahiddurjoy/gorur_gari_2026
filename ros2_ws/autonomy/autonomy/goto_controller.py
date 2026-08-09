@@ -31,6 +31,10 @@ class GoToController(Node):
         # Same convention parameter as vector_odom: the BNO055 heading grows
         # clockwise, ROS yaw grows counter clockwise.
         self.declare_parameter('heading_clockwise', True)
+        # The BNO055 is mounted at the rear of the car facing BACKWARD, so it
+        # reports the direction the tail points. Added to the raw heading to
+        # get the direction the car actually drives. Must match vector_odom.
+        self.declare_parameter('heading_offset_deg', 180.0)
         # Flip if the car steers AWAY from the target: the servo mapping in
         # mcu_bridge (90 + angular.z * 45) decides which sign turns left.
         self.declare_parameter('invert_steering', False)
@@ -43,6 +47,7 @@ class GoToController(Node):
         self.declare_parameter('overshoot_margin', 10.0)
 
         self.heading_clockwise = self.get_parameter('heading_clockwise').value
+        self.heading_offset_deg = float(self.get_parameter('heading_offset_deg').value)
         self.steer_sign = -1.0 if self.get_parameter('invert_steering').value else 1.0
         self.odom_units = self.get_parameter('odom_units').value
         self.distance_tolerance = float(self.get_parameter('distance_tolerance').value)
@@ -86,7 +91,8 @@ class GoToController(Node):
 
     def heading_callback(self, msg: Float32):
         """Convert the MCU compass heading (deg, clockwise) into a ROS yaw in degrees."""
-        yaw = -msg.data if self.heading_clockwise else msg.data
+        heading = msg.data + self.heading_offset_deg  # undo the backward IMU mounting
+        yaw = -heading if self.heading_clockwise else heading
         self.current_yaw_deg = normalize_angle_deg(yaw)
 
     def target_coord_callback(self, msg: Vector3):
