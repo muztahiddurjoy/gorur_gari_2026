@@ -20,11 +20,15 @@ of turns_per_lap in one direction makes a lap.
 
 Publishes /lap_count and /turn_count (both latched, so a node started later
 still sees the current values) and logs every corner and every lap.
+
+Anything published on /reset_lap_count zeroes both counts and starts the timing
+and distance over, as if the node had just come up, without losing the heading
+tracking - use it between runs instead of restarting the node.
 """
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
-from std_msgs.msg import Float32, Int32
+from std_msgs.msg import Empty, Float32, Int32
 from geometry_msgs.msg import Vector3
 
 
@@ -108,11 +112,13 @@ class LapCounterNode(Node):
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.lap_pub = self.create_publisher(Int32, 'lap_count', latched)
         self.turn_pub = self.create_publisher(Int32, 'turn_count', latched)
-
+        
         self.heading_sub = self.create_subscription(
             Float32, 'heading', self.heading_callback, 10)
         self.odom_sub = self.create_subscription(
             Vector3, 'odom_vector', self.odom_callback, 10)
+        self.reset_sub = self.create_subscription(
+            Empty, 'reset_lap_count', self.reset_callback, 10)
 
         self.lap_pub.publish(Int32(data=self.lap_count))
         self.turn_pub.publish(Int32(data=self.turn_count))
@@ -120,7 +126,8 @@ class LapCounterNode(Node):
         self.get_logger().info(
             f'Lap counter: {self.turns_per_lap} turns of {self.turn_angle_deg:g} deg per lap, '
             f'a turn confirms at {self.turn_confirm_deg:.1f} deg, '
-            f'publishing /lap_count and /turn_count')
+            f'publishing /lap_count and /turn_count, '
+            f'reset with /reset_lap_count')
 
     def now_sec(self):
         return self.get_clock().now().nanoseconds / 1e9
@@ -207,6 +214,33 @@ class LapCounterNode(Node):
         self.total_distance = msg.z
         if self.lap_start_distance is None:
             self.lap_start_distance = msg.z
+
+    def reset_callback(self, msg: Empty):
+        del msg  # the message itself carries nothing, arriving at all is the command
+        laps, turns = self.lap_count, self.turn_count
+
+        self.turn_count = 0
+        self.net_turns = 0
+        self.lap_count = 0
+
+        # last_raw_yaw and cumulative_yaw are left alone - they are only the
+        # heading tracking, and clearing them would drop the next step. Marking
+        # the corner here instead throws away the part turn we were in the
+        # middle of, so the first corner after a reset is a whole one.
+        self.turn_mark = self.cumulative_yaw
+        self.last_turn_time = None
+
+        now = self.now_sec()
+        self.start_time = now
+        self.lap_start_time = now
+        # total_distance is the odometry's own running total and keeps counting,
+        # only the mark this lap is measured from moves
+        self.lap_start_distance = self.total_distance
+
+        self.lap_pub.publish(Int32(data=self.lap_count))
+        self.turn_pub.publish(Int32(data=self.turn_count))
+        self.get_logger().info(
+            f'Reset - {laps} laps and {turns} turns cleared, counting from zero')
 
 
 def main(args=None):
