@@ -32,10 +32,13 @@ class GoToController(Node):
         # Same convention parameter as vector_odom: the BNO055 heading grows
         # clockwise, ROS yaw grows counter clockwise.
         self.declare_parameter('heading_clockwise', True)
-        # The BNO055 is mounted at the rear of the car facing BACKWARD, so it
-        # reports the direction the tail points. Added to the raw heading to
-        # get the direction the car actually drives. Must match vector_odom.
-        self.declare_parameter('heading_offset_deg', -180)
+        # Added to the raw heading to get the direction the car actually
+        # drives. The BNO055 is mounted at the rear facing BACKWARD, but that
+        # does NOT make this 180: its Euler yaw is referenced to the sensor's
+        # own attitude at power-on, so a constant mounting rotation about z
+        # cancels. Float, not int, so it can be overridden with the same value
+        # vector_odom takes. Must match vector_odom.
+        self.declare_parameter('heading_offset_deg', 0.0)
         # Flip if the car steers AWAY from the target: the servo mapping in
         # mcu_bridge (90 + angular.z * 45) decides which sign turns left.
         self.declare_parameter('invert_steering', False)

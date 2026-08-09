@@ -9,8 +9,11 @@ const uint8_t IN_A = 5;
 const uint8_t IN_B = 6;
 const uint8_t STANDBY_PIN = 7;
 //encoder pin
-const uint8_t ENCODER_A_PIN = 1;
-const uint8_t ENCODER_B_PIN = 2;
+// A and B are deliberately the reverse of the silkscreen: wired the other way
+// the quadrature decoder counts DOWN when the car drives forward, which flips
+// the sign of every distance the odometry nodes integrate.
+const uint8_t ENCODER_A_PIN = 2;
+const uint8_t ENCODER_B_PIN = 1;
 // I²C pins
 const uint8_t I2C_SDA = 8;
 const uint8_t I2C_SCL = 9;

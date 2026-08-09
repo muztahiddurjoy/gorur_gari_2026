@@ -54,10 +54,12 @@ class EncoderOdometryNode(Node):
         # ROS wants yaw growing counter clockwise (REP-103). Flip this if the
         # robot turns the wrong way in RViz.
         self.declare_parameter('heading_clockwise', True)
-        # The BNO055 is mounted at the rear of the car facing BACKWARD, so it
-        # reports the direction the tail points. Added to the raw heading to
-        # get the direction the car actually drives. Must match vector_odom.
-        self.declare_parameter('heading_offset_deg', 180.0)
+        # Added to the raw heading to get the direction the car actually
+        # drives. The BNO055 is mounted at the rear facing BACKWARD, but that
+        # does NOT make this 180: its Euler yaw is referenced to the sensor's
+        # own attitude at power-on, so a constant mounting rotation about z
+        # cancels. Must match vector_odom and goto_controller.
+        self.declare_parameter('heading_offset_deg', 0.0)
         # Keep False so the yaw always matches the MCU's heading (the OLED
         # value, just sign flipped into REP-103), and restarting this node
         # does not move the odom frame. True re-zeroes yaw at node start.

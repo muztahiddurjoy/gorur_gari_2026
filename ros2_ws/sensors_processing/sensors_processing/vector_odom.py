@@ -62,11 +62,15 @@ class VectorOdometryNode(Node):
         # The BNO055 reports a compass style heading that grows clockwise, while
         # ROS wants yaw growing counter clockwise (REP-103).
         self.declare_parameter('heading_clockwise', True)
-        # The BNO055 is mounted at the rear of the car facing BACKWARD, so it
-        # reports the direction the tail points. Added to the raw heading to
-        # get the direction the car actually drives. Every /heading consumer
+        # Added to the raw heading to get the direction the car actually
+        # drives. The BNO055 is mounted at the rear facing BACKWARD, but that
+        # does NOT make this 180: its Euler yaw is referenced to the sensor's
+        # own attitude at power-on (it reads 0 at boot however the chip is
+        # bolted on), so a constant mounting rotation about z cancels - chip
+        # and car turn together from the same zero. Only non-zero if /heading
+        # ever becomes a true absolute compass bearing. Every /heading consumer
         # that turns it into a yaw must use the same value.
-        self.declare_parameter('heading_offset_deg', 180.0)
+        self.declare_parameter('heading_offset_deg', 0.0)
         # Keep False so the yaw always matches the MCU's heading (the OLED
         # value, just sign flipped into REP-103), and restarting this node
         # does not move the odom frame. True re-zeroes yaw at node start.
