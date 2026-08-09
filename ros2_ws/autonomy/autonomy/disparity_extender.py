@@ -14,6 +14,14 @@ Core Algorithm:
 4. Apply WRO color rules: Green = pass left, Red = pass right.
 5. Boost speed on clear straights, emergency override on close side obstacles.
 
+Start gate:
+The node never drives on its own. It comes up in STANDBY - spinning, processing
+LiDAR, publishing debug topics, but holding the car at zero. Pressing the start
+button on the car (MCU publishes /button_status) moves it to ARMING, and after
+start_delay_sec it goes RUNNING and the algorithm above takes the wheel. The
+MCU blinks its status LED once per second through that same delay, so the
+countdown is visible on the car itself (see firmware/src/main.cpp).
+
 Reference: https://github.com/A-N-M-Noor/LazyGo_WRO2025
 """
 
@@ -26,8 +34,17 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Float32MultiArray, String, Int32
+from std_msgs.msg import Bool, Float32MultiArray, String, Int32
 from visualization_msgs.msg import Marker
+
+# Run states of the start gate.
+STATE_STANDBY = 'STANDBY'   # powered up, waiting for the button
+STATE_ARMING = 'ARMING'     # button seen, counting the start delay down
+STATE_RUNNING = 'RUNNING'   # driving
+
+# While parked we still send zeros so the MCU never sits on a stale throttle,
+# but at a fraction of the control rate - there is nothing to steer.
+STOP_REPUBLISH_INTERVAL_S = 0.5
 
 
 def clamp(val, mini, maxi):
@@ -83,6 +100,11 @@ class DisparityExtenderNode(Node):
         # ── Master Controls ────────────────────────────────────────────
         self.declare_parameter('enable_auto_steering', False)
 
+        # ── Start Gate ────────────────────────────────────────────────
+        self.declare_parameter('require_button_start', True)
+        self.declare_parameter('start_delay_sec', 3.0)
+        self.declare_parameter('button_topic', '/button_status')
+
         # ── Steering ─────────────────────────────────────────────────
         self.declare_parameter('str_ang_thresh', 60.0)
 
@@ -124,6 +146,10 @@ class DisparityExtenderNode(Node):
 
         self.chase_tower_mode = bool(self.get_parameter('chase_tower_mode').value)
 
+        self.require_button_start = bool(self.get_parameter('require_button_start').value)
+        self.start_delay_sec = float(self.get_parameter('start_delay_sec').value)
+        button_topic = self.get_parameter('button_topic').value
+
         scan_topic = self.get_parameter('scan_topic').value
         odom_topic = self.get_parameter('odom_topic').value
         cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
@@ -152,11 +178,21 @@ class DisparityExtenderNode(Node):
         self.last_time = time.time()
         self.lap_count = 0
 
+        # ── Start Gate State ─────────────────────────────────────────
+        # With the gate disabled the node behaves as it always did: it drives as
+        # soon as it has scan data.
+        self.run_state = STATE_STANDBY if self.require_button_start else STATE_RUNNING
+        self.arm_start_time = 0.0
+        self.prev_button = False       # for rising edge detection on /button_status
+        self.last_countdown_logged = -1
+        self.last_stop_pub_time = 0.0
+
         # ── Subscriptions & Publishers ────────────────────────────────
         self.scan_sub = self.create_subscription(LaserScan, scan_topic, self.lidar_callback, 1)
         self.odom_sub = self.create_subscription(Odometry, odom_topic, self.odom_callback, 10)
         self.color_sub = self.create_subscription(String, '/closest_obj', self.color_callback, 1)
         self.lap_sub = self.create_subscription(Int32, '/lap_count', self.lap_callback, 10)
+        self.button_sub = self.create_subscription(Bool, button_topic, self.button_callback, 10)
 
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.debug_scan_pub = self.create_publisher(LaserScan, '/scan_processed', 10)
@@ -177,6 +213,13 @@ class DisparityExtenderNode(Node):
             f'FOV: ±{math.degrees(self.look_range_rad):.0f}° | '
             f'Chase Mode: {self.chase_tower_mode}'
         )
+        if self.require_button_start:
+            self.get_logger().info(
+                f'STANDBY — press the start button ({button_topic}) to run. '
+                f'The car moves {self.start_delay_sec:.0f}s after the press.'
+            )
+        else:
+            self.get_logger().warn('Start button gate disabled — driving immediately.')
 
     # ══════════════════════════════════════════════════════════════════
     # Callbacks
@@ -199,6 +242,56 @@ class DisparityExtenderNode(Node):
         """Update lap count from the lap_counter node."""
         self.lap_count = msg.data
 
+    def button_callback(self, msg: Bool):
+        """
+        Start button from the MCU. /button_status stays true for as long as the
+        button is held, so only the press edge counts - otherwise holding it
+        would re-arm on every frame.
+        """
+        pressed = bool(msg.data)
+        rising = pressed and not self.prev_button
+        self.prev_button = pressed
+        if not rising:
+            return
+
+        if self.run_state == STATE_STANDBY:
+            self.run_state = STATE_ARMING
+            self.arm_start_time = time.time()
+            self.last_countdown_logged = -1
+            self.get_logger().info(
+                f'Start button pressed — going in {self.start_delay_sec:.0f}s.')
+        else:
+            self.get_logger().info(
+                f'Start button pressed but already {self.run_state}, ignoring.')
+
+    def update_run_state(self):
+        """Advance ARMING → RUNNING once the start delay has elapsed."""
+        if self.run_state != STATE_ARMING:
+            return
+
+        remaining = self.start_delay_sec - (time.time() - self.arm_start_time)
+        if remaining <= 0.0:
+            self.run_state = STATE_RUNNING
+            self.get_logger().info('GO — disparity extender is driving.')
+            return
+
+        # one line per second, matching the MCU's LED blinks
+        secs_left = int(math.ceil(remaining))
+        if secs_left != self.last_countdown_logged:
+            self.last_countdown_logged = secs_left
+            self.get_logger().info(f'Starting in {secs_left}...')
+
+    def publish_stop(self):
+        """Hold the car at zero, republished slowly so it can't latch a stale command."""
+        now = time.time()
+        if now - self.last_stop_pub_time < STOP_REPUBLISH_INTERVAL_S:
+            return
+        self.last_stop_pub_time = now
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.angular.z = 0.0
+        self.cmd_pub.publish(cmd)
+
     def lidar_callback(self, msg: LaserScan):
         """Buffer incoming LaserScan data for the background thread."""
         with self._scan_lock:
@@ -214,7 +307,19 @@ class DisparityExtenderNode(Node):
 
     def control_loop(self):
         """Publish motor commands at a fixed rate."""
+        # The gate is ticked before the enable check so the countdown keeps
+        # running even while auto steering is switched off.
+        self.update_run_state()
+
         if not bool(self.get_parameter('enable_auto_steering').value):
+            return
+
+        # ── START GATE: STANDBY / ARMING park the car ──
+        if self.run_state != STATE_RUNNING:
+            self.publish_stop()
+            self.get_logger().info(
+                f'{self.run_state} — waiting for the start button.',
+                throttle_duration_sec=5.0)
             return
 
         # ── LAP COMPLETION STOP ──

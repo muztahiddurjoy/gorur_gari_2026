@@ -31,6 +31,11 @@ disparity_extender_node:
     # ── Master Controls ────────────────────────────────────────────
     enable_auto_steering: true  # Set to false to disable scan feed from directing steering/cmd_vel
 
+    # ── Start Gate ─────────────────────────────────────────────────
+    require_button_start: true  # Stay in standby until the car's start button is pressed
+    start_delay_sec: 3.0        # Delay between the press and the first movement
+    button_topic: "/button_status"
+
     # ── Steering ───────────────────────────────────────────────────
     str_ang_thresh: 60.0        # Max physical steering angle (degrees)
 

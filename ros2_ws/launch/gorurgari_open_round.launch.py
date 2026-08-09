@@ -8,7 +8,11 @@ Open round: the full driving stack, no obstacles on the mat.
                                     (and the odom -> base_link TF)
     lap_counter         autonomy    /heading corners -> /lap_count, /turn_count
     disparity_extender  autonomy    /scan -> /cmd_vel, and stops the car once
-                                    /lap_count reaches the round's lap target
+                                    /lap_count reaches the round's lap target.
+                                    Starts in standby: it only drives 3 s after
+                                    the start button on the car is pressed
+                                    (/button_status), and the MCU blinks its
+                                    status LED once a second over that delay
 
 Everything talks on relative topic names in the root namespace, so the nodes
 wire up to each other with no remaps. The LiDAR driver itself is NOT started
@@ -80,6 +84,14 @@ def generate_launch_description():
             'enable_auto_steering', default_value='true',
             description='Let disparity_extender drive /cmd_vel. False to watch it '
                         'plan without the car moving.'),
+        DeclareLaunchArgument(
+            'require_button_start', default_value='true',
+            description='Hold disparity_extender in standby until the start button on '
+                        'the car is pressed. False to drive as soon as scans arrive.'),
+        DeclareLaunchArgument(
+            'start_delay_sec', default_value='3.0',
+            description='Seconds between the start button press and the first movement. '
+                        'The MCU blinks its status LED once a second through it.'),
     ]
 
     # one launch argument per sonar, mirroring the firmware SONAR_*_ENABLED flags
@@ -147,7 +159,11 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             LaunchConfiguration('disparity_params'),
-            {'enable_auto_steering': typed('enable_auto_steering', bool)},
+            {
+                'enable_auto_steering': typed('enable_auto_steering', bool),
+                'require_button_start': typed('require_button_start', bool),
+                'start_delay_sec': typed('start_delay_sec', float),
+            },
         ],
     )
 

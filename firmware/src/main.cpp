@@ -198,7 +198,13 @@ void loop(){
     if (button.isPressed()) {
         buttonPressLatch = true;
         DEBUG_SERIAL.println("Button pressed!");
+        // count the start delay out on the LED. ROS2 starts its own timer off
+        // the same press, so both ends run the same countdown - the blinks are
+        // over at the moment the car begins to move.
+        status_led.blink(START_BLINK_COUNT, START_BLINK_INTERVAL_MS);
     }
+    // advances the countdown blinks, no-op the rest of the time
+    status_led.update();
 
     // --- Send encoder/steering/heading/sonar/button telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
@@ -249,7 +255,9 @@ void loop(){
             }
             // mcu_bridge sends this once, right after it opens the port. it is the
             // only announcement we get that a ROS2 side actually exists, so it is
-            // what drives the status LED.
+            // what drives the status LED. if a start countdown happens to be
+            // blinking, set() just records the level and the LED lands on it once
+            // the countdown finishes.
             else if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_connect_msg){
                 uint8_t connected = mavlink_msg_gorur_gari_ros2_to_mcu_connect_msg_get_connected(&received_msg);
                 status_led.set(connected != 0);

@@ -57,6 +57,15 @@ const bool SONAR_REAR_ENABLED = false;
 // full duration and delays the next throttle/steering command.
 const unsigned long SONAR_ECHO_TIMEOUT_US = 15000;
 
+//start button
+// Pressing the button arms the run. The ROS2 side (autonomy/disparity_extender)
+// holds the car still for START_BLINK_COUNT * START_BLINK_INTERVAL_MS after the
+// press, and the status LED blinks that delay out so the countdown is visible on
+// the car. Keep these in step with start_delay_sec in
+// ros2_ws/config/disparity_extender_params.yaml - 3 * 1000 ms = 3 s.
+const uint8_t START_BLINK_COUNT = 3;
+const unsigned long START_BLINK_INTERVAL_MS = 1000;
+
 //ROS2 telemetry
 const unsigned long SENSOR_TX_INTERVAL_MS = 50; // how often the mcu_to_ros2 sensor message is sent
 
