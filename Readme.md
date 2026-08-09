@@ -20,7 +20,7 @@ ros2 run sensors_processing vision_node --ros-args --params-file config/vision_p
 
 
 # Start ros2 cam
-ros2 run usb_cam usb_cam_node_exe --ros-args -r __ns:=/camera -p video_device:=/dev/video0
+ros2 run usb_cam usb_cam_node_exe --ros-args -r __ns:=/camera -p video_device:=/dev/video2
 
 # TuningHSV
 cd ~/Documents/GitHub/gorur_gari_2026/ros2_ws/sensors_processing/sensors_processing

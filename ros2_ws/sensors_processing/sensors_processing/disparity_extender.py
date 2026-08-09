@@ -27,7 +27,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float32MultiArray, String
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 from sensors_processing.steering_stabilizer import SteeringStabilizer
 
 
@@ -64,9 +64,9 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('look_range_deg', 80.0)
 
         # ── Speed ─────────────────────────────────────────────────────
-        self.declare_parameter('max_speed', 0.60)
+        self.declare_parameter('max_speed', 1.2)
         self.declare_parameter('speed_cap_corner', 0.30)
-        self.declare_parameter('speed_cap_straight', 0.45)
+        self.declare_parameter('speed_cap_straight', 1.1)
         self.declare_parameter('boost_max', 1.35)
         self.declare_parameter('boost_angle_thresh', 7.5)
         self.declare_parameter('boost_dist_thresh', 1.10)
@@ -82,7 +82,7 @@ class DisparityExtenderNode(Node):
         self.declare_parameter('danger_angle_max', 90.0)
 
         # ── Master Controls ────────────────────────────────────────────
-        self.declare_parameter('enable_auto_steering', False)
+        self.declare_parameter('enable_auto_steering', True)
 
         # ── Steering ─────────────────────────────────────────────────
         self.declare_parameter('str_ang_thresh', 60.0)
@@ -117,7 +117,7 @@ class DisparityExtenderNode(Node):
         self.max_speed = float(self.get_parameter('max_speed').value)
         self.speed_cap_corner = float(self.get_parameter('speed_cap_corner').value)
         self.speed_cap_straight = float(self.get_parameter('speed_cap_straight').value)
-        self.boost_max = float(self.get_parameter('boost_max').value)
+        self.boost_max = float(self.get_parameter('boost_max').value * 2)
         self.boost_angle_thresh = float(self.get_parameter('boost_angle_thresh').value)
         self.boost_dist_thresh = float(self.get_parameter('boost_dist_thresh').value)
 
@@ -186,6 +186,7 @@ class DisparityExtenderNode(Node):
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.debug_scan_pub = self.create_publisher(LaserScan, '/scan_processed', 10)
         self.marker_pub = self.create_publisher(Marker, '/disparity/target_marker', 10)
+        self.pillar_marker_pub = self.create_publisher(MarkerArray, '/disparity/pillar_markers', 10)
         self.tower_pub = self.create_publisher(Float32MultiArray, '/tower_detections', 10)
 
         self.last_color_time = 0.0
@@ -627,13 +628,16 @@ class DisparityExtenderNode(Node):
                 self.speed_boost = self.boost_max
 
         # 8. Stable PD Steering Function (Proportional-Derivative) via SteeringStabilizer
-        # We negate the output because the stabilizer outputs negative steering for positive error,
-        # but our robot requires positive steering for positive (left) target angles.
-        s_ang = -self.stabilizer.compute_steering(
-            current_heading_deg=0.0,
-            target_heading_deg=target_deg,
-            dt=dt
-        )
+        # Commented out by user request. Reverting to raw direct steering mapping.
+        # s_ang = -self.stabilizer.compute_steering(
+        #     current_heading_deg=0.0,
+        #     target_heading_deg=target_deg,
+        #     dt=dt
+        # )
+        
+        # RAW Direct Steering (Normalizes the target degree by the max physical threshold)
+        s_ang = target_deg / self.str_ang_thresh
+        
         self.str_angle = s_ang
 
         # 9. Calculate speed based on distance
@@ -666,6 +670,9 @@ class DisparityExtenderNode(Node):
 
         # 13. Publish target arrow marker
         self.publish_target_marker()
+        
+        # 14. Publish 3D pillars combined from LiDAR + Webcam
+        self.publish_pillars_marker_array()
 
 
 
@@ -712,6 +719,58 @@ class DisparityExtenderNode(Node):
         marker.color.b = 0.0
         marker.color.a = 0.9
         self.marker_pub.publish(marker)
+
+    def publish_pillars_marker_array(self):
+        """Combine LiDAR distance and Webcam color to draw 3D pillars in RViz2."""
+        if not hasattr(self, 'scan_header'):
+            return
+            
+        marker_array = MarkerArray()
+        
+        # A single 'delete all' marker to clear previous frame's pillars
+        del_marker = Marker()
+        del_marker.action = 3  # Marker.DELETEALL is 3
+        marker_array.markers.append(del_marker)
+        
+        for i, tower in enumerate(self.detected_towers):
+            marker = Marker()
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.header.frame_id = self.scan_header.frame_id if self.scan_header.frame_id else 'laser'
+            marker.ns = "pillars"
+            marker.id = i + 1
+            marker.type = Marker.CUBE
+            marker.action = Marker.ADD
+            
+            # Position from LiDAR
+            marker.pose.position.x = float(tower["x"])
+            marker.pose.position.y = float(tower["y"])
+            marker.pose.position.z = 0.05  # Half of 10cm height
+            marker.pose.orientation.w = 1.0
+            
+            # WRO Pillar approximate size (5x5x10cm)
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.10
+            
+            # Color logic: The closest tower (index 0) gets the camera color
+            marker.color.a = 1.0
+            if i == 0 and self.closest_color == "R":
+                marker.color.r = 1.0
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+            elif i == 0 and self.closest_color == "G":
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+            else:
+                # Gray for unknown/distant towers
+                marker.color.r = 0.5
+                marker.color.g = 0.5
+                marker.color.b = 0.5
+                
+            marker_array.markers.append(marker)
+            
+        self.pillar_marker_pub.publish(marker_array)
 
 
 def main(args=None):
