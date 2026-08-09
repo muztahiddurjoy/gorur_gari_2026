@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'mcu_bridge = controls.mcu_bridge:main'
+            'mcu_bridge = controls.mcu_bridge:main',
+            'vector_odom = controls.vector_odom:main',
         ],
     },
 )

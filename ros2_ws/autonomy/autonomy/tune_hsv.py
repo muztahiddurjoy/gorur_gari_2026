@@ -24,7 +24,7 @@ if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
 try:
-    from wro_autodrive.pillar_detector import PillarDetector
+    from autonomy.pillar_detector import PillarDetector
 except ModuleNotFoundError:
     from pillar_detector import PillarDetector
 
