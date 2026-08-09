@@ -51,7 +51,7 @@ def generate_launch_description():
         return ParameterValue(LaunchConfiguration(name), value_type=value_type)
 
     mcu_bridge = Node(
-        package='contols',
+        package='controls',
         executable='mcu_bridge',
         name='mcu_bridge',
         output='screen',

@@ -11,9 +11,9 @@ disparity_extender_node:
     look_range_deg: 80.0        # Forward FOV half-angle (degrees)
 
     # ── Speed ──────────────────────────────────────────────────────
-    max_speed: 1.5             # Maximum linear velocity (m/s)
-    speed_cap_corner: 0.8      # Speed cap when cornering (m/s)
-    speed_cap_straight: 1.2    # Speed cap on straights (m/s)
+    max_speed: 2.0            # Maximum linear velocity (m/s)
+    speed_cap_corner: 1.2      # Speed cap when cornering (m/s)
+    speed_cap_straight: 1.5    # Speed cap on straights (m/s)
     boost_max: 1.155             # Speed boost multiplier on clear straights
     boost_angle_thresh: 10.0     # Max steering angle to allow boost (degrees)
     boost_dist_thresh: 1.5     # Min clear distance to allow boost (m)
