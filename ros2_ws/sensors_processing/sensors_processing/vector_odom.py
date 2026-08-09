@@ -138,7 +138,10 @@ class VectorOdometryNode(Node):
 
         del_distance = del_tick * self.metres_per_tick
         self.total_ticks += del_tick
-        self.total_distance += del_distance
+        # abs: z is "total distance TRAVELLED", so backing up (negative
+        # ticks, quadrature encoder) must add to it, not unwind it. The
+        # x/y pose below still integrates the signed delta.
+        self.total_distance += abs(del_distance)
 
         previous_yaw = self.current_yaw
         if self.raw_yaw is not None:
