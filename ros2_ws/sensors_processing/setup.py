@@ -30,6 +30,7 @@ setup(
             'encoder_odometry = sensors_processing.encoder_odometry:main',
             'disparity_extender = sensors_processing.disparity_extender:main',
             'vector_odom = sensors_processing.vector_odom:main',
+            'lap_counter = sensors_processing.lap_counter:main',
         ],
     },
 )
