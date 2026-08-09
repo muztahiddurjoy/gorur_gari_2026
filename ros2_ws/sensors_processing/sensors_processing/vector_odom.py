@@ -62,9 +62,10 @@ class VectorOdometryNode(Node):
         # The BNO055 reports a compass style heading that grows clockwise, while
         # ROS wants yaw growing counter clockwise (REP-103).
         self.declare_parameter('heading_clockwise', True)
-        # Start at yaw 0 instead of whatever direction the car happens to face,
-        # so that driving straight forward puts the whole distance into x.
-        self.declare_parameter('zero_heading_on_start', True)
+        # Keep False so the yaw always matches the MCU's heading (the OLED
+        # value, just sign flipped into REP-103), and restarting this node
+        # does not move the odom frame. True re-zeroes yaw at node start.
+        self.declare_parameter('zero_heading_on_start', False)
 
         wheel_diameter = self.get_parameter('wheel_diameter_m').value
         counts_per_rev = self.get_parameter('encoder_counts_per_rev').value
@@ -94,6 +95,7 @@ class VectorOdometryNode(Node):
 
         self.heading_offset = None
         self.raw_yaw = None
+        self.mcu_heading_deg = None    # raw MCU heading, exactly what the OLED shows
         self.warned_no_heading = False
 
         self.pos = Vector3()
@@ -151,8 +153,11 @@ class VectorOdometryNode(Node):
         self.pos.z = self.total_distance * self.output_scale
         self.odom_pub.publish(self.pos)
 
-        # ticks are here so a straight line drive is all the calibration needs
-        line = (f'ticks={self.total_ticks} '
+        # ticks and heading are the MCU's raw values (same as its OLED), so
+        # they survive a node restart; dist/x/y are this node's integration.
+        heading_str = (f'{self.mcu_heading_deg:.1f}'
+                       if self.mcu_heading_deg is not None else 'n/a')
+        line = (f'mcu ticks={count} heading={heading_str} deg | '
                 f'x={self.pos.x:.2f} y={self.pos.y:.2f} '
                 f'dist={self.pos.z:.2f} {self.output_units} '
                 f'yaw={math.degrees(self.current_yaw):.1f} deg')
@@ -166,6 +171,7 @@ class VectorOdometryNode(Node):
 
     def heading_callback(self, msg: Float32):
         """Cache the IMU heading, converted into a ROS yaw in radians."""
+        self.mcu_heading_deg = msg.data
         yaw = math.radians(msg.data)
         if self.heading_clockwise:
             yaw = -yaw

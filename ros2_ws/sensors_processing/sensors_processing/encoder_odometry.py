@@ -54,9 +54,10 @@ class EncoderOdometryNode(Node):
         # ROS wants yaw growing counter clockwise (REP-103). Flip this if the
         # robot turns the wrong way in RViz.
         self.declare_parameter('heading_clockwise', True)
-        # Start at yaw 0 instead of whatever direction the car happens to face,
-        # so the odom frame lines up with the robot at startup.
-        self.declare_parameter('zero_heading_on_start', True)
+        # Keep False so the yaw always matches the MCU's heading (the OLED
+        # value, just sign flipped into REP-103), and restarting this node
+        # does not move the odom frame. True re-zeroes yaw at node start.
+        self.declare_parameter('zero_heading_on_start', False)
 
         self.wheel_diameter = self.get_parameter('wheel_diameter_m').value
         self.counts_per_rev = self.get_parameter('encoder_counts_per_rev').value

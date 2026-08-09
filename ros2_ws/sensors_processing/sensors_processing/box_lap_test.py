@@ -17,7 +17,7 @@ class BoxLapTestNode(Node):
         self.car_w = 0.21
         self.heading = 0.0
         self.expected_heading = 0.0
-        self.heading_tolerance = 2  # radians, ~5 degrees
+        self.heading_tolerance = 2  # degrees (error below is computed in degrees)
         self.vel_msg = Twist()
         self.pub = self.create_publisher(Twist, 'cmd_vel', 10)
     def odom_callback(self, msg:Vector3):

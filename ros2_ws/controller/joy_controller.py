@@ -11,8 +11,11 @@ class JoyToCmdVel(Node):
         # ======  CONFIGURE YOUR AXES HERE  ======
         self.linear_axis  = 1      # index of forward/backward axis
         self.angular_axis = 3      # index of rotation axis
-        self.linear_scale  = 3   # max speed (m/s)
-        self.angular_scale = 3   # max rotation (rad/s)
+        self.linear_scale  = 3   # mcu_bridge maps linear.x*100 to throttle -128..127
+        # angular.z is NOT rad/s on this robot: mcu_bridge maps it as a
+        # normalized steering fraction (90 + z*45 servo degrees), so 1.0 is
+        # full lock. A scale of 3 makes the servo saturate at 1/3 stick.
+        self.angular_scale = 3
         # =======================================
 
         self.subscription = self.create_subscription(
