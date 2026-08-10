@@ -1,0 +1,60 @@
+# ════════════════════════════════════════════════════════════════════
+# Global bot configuration — the single source of truth for the
+# physical robot.
+#
+# The `/**` section matches EVERY node launched with this file, so any
+# node that declares `bot.*` parameters picks the same geometry up.
+# Node-specific tuning lives under the node's own name below.
+#
+# Use it standalone:
+#   ros2 run autonomy custom_disparity_extender --ros-args \
+#       --params-file config/bot_config.yaml
+# or from a launch file:
+#   parameters=[os.path.join(WORKSPACE_DIR, 'config', 'bot_config.yaml')]
+# ════════════════════════════════════════════════════════════════════
+
+/**:
+  ros__parameters:
+    bot:
+      width_m: 0.21              # chassis width including wheels
+      length_m: 0.31             # bumper to bumper
+      wheel_diameter_m: 0.065    # drive wheel diameter
+      encoder_counts_per_rev: 363
+      max_steer_deg: 60.0        # physical steering lock (one side)
+      safety_margin_m: 0.06      # clearance kept on EACH side of the bot
+      max_speed_mps: 0.6         # cruise ceiling on open track
+      min_speed_mps: 0.25        # creep floor while threading gaps
+      lidar:
+        frame_id: laser          # must match the C1 driver's frame_id
+        forward_offset_m: 0.0    # lidar origin ahead(+)/behind(-) of bot centre
+      tower:
+        width_m: 0.05            # pillar face width (50 mm)
+        min_separation_m: 0.10   # closest possible pillar centre-to-centre gap
+
+custom_disparity_extender:
+  ros__parameters:
+    # Master switch: the node never publishes /cmd_vel unless this is
+    # true. The in-code default is false, so a bare `ros2 run` without
+    # this file can never move the car.
+    enable_drive: true
+
+    scan_topic: /scan
+    cmd_vel_topic: /cmd_vel
+
+    # ── Edge detection (tower finder) ─────────────────────────────
+    spike_threshold_m: 0.06      # disparity at spike_ref_dist_m
+    spike_ref_dist_m: 0.8        # threshold scales linearly beyond this
+    edge_stride: 6               # compare ranges[i] vs ranges[i-stride]
+    detect_fov_half_deg: 90.0    # half-angle searched for towers
+    width_min_cm: 3.0            # coarse segment floor (1 ray of noise)
+    width_max_cm: 25.0           # coarse ceiling (200 mm parking wall + slack)
+    max_useful_range_m: 2.0      # beyond this a 5 cm pillar is <= 2 rays
+
+    # ── Navigation (disparity extender) ───────────────────────────
+    nav:
+      fov_half_deg: 80.0         # steering search half-angle
+      max_range_m: 3.0           # scan cap; no-return rays count as this
+      disparity_threshold_m: 0.25 # min neighbour step that is an edge
+      stop_distance_m: 0.35      # blocked stop-cone trigger (bot is 31 cm long)
+      stop_cone_half_deg: 20.0   # half-angle of the forward stop cone
+      steer_speed_drop: 0.4      # speed loss fraction at full steering lock

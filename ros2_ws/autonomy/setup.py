@@ -30,6 +30,7 @@ setup(
             'lap_counter = autonomy.lap_counter:main',
             'tune_hsv = autonomy.tune_hsv:main',
             'testing = autonomy.custom_disparity_extender:main',
+            'custom_disparity_extender = autonomy.custom_disparity_extender:main',
             'camera_push_detector = autonomy.camera_push_detector:main',
         ],
     },

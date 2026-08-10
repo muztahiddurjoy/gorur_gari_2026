@@ -1,65 +1,143 @@
+"""
+Custom disparity extender: tower detection + gap navigation between pillars.
+
+Detection pipeline (per scan):
+  falling/rising edge pairs -> asymmetric width gate -> dedup -> /tower_markers
+
+Navigation pipeline (classic disparity extender, per scan):
+  1. Build a nav view of the scan: no-return rays count as OPEN space at
+     nav.max_range_m, dropouts are interpolated from valid neighbours, and
+     everything is capped at nav.max_range_m.
+  2. At every disparity (neighbouring rays differing by more than
+     nav.disparity_threshold_m) smear the CLOSER distance sideways over the
+     angle that (bot half-width + safety margin) subtends at that distance.
+     A gap the bot cannot physically fit through simply disappears from the
+     scan, so the target picker can never choose it.
+  3. Steer at the farthest surviving ray inside the FOV, ties broken toward
+     straight ahead. Speed scales with free distance and steering effort;
+     a blocked forward stop-cone parks the car.
+
+All physical geometry (bot width/length, margins, steering lock, speed
+band, tower spec) comes from config/bot_config.yaml. The bot.* section is
+shared by every node via the /** wildcard, so re-dimensioning the bot is a
+config edit, not a code edit.
+
+Run:
+  ros2 run autonomy custom_disparity_extender --ros-args \
+      --params-file config/bot_config.yaml
+"""
+
 import math
+import time
 
 import numpy as np
 import rclpy
+from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker, MarkerArray
 
 
+def clamp(val, lo, hi):
+    return max(lo, min(hi, val))
+
+
 class CustomDisparityExtender(Node):
 
     def __init__(self):
-        super().__init__('disparity_checker_test')
+        super().__init__('custom_disparity_extender')
 
-        self.sub = self.create_subscription(
-            LaserScan, '/scan', self.lidr_callback, 10)
+        p = self._param
 
-        # Filled in from the first message; these are only fallbacks.
+        # ── Global bot geometry (bot_config.yaml, /** section) ────
+        self.bot_width = float(p('bot.width_m', 0.21))
+        self.bot_length = float(p('bot.length_m', 0.31))
+        self.safety_margin = float(p('bot.safety_margin_m', 0.06))
+        self.max_steer_rad = math.radians(float(p('bot.max_steer_deg', 60.0)))
+        self.max_speed = float(p('bot.max_speed_mps', 0.6))
+        self.min_speed = float(p('bot.min_speed_mps', 0.25))
+
+        # Verify against: ros2 topic echo /scan --field header.frame_id
+        # C1 drivers publish either 'laser' or 'laser_frame'; a mismatch
+        # makes markers vanish silently.
+        self.frame_id = str(p('bot.lidar.frame_id', 'laser'))
+
+        tower_w = float(p('bot.tower.width_m', 0.05))
+
+        # Pillars sit min_separation apart centre-to-centre at the tightest.
+        # Anything closer than this is the same pillar detected twice.
+        self.min_tower_separation = float(p('bot.tower.min_separation_m', 0.10))
+
+        # Derived from the geometry:
+        #  - extend_radius is the half-corridor the bot needs to pass anything;
+        #    it is THE quantity the disparity extension smears obstacles by.
+        #  - tower width gate end-points: face-on vs corner-on (w * sqrt(2)).
+        self.extend_radius = self.bot_width / 2.0 + self.safety_margin
+        self.tower_w_min_face = tower_w * 100.0
+        self.tower_w_max_diag = tower_w * 100.0 * math.sqrt(2.0)
+
+        # ── Edge detection tuning ─────────────────────────────────
+        # 0.06 m: a pillar seated 400 mm off the inner wall gives only a small
+        # disparity at grazing incidence. 0.10 started missing those past 1.5 m.
+        self.spike_threshold = float(p('spike_threshold_m', 0.06))
+        self.spike_ref_dist = float(p('spike_ref_dist_m', 0.8))
+        self.edge_stride = int(p('edge_stride', 6))
+        self.fov_half_deg = float(p('detect_fov_half_deg', 90.0))
+
+        # 3.0 cm floor: below that is one ray of noise at working range.
+        # 25.0 cm ceiling: the widest legitimate object is the 200 mm parking
+        # lot limitation; anything larger is wall.
+        self.width_min_cm = float(p('width_min_cm', 3.0))
+        self.width_max_cm = float(p('width_max_cm', 25.0))
+
+        # Corridor is 1000 mm wide and the mat 3200 mm. Beyond 2 m a 5 cm
+        # pillar subtends <= 2 rays, so the width estimate is meaningless.
+        self.max_useful_range = float(p('max_useful_range_m', 2.0))
+
+        # ── Navigation tuning ─────────────────────────────────────
+        self.nav_fov_half = math.radians(float(p('nav.fov_half_deg', 80.0)))
+        self.nav_max_range = float(p('nav.max_range_m', 3.0))
+        self.disparity_thresh = float(p('nav.disparity_threshold_m', 0.25))
+        self.stop_distance = float(p('nav.stop_distance_m', 0.35))
+        self.stop_cone_half = math.radians(float(p('nav.stop_cone_half_deg', 20.0)))
+        self.steer_speed_drop = float(p('nav.steer_speed_drop', 0.4))
+
+        # Drive gate. Default OFF in code so a bare `ros2 run` without the
+        # config file can never move the car; bot_config.yaml enables it.
+        self.enable_drive = bool(p('enable_drive', False))
+
+        scan_topic = str(p('scan_topic', '/scan'))
+        cmd_topic = str(p('cmd_vel_topic', '/cmd_vel'))
+
+        # ── LiDAR state (fallbacks until the first scan arrives) ──
         # 0.72 deg matches an RPLIDAR C1 at 10 Hz.
         self.min_ang = -math.pi
         self.max_ang = math.pi
         self.ang_inc = math.radians(0.72)
-
         self.ranges = np.empty(0, dtype=np.float32)
         self.valid = np.empty(0, dtype=bool)
+        self.last_scan_time = 0.0
 
+        # ── I/O ───────────────────────────────────────────────────
+        self.sub = self.create_subscription(
+            LaserScan, scan_topic, self.lidr_callback, 10)
         self.marker_pub = self.create_publisher(MarkerArray, '/tower_markers', 10)
+        self.target_pub = self.create_publisher(Marker, '/custom_disparity/target', 10)
+        self.cmd_pub = self.create_publisher(Twist, cmd_topic, 10)
 
-        # Verify against: ros2 topic echo /scan --field header.frame_id
-        # C1 drivers publish either 'laser' or 'laser_frame'; a mismatch makes
-        # markers vanish silently.
-        self.frame_id = 'laser'
+        # A silent /scan must never leave the MCU on a stale throttle.
+        self.create_timer(0.1, self.watchdog)
 
-        # ── Edge detection ────────────────────────────────────────
-        # 0.06 m: a pillar seated 400 mm off the inner wall gives only a small
-        # disparity at grazing incidence. 0.10 started missing those past 1.5 m.
-        self.spike_threshold = 0.06   # metres, at spike_ref_dist
-        self.spike_ref_dist = 0.8     # threshold scales linearly beyond this
-        self.edge_stride = 6          # compare ranges[i] against ranges[i-stride]
+        self.get_logger().info(
+            f'Custom disparity extender up | bot {self.bot_width:.2f}x'
+            f'{self.bot_length:.2f} m | extend radius {self.extend_radius:.3f} m | '
+            f'drive {"ENABLED" if self.enable_drive else "disabled"}'
+        )
 
-        # ── Search window ─────────────────────────────────────────
-        # Half-angle: the scan is searched over +/- this value.
-        self.fov_half_deg = 90.0
-
-        # ── Coarse segment acceptance (pre-tower-gate) ────────────
-        # 3.0 cm floor: below that is one ray of noise at working range.
-        # 25.0 cm ceiling: the widest legitimate object is the 200 mm parking
-        # lot limitation; anything larger is wall.
-        self.width_min_cm = 3.0
-        self.width_max_cm = 25.0
-
-        # Corridor is 1000 mm wide and the mat 3200 mm. Beyond 2 m a 5 cm
-        # pillar subtends <= 2 rays, so the width estimate is meaningless.
-        self.max_useful_range = 2.0
-
-        # ── Tower width gate (asymmetric, see module docstring) ───
-        self.tower_w_min_face = 5.0    # cm, face-on
-        self.tower_w_max_diag = 7.07   # cm, corner-on, 50 * sqrt(2)
-
-        # Pillars sit 200 mm apart centre-to-centre at the tightest. Anything
-        # closer than this is the same physical pillar detected twice.
-        self.min_tower_separation = 0.10   # metres
+    def _param(self, name, default):
+        """Declare with a default and read back the (possibly overridden) value."""
+        self.declare_parameter(name, default)
+        return self.get_parameter(name).value
 
     # ──────────────────────────────────────────────────────────────
     # Index <-> angle helpers
@@ -85,6 +163,7 @@ class CustomDisparityExtender(Node):
         self.min_ang = msg.angle_min
         self.max_ang = msg.angle_max
         self.ang_inc = msg.angle_increment
+        self.last_scan_time = time.time()
 
         if self.ang_inc <= 0.0:
             self.get_logger().warn('angle_increment is non-positive; dropping scan.')
@@ -116,15 +195,174 @@ class CustomDisparityExtender(Node):
         # Publish unconditionally: an empty array is meaningful information.
         self.marker_pub.publish(marker_array)
 
-        if not towers:
+        if towers:
+            target = towers[0]
+            self.get_logger().info(
+                f"{len(towers)} tower(s); closest at {target['dist']:.2f} m, "
+                f"width {target['width_cm']:.1f} cm, "
+                f"angle {target['angle_deg']:.1f} deg.",
+                throttle_duration_sec=0.5,
+            )
+
+        self.drive_step(msg)
+
+    # ──────────────────────────────────────────────────────────────
+    # Navigation: disparity extension over the raw scan
+    # ──────────────────────────────────────────────────────────────
+
+    def build_nav_ranges(self, msg: LaserScan):
+        """
+        Nav view of the scan, distinct from the detection mask:
+
+          - inf / beyond nav_max_range  -> OPEN space at nav_max_range.
+            (Detection treats these as invalid; for driving, "no return"
+            usually means "nothing there", and zeroing it would wall off
+            every open corridor.)
+          - nan / below range_min       -> dropout; interpolated from the
+            nearest valid rays so one dead ray doesn't split a real gap.
+        """
+        raw = np.array(msg.ranges, dtype=np.float32)
+        if raw.size == 0:
+            return None
+
+        open_mask = np.isposinf(raw) | (raw >= self.nav_max_range)
+        bad = ~open_mask & (np.isnan(raw) | (raw < max(float(msg.range_min), 0.01)))
+
+        nav = raw.copy()
+        nav[open_mask] = self.nav_max_range
+
+        if bad.any():
+            good = ~bad
+            if not good.any():
+                return None
+            idx = np.arange(nav.size, dtype=np.float32)
+            nav[bad] = np.interp(idx[bad], idx[good], nav[good])
+
+        return np.minimum(nav, self.nav_max_range)
+
+    def extend_disparities(self, nav):
+        """
+        Core of the disparity extender.
+
+        At each step bigger than disparity_thresh between neighbouring rays,
+        the closer surface has an exposed edge the bot could clip. Overwrite
+        the far side of the edge with the CLOSER distance across the angle
+        that extend_radius (half-width + margin) subtends at that distance:
+
+            n_rays = atan(extend_radius / closer) / ang_inc
+
+        After this pass every remaining far ray is guaranteed to be at least
+        extend_radius from every detected edge, so "steer at the farthest
+        ray" is collision-safe by construction — including between pillars:
+        a pillar gap narrower than the bot is erased, a passable one stays.
+        """
+        d = nav.copy()
+        n = d.size
+
+        diffs = np.diff(nav)
+        for i in np.flatnonzero(np.abs(diffs) > self.disparity_thresh):
+            closer = float(min(nav[i], nav[i + 1]))
+            if closer <= 0.0:
+                continue
+
+            n_ext = int(math.ceil(
+                math.atan2(self.extend_radius, closer) / self.ang_inc))
+
+            if nav[i] < nav[i + 1]:
+                # Obstacle is on the low-index side: smear forward.
+                j0, j1 = i + 1, min(n, i + 1 + n_ext)
+            else:
+                # Obstacle is on the high-index side: smear backward.
+                j0, j1 = max(0, i + 1 - n_ext), i + 1
+
+            seg = d[j0:j1]
+            np.minimum(seg, closer, out=seg)
+
+        return d
+
+    def pick_target(self, d):
+        """
+        Farthest extended ray inside the nav FOV. Among rays within 95% of
+        the best (the cap at nav_max_range creates whole plateaus of "best"),
+        take the one closest to straight ahead — maximum clearance with
+        minimum steering, and no oscillation between equal far rays.
+        """
+        lo = max(0, self.a2i(-self.nav_fov_half))
+        hi = min(d.size - 1, self.a2i(self.nav_fov_half))
+        if hi <= lo:
+            return None
+
+        window = d[lo:hi + 1]
+        best = float(window.max())
+        if best <= 0.0:
+            return None
+
+        cand = np.flatnonzero(window >= 0.95 * best) + lo
+        centre = self.a2i(0.0)
+        idx = int(cand[np.argmin(np.abs(cand - centre))])
+        return idx, float(d[idx])
+
+    def drive_step(self, msg: LaserScan):
+        if not self.enable_drive:
             return
 
-        target = towers[0]
+        nav = self.build_nav_ranges(msg)
+        if nav is None:
+            self.publish_stop('no usable rays in scan')
+            return
+
+        extended = self.extend_disparities(nav)
+        pick = self.pick_target(extended)
+
+        # Forward stop-cone: raw nav distances, not extended ones — the
+        # extension is for steering choice, physical clearance is physical.
+        c0 = max(0, self.a2i(-self.stop_cone_half))
+        c1 = min(nav.size - 1, self.a2i(self.stop_cone_half))
+        clearance = float(nav[c0:c1 + 1].min()) if c1 > c0 else 0.0
+
+        if pick is None or clearance < self.stop_distance:
+            self.publish_stop(f'blocked, clearance {clearance:.2f} m')
+            return
+
+        idx, free_dist = pick
+        target_ang = self.i2a(idx)
+
+        # REP-103: +angle = left = +angular.z. Normalised to [-1, 1] of the
+        # physical lock, same convention the MCU bridge expects on /cmd_vel.
+        steer = clamp(target_ang / self.max_steer_rad, -1.0, 1.0)
+
+        open_frac = clamp(
+            (free_dist - self.stop_distance)
+            / max(self.nav_max_range - self.stop_distance, 1e-6),
+            0.0, 1.0)
+        speed = self.min_speed + (self.max_speed - self.min_speed) * open_frac
+        speed *= 1.0 - self.steer_speed_drop * abs(steer)
+
+        cmd = Twist()
+        cmd.linear.x = float(speed)
+        cmd.angular.z = float(steer)
+        self.cmd_pub.publish(cmd)
+
+        self.publish_target_marker(target_ang, free_dist)
         self.get_logger().info(
-            f"{len(towers)} tower(s); closest at {target['dist']:.2f} m, "
-            f"width {target['width_cm']:.1f} cm, "
-            f"angle {target['angle_deg']:.1f} deg."
+            f'[NAV] {math.degrees(target_ang):+6.1f} deg | free {free_dist:.2f} m | '
+            f'clear {clearance:.2f} m | v {speed:.2f} m/s',
+            throttle_duration_sec=0.5,
         )
+
+    def publish_stop(self, reason: str):
+        self.cmd_pub.publish(Twist())
+        self.get_logger().warn(f'STOP — {reason}.', throttle_duration_sec=1.0)
+
+    def watchdog(self):
+        """Emergency stop if /scan goes quiet while we are allowed to drive."""
+        if not self.enable_drive or self.last_scan_time == 0.0:
+            return
+        if time.time() - self.last_scan_time > 0.3:
+            self.cmd_pub.publish(Twist())
+            self.get_logger().error(
+                'LiDAR silent > 300 ms — emergency stop.',
+                throttle_duration_sec=1.0)
 
     # ──────────────────────────────────────────────────────────────
     # Edge detection + width measurement
@@ -143,9 +381,9 @@ class CustomDisparityExtender(Node):
     def tower_width_gate(self, dist: float):
         """Return (min_cm, max_cm) accepted for a tower at this distance.
 
-        Geometric band is [5.0, 7.07] cm. Each edge is quantised by up to one
-        beam step, and a stride > 1 adds further edge ambiguity, so the band is
-        widened by a range-dependent slack.
+        Geometric band is [face, face * sqrt(2)] cm. Each edge is quantised by
+        up to one beam step, and a stride > 1 adds further edge ambiguity, so
+        the band is widened by a range-dependent slack.
         """
         ray_cm = dist * self.ang_inc * 100.0
         slack = 1.5 * ray_cm + 0.5 * (self.edge_stride - 1) * ray_cm
@@ -290,10 +528,11 @@ class CustomDisparityExtender(Node):
             "width_cm": width_cm,
         }
 
-    def make_marker(self, obj: dict, marker_id: int) -> Marker:
-        x = obj['x']
-        y = obj['y']
+    # ──────────────────────────────────────────────────────────────
+    # Visualization
+    # ──────────────────────────────────────────────────────────────
 
+    def make_marker(self, obj: dict, marker_id: int) -> Marker:
         m = Marker()
         m.header.frame_id = self.frame_id
         m.header.stamp = self.get_clock().now().to_msg()
@@ -302,14 +541,14 @@ class CustomDisparityExtender(Node):
         m.type = Marker.CYLINDER
         m.action = Marker.ADD
 
-        m.pose.position.x = x
-        m.pose.position.y = y
+        m.pose.position.x = obj['x']
+        m.pose.position.y = obj['y']
         m.pose.position.z = 0.0
         m.pose.orientation.w = 1.0   # identity: no rotation needed for a flat disk
 
-        # Draw the pillar at its true 5 cm footprint rather than the measured
-        # contour width, which inflates toward 7.07 cm when seen corner-on.
-        diameter = 0.05
+        # Draw the pillar at its true footprint rather than the measured
+        # contour width, which inflates toward w*sqrt(2) when seen corner-on.
+        diameter = self.tower_w_min_face / 100.0
         m.scale.x = diameter
         m.scale.y = diameter
         m.scale.z = 0.02             # thin: sits like a flat disk on the ground
@@ -325,6 +564,24 @@ class CustomDisparityExtender(Node):
         m.lifetime.nanosec = int(0.3 * 1e9)   # 300 ms
 
         return m
+
+    def publish_target_marker(self, angle: float, dist: float):
+        m = Marker()
+        m.header.frame_id = self.frame_id
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = 'nav_target'
+        m.id = 0
+        m.type = Marker.ARROW
+        m.action = Marker.ADD
+        m.pose.orientation.z = math.sin(angle / 2.0)
+        m.pose.orientation.w = math.cos(angle / 2.0)
+        m.scale.x = float(dist)
+        m.scale.y = 0.04
+        m.scale.z = 0.04
+        m.color.g = 1.0
+        m.color.a = 0.9
+        m.lifetime.nanosec = int(0.3 * 1e9)
+        self.target_pub.publish(m)
 
 
 def main(args=None):
