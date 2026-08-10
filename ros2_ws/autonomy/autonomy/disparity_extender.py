@@ -34,7 +34,7 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Bool, Float32MultiArray, String, Int32
+from std_msgs.msg import Bool, Float32MultiArray, String, Int32, Empty
 from visualization_msgs.msg import Marker
 
 # Run states of the start gate.
@@ -177,6 +177,8 @@ class DisparityExtenderNode(Node):
         self.detected_towers = []
         self.last_time = time.time()
         self.lap_count = 0
+        self.has_reset_laps = False
+        self.reset_timer_ticks = 0
 
         # ── Start Gate State ─────────────────────────────────────────
         # With the gate disabled the node behaves as it always did: it drives as
@@ -193,6 +195,7 @@ class DisparityExtenderNode(Node):
         self.color_sub = self.create_subscription(String, '/closest_obj', self.color_callback, 1)
         self.lap_sub = self.create_subscription(Int32, '/lap_count', self.lap_callback, 10)
         self.button_sub = self.create_subscription(Bool, button_topic, self.button_callback, 10)
+        self.lap_reset_pub = self.create_publisher(Empty, '/reset_lap_count', 10)
 
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.debug_scan_pub = self.create_publisher(LaserScan, '/scan_processed', 10)
@@ -291,7 +294,6 @@ class DisparityExtenderNode(Node):
         cmd.linear.x = 0.0
         cmd.angular.z = 0.0
         self.cmd_pub.publish(cmd)
-
     def lidar_callback(self, msg: LaserScan):
         """Buffer incoming LaserScan data for the background thread."""
         with self._scan_lock:
@@ -314,6 +316,17 @@ class DisparityExtenderNode(Node):
         if not bool(self.get_parameter('enable_auto_steering').value):
             return
 
+        # ── LAP RESET LOGIC ──
+        if not self.has_reset_laps:
+            self.reset_timer_ticks += 1
+            if self.reset_timer_ticks >= 20:  # Wait 0.5s for ROS 2 Discovery to connect publishers
+                self.lap_reset_pub.publish(Empty())
+                self.has_reset_laps = True
+                self.lap_count = 0  # Force local reset too
+                self.get_logger().info('Sent lap count reset signal on startup.')
+            else:
+                return  # Don't drive while waiting for reset
+
         # ── START GATE: STANDBY / ARMING park the car ──
         if self.run_state != STATE_RUNNING:
             self.publish_stop()
@@ -321,7 +334,6 @@ class DisparityExtenderNode(Node):
                 f'{self.run_state} — waiting for the start button.',
                 throttle_duration_sec=5.0)
             return
-
         # ── LAP COMPLETION STOP ──
         if self.lap_count >= 3:
             cmd = Twist()
