@@ -1,3 +1,0 @@
-[console_scripts]
-mcu_bridge = contols.mcu_bridge:main
-

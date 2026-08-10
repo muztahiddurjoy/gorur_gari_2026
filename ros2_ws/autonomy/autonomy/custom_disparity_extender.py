@@ -1,55 +1,239 @@
-from cv2 import line
+"""
+Disparity edge detector + object width measurement — corrected.
 
+Fixes vs the original:
+  1. Object distance is taken from INSIDE the object (median of the segment),
+     not from the background ray on the far side of the entering edge.
+  2. Edge direction (sign) is used: falling edge pushes, rising edge pops.
+     No more blind (0,1),(2,3) pairing.
+  3. nan_to_num maps every invalid reading to a single 0.0 sentinel, and a
+     validity mask gates every comparison.
+  4. Slope is measured over a stride so one physical edge registers once.
+  5. angle_min / angle_increment are read from the message every frame.
+"""
+
+import math
+
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-import math
-import numpy as np 
+
 
 class CustomDisparityExtender(Node):
+
     def __init__(self):
         super().__init__('disparity_checker_test')
-        self.sub = self.create_subscription(LaserScan,'/scan',self.lidr_callback, 10)
+
+        self.sub = self.create_subscription(
+            LaserScan, '/scan', self.lidr_callback, 10)
+
+        # Filled in from the first message; these are only fallbacks.
         self.min_ang = -math.pi
         self.max_ang = math.pi
         self.ang_inc = math.radians(0.5)
-        self.ranges = []
-        self.intensities = []
-        self.spike_threshold = 0.1
-        self.get_logger().info(f"the angle for 0th index will be {math.degrees(self.i2a(0))} and for last index will be {math.degrees(self.i2a(719))}")
-        
-    def lidr_callback(self, msg:LaserScan):
-        self.ranges = np.array(msg.ranges, dtype=np.float32)
-        self.intensities = np.array(msg.intensities, dtype=np.float32)
-        self.ranges = np.nan_to_num(self.ranges, nan=math.inf, posinf=0, neginf=0)
-        self.ang_inc = msg.angle_increment
-        start = self.a2i(-math.radians(20))
-        end = self.a2i(math.radians(20))
 
-        for i in range (start, end):
-            if self.ranges[i] > 0.01 and abs(self.ranges[i]-self.ranges[i+1]) > self.spike_threshold:
-                self.get_logger().info(f"Spike detected at angle: {math.degrees(self.i2a(i))}")
+        self.ranges = np.empty(0, dtype=np.float32)
+        self.valid = np.empty(0, dtype=bool)
 
-        # line = ", ".join(
-        #     f"{self.ranges[i]:.2f}" if self.ranges[i] != math.inf else "inf"
-        #     for i in range(start, end)
-        # )
+        # Edge detection
+        self.spike_threshold = 0.10   # metres, at the reference distance below
+        self.spike_ref_dist = 1.0     # threshold scales linearly beyond this
+        self.edge_stride = 4          # compare ranges[i] against ranges[i-stride]
 
-        # self.get_logger().info(line)
-        #self.get_logger().info(f"Received LaserScan with {len(self.ranges)} ranges and {len(self.intensities)} intensities and angle increment {self.ang_inc}")
+        # Search window
+        self.fov_deg = 20.0
 
-    def a2i(self, angle:float):
-        return int((angle - self.min_ang) / self.ang_inc)
+        # Accept anything from a 2 cm sliver to a 40 cm crate as an "object"
+        self.width_min_cm = 2.0
+        self.width_max_cm = 40.0
 
-    def i2a(self, index:int):
+        # Ignore returns beyond this — noise dominates and the threshold
+        # heuristic stops being meaningful.
+        self.max_useful_range = 4.0
+
+    # ──────────────────────────────────────────────────────────────
+    # Index <-> angle helpers
+    # ──────────────────────────────────────────────────────────────
+
+    def a2i(self, angle: float) -> int:
+        """Angle (radians) -> array index. round(), not int(): int() truncates
+        toward zero, which is asymmetric either side of 0."""
+        return int(round((angle - self.min_ang) / self.ang_inc))
+
+    def i2a(self, index: int) -> float:
+        """Array index -> angle (radians)."""
         return self.min_ang + index * self.ang_inc
+
+    # ──────────────────────────────────────────────────────────────
+    # Scan handling
+    # ──────────────────────────────────────────────────────────────
+
+    def lidr_callback(self, msg: LaserScan):
+        # Read the geometry from the message. Hardcoding min_ang = -pi breaks
+        # a2i() on any LiDAR that publishes 0..2pi instead of -pi..pi: the
+        # index goes negative and Python silently wraps to the end of the array.
+        self.min_ang = msg.angle_min
+        self.max_ang = msg.angle_max
+        self.ang_inc = msg.angle_increment
+
+        r = np.array(msg.ranges, dtype=np.float32)
+
+        # ONE sentinel for every kind of invalid reading. The original mapped
+        # nan -> inf and inf -> 0, which meant "nothing in range" became
+        # "obstacle at 0 m" and manufactured a disparity against its neighbour.
+        r = np.nan_to_num(r, nan=0.0, posinf=0.0, neginf=0.0)
+
+        upper = min(float(msg.range_max), self.max_useful_range)
+        valid = (r > max(float(msg.range_min), 0.01)) & (r < upper)
+
+        self.ranges = r
+        self.valid = valid
+
+        objects = self.find_objects()
+
+        if not objects:
+            return
+
+        report = " | ".join(
+            f"{o['width_cm']:5.1f}cm @ {o['dist']:4.2f}m, {o['angle_deg']:+6.1f}deg"
+            for o in objects
+        )
+        self.get_logger().info(report)
+
+    # ──────────────────────────────────────────────────────────────
+    # Edge detection + width measurement
+    # ──────────────────────────────────────────────────────────────
+
+    def threshold_at(self, dist: float) -> float:
+        """Scale the spike threshold with distance.
+
+        At 3 m the natural range difference between adjacent rays on an
+        obliquely-viewed wall already approaches 0.1 m, so a fixed threshold
+        fires on flat surfaces. Growing it with range keeps the detector
+        sensitive up close without going off constantly far away.
+        """
+        return self.spike_threshold * max(1.0, dist / self.spike_ref_dist)
+
+    def find_objects(self):
+        """
+        Walk the FOV looking for falling-edge -> rising-edge pairs.
+
+        Falling edge  (range drops) = an object begins; push its NEAR index.
+        Rising  edge  (range jumps) = the object ends;  pop and measure.
+
+        Using the SIGN is what makes this robust. abs() throws the direction
+        away, and then pairing elements (0,1),(2,3),... assumes edges alternate
+        perfectly starting with an entering edge. One clipped or missed edge
+        shifts every later pair by one, and you end up measuring the GAP
+        between two objects instead of an object.
+        """
+        n = len(self.ranges)
+        if n == 0:
+            return []
+
+        stride = self.edge_stride
+
+        # Clamp so neither i-stride nor i+1 can run off either end.
+        start = max(stride, self.a2i(-math.radians(self.fov_deg)))
+        end = min(n - 1, self.a2i(math.radians(self.fov_deg)))
+        if end <= start:
+            return []
+
+        stack = []
+        objects = []
+
+        for i in range(start, end):
+            # Both samples must be real before their difference means anything.
+            if not (self.valid[i] and self.valid[i - stride]):
+                continue
+
+            near = float(self.ranges[i])
+            far = float(self.ranges[i - stride])
+            slope = near - far
+
+            thresh = self.threshold_at(min(near, far))
+
+            if slope < -thresh:
+                # Range dropped: object starts here, at the NEAR ray.
+                stack.append(i)
+
+            elif slope > thresh:
+                # Range jumped back out: object ended at the previous ray.
+                if not stack:
+                    # Rising edge with no matching fall — the object was
+                    # already in view when the window started. Skip it rather
+                    # than pair it with something unrelated.
+                    continue
+
+                p = stack.pop()
+                q = i - 1
+                if q < p:
+                    continue
+
+                obj = self.measure(p, q)
+                if obj is not None:
+                    objects.append(obj)
+
+        return objects
+
+    def measure(self, p: int, q: int):
+        """
+        Measure the object occupying rays [p, q] inclusive.
+
+        The distance comes from INSIDE the segment. This is the bug that
+        dominated the original: at a falling edge, ranges[i] is the background
+        behind the object and ranges[i+1] is the object. Recording ranges[i]
+        meant r was the wall's distance, so a 5 cm pole at 1 m in front of a
+        wall at 3 m measured ~15 cm — off by exactly the ratio of the two.
+
+        Median rather than mean, so one bad ray inside the segment can't drag
+        the estimate.
+        """
+        seg = self.ranges[p:q + 1]
+        seg_valid = self.valid[p:q + 1]
+        seg = seg[seg_valid]
+
+        if seg.size == 0:
+            return None
+
+        dist = float(np.median(seg))
+
+        # (q - p + 1) rays, each covering one angular increment, so this is the
+        # object's angular footprint. Using (q - p) would undercount by one
+        # increment — negligible on a wide object, ~50% on a 2-ray one.
+        theta = (q - p + 1) * self.ang_inc
+
+        # Arc length s = r * theta. For a cylinder of radius a at distance d the
+        # subtended angle is 2*asin(a/d) ~= 2a/d, so s ~= 2a = the diameter.
+        width_cm = dist * theta * 100.0
+
+        if not (self.width_min_cm < width_cm < self.width_max_cm):
+            return None
+
+        mid = (p + q) // 2
+
+        return {
+            "start": p,
+            "end": q,
+            "dist": dist,
+            "angle_deg": math.degrees(self.i2a(mid)),
+            "width_cm": width_cm,
+        }
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = CustomDisparityExtender()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

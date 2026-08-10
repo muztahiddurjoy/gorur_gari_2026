@@ -1,5 +1,0 @@
-[console_scripts]
-disparity_extender = sensors_processing.disparity_extender:main
-encoder_odometry = sensors_processing.encoder_odometry:main
-vector_odom = sensors_processing.vector_odom:main
-
