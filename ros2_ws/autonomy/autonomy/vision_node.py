@@ -16,7 +16,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
 from sensor_msgs.msg import Image
-from std_msgs.msg import String
+from std_msgs.msg import Float32MultiArray
 
 # Import cv_bridge safely if installed, or fallback gracefully
 try:
@@ -56,6 +56,7 @@ class VisionNode(Node):
         self.declare_parameter('process_every_n_frames', 2)   # Throttle processing when efficient_mode is True
         self.declare_parameter('processing_width', 320)       # Downscale resolution when efficient_mode is True
         self.declare_parameter('processing_height', 240)
+        self.declare_parameter('camera_hfov_deg', 60.0)       # Camera Horizontal FOV for angular matching
         
         self.declare_parameter('min_aspect_ratio', 1.0)
         self.declare_parameter('max_aspect_ratio', 3.5)
@@ -70,8 +71,9 @@ class VisionNode(Node):
         self.declare_parameter('red_upper_2', [180, 255, 255])
         
         self.efficient_mode = bool(self.get_parameter('efficient_mode').value)
-        camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
-        obstacles_topic = self.get_parameter('obstacles_topic').get_parameter_value().string_value
+        camera_topic = self.get_parameter('camera_topic').value
+        obstacles_topic = self.get_parameter('obstacles_topic').value
+        self.camera_hfov_deg = self.get_parameter('camera_hfov_deg').value
         min_area = self.get_parameter('min_contour_area').get_parameter_value().integer_value
         roi_crop = self.get_parameter('roi_top_crop').get_parameter_value().double_value
         min_ar = float(self.get_parameter('min_aspect_ratio').value)
@@ -120,12 +122,13 @@ class VisionNode(Node):
         )
 
         # --- Publishers & Subscribers ---
+        # ── Publishers ────────────────────────────────────────────────
         self.bridge = CvBridge() if CV_BRIDGE_AVAILABLE else None
 
         self.obstacle_pub = self.create_publisher(
-            String,
+            Float32MultiArray,
             obstacles_topic,
-            qos_profile=10
+            qos_profile=self.sensor_qos
         )
 
         self.debug_image_pub = self.create_publisher(
@@ -177,20 +180,23 @@ class VisionNode(Node):
 
         # Convert detection dicts to ROS 2 String message for disparity extender
         # We assume the largest bounding box (largest width * height) is the closest pillar
-        closest_color = "N"
+        closest_color_code = 0.0 # 0=None, 1=Red, 2=Green
+        closest_angle = 0.0
         max_area = 0
+        frame_w = cv_image.shape[1]
         
         for det in detections:
             x, y, w, h = det['bbox']
             area = w * h
             if area > max_area:
                 max_area = area
-                closest_color = "R" if det['color'] == 'red' else "G"
+                closest_color_code = 1.0 if det['color'] == 'red' else 2.0
+                closest_angle = ((det['centroid_x'] - frame_w / 2) / (frame_w / 2)) * (self.camera_hfov_deg / 2)
 
-        msg_out = String()
-        msg_out.data = closest_color
+        msg_out = Float32MultiArray()
+        msg_out.data = [closest_color_code, float(closest_angle)]
         self.obstacle_pub.publish(msg_out)
-        self.get_logger().debug(f'Published closest object color: {closest_color}')
+        self.get_logger().debug(f'Published closest object color code: {closest_color_code}, angle: {closest_angle}')
 
         # Publish visual debug frame if enabled
         if self.publish_debug and self.bridge:

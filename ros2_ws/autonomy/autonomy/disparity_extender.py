@@ -34,7 +34,9 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Bool, Float32MultiArray, String, Int32, Empty
+from nav_msgs.msg import Odometry
+from std_msgs.msg import Float32MultiArray, Int32, Bool, Empty
+from geometry_msgs.msg import Twist
 from visualization_msgs.msg import Marker
 
 # Run states of the start gate.
@@ -78,6 +80,7 @@ class DisparityExtenderNode(Node):
 
         # ── FOV ───────────────────────────────────────────────────────
         self.declare_parameter('look_range_deg', 80.0)
+        self.declare_parameter('vision_angle_tolerance_deg', 15.0)
 
         # ── Speed ─────────────────────────────────────────────────────
         self.declare_parameter('max_speed', 0.60)
@@ -126,6 +129,7 @@ class DisparityExtenderNode(Node):
         self.cast_skip_fine = int(self.get_parameter('cast_skip_fine').value)
 
         self.look_range_rad = math.radians(float(self.get_parameter('look_range_deg').value))
+        self.vision_angle_tolerance_rad = math.radians(float(self.get_parameter('vision_angle_tolerance_deg').value))
 
         self.max_speed = float(self.get_parameter('max_speed').value)
         self.speed_cap_corner = float(self.get_parameter('speed_cap_corner').value)
@@ -174,6 +178,7 @@ class DisparityExtenderNode(Node):
         self.target_dist = 0.0
         self.cast_r = self.cast_range_min
         self.closest_color = "N"  # "R", "G", or "N"
+        self.camera_pillar_angle = 0.0
         self.detected_towers = []
         self.last_time = time.time()
         self.lap_count = 0
@@ -193,7 +198,7 @@ class DisparityExtenderNode(Node):
         # ── Subscriptions & Publishers ────────────────────────────────
         self.scan_sub = self.create_subscription(LaserScan, scan_topic, self.lidar_callback, 1)
         self.odom_sub = self.create_subscription(Odometry, odom_topic, self.odom_callback, 10)
-        self.color_sub = self.create_subscription(String, '/closest_obj', self.color_callback, 1)
+        self.color_sub = self.create_subscription(Float32MultiArray, '/closest_obj', self.color_callback, 1)
         self.lap_sub = self.create_subscription(Int32, '/lap_count', self.lap_callback, 10)
         self.button_sub = self.create_subscription(Bool, button_topic, self.button_callback, 10)
         self.lap_reset_pub = self.create_publisher(Empty, '/reset_lap_count', 10)
@@ -235,12 +240,13 @@ class DisparityExtenderNode(Node):
         vy = msg.twist.twist.linear.y
         self.current_speed = math.hypot(vx, vy)
 
-    def color_callback(self, msg: String):
-        """Update the active WRO color override (R, G, N)."""
-        self.closest_color = msg.data.strip().upper()
+    def color_callback(self, msg: Float32MultiArray):
+        """Update the active WRO color override (R, G, N) and angle."""
+        if len(msg.data) >= 2:
+            code = int(msg.data[0])
+            self.closest_color = {0: "N", 1: "R", 2: "G"}.get(code, "N")
+            self.camera_pillar_angle = math.radians(msg.data[1])
         self.last_color_time = time.time()
-        if self.closest_color not in ("R", "G"):
-            self.closest_color = "N"
 
     def lap_callback(self, msg: Int32):
         """Update lap count from the lap_counter node."""
@@ -565,13 +571,17 @@ class DisparityExtenderNode(Node):
         chk = self.ind_range(-self.look_range_rad, self.look_range_rad)
         n = len(self.ranges)
 
-        # WRO Color Override: restrict search range
+        # WRO Color Override: restrict search range using Angular Matching
         if towers and self.closest_color == "G":
-            # Green → only search rays LEFT of the closest tower (force pass left)
-            chk[0] = towers[0]["index"]
+            # Green → only search rays LEFT of the closest matching tower (force pass left)
+            matched = min(towers, key=lambda t: abs(t["ang"] - self.camera_pillar_angle))
+            if abs(matched["ang"] - self.camera_pillar_angle) < self.vision_angle_tolerance_rad:
+                chk[0] = matched["index"]
         elif towers and self.closest_color == "R":
-            # Red → only search rays RIGHT of the closest tower (force pass right)
-            chk[1] = towers[0]["index"]
+            # Red → only search rays RIGHT of the closest matching tower (force pass right)
+            matched = min(towers, key=lambda t: abs(t["ang"] - self.camera_pillar_angle))
+            if abs(matched["ang"] - self.camera_pillar_angle) < self.vision_angle_tolerance_rad:
+                chk[1] = matched["index"]
 
         for i in range(chk[0], chk[1], self.cast_skip):
             if i < 0 or i >= n:

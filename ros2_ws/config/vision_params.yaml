@@ -10,6 +10,7 @@ vision_node:
     # ── Topics ──────────────────────────────────────────────────────
     camera_topic: "/camera/image_raw"
     obstacles_topic: "/closest_obj"
+    camera_hfov_deg: 60.0        # Horizontal FOV of the camera in degrees
 
     # ── Region of Interest & Geometry Filtering ─────────────────────
     roi_top_crop: 0.4            # Fraction of top frame to ignore (keeps bottom 60%)

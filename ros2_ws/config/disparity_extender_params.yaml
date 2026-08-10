@@ -9,6 +9,7 @@ disparity_extender_node:
 
     # ── Field of View ──────────────────────────────────────────────
     look_range_deg: 80.0        # Forward FOV half-angle (degrees)
+    vision_angle_tolerance_deg: 15.0 # Max angular diff to match camera to LiDAR
 
     # ── Speed ──────────────────────────────────────────────────────
     max_speed: 1.3            # Maximum linear velocity (m/s)
