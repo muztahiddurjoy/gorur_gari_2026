@@ -44,7 +44,29 @@ class HSVTuningApp:
         self.root.minsize(1000, 650)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        self.detector = PillarDetector()
+        # Dynamically load current parameters from vision_params.yaml
+        import yaml
+        yaml_path = os.path.join(script_dir, '../../config/vision_params.yaml')
+        
+        # Fallback values
+        kwargs = {}
+        try:
+            with open(yaml_path, 'r') as f:
+                config = yaml.safe_load(f)
+                v_params = config['vision_node']['ros__parameters']
+                kwargs['green_lower'] = v_params['green_lower']
+                kwargs['green_upper'] = v_params['green_upper']
+                kwargs['red_lower_1'] = v_params['red_lower_1']
+                kwargs['red_upper_1'] = v_params['red_upper_1']
+                kwargs['red_lower_2'] = v_params['red_lower_2']
+                kwargs['red_upper_2'] = v_params['red_upper_2']
+                kwargs['min_area'] = v_params.get('min_contour_area', 250)
+                kwargs['roi_top_crop'] = v_params.get('roi_top_crop', 0.40)
+                print(f"✅ Loaded dynamic parameters from: {yaml_path}")
+        except Exception as e:
+            print(f"⚠️ Could not load YAML config ({e}). Falling back to hardcoded defaults.")
+
+        self.detector = PillarDetector(**kwargs)
         self.cap = None
         self.frame_static = None
         self.latest_frame = None

@@ -188,6 +188,7 @@ class DisparityExtenderNode(Node):
         self.prev_button = False       # for rising edge detection on /button_status
         self.last_countdown_logged = -1
         self.last_stop_pub_time = 0.0
+        self.last_scan_time = 0.0         # Watchdog: last time /scan was received
 
         # ── Subscriptions & Publishers ────────────────────────────────
         self.scan_sub = self.create_subscription(LaserScan, scan_topic, self.lidar_callback, 1)
@@ -306,6 +307,7 @@ class DisparityExtenderNode(Node):
             self.range_max = msg.range_max
             self.scan_header = msg.header
             self.new_lidar_val = True
+            self.last_scan_time = time.time()
 
     def control_loop(self):
         """Publish motor commands at a fixed rate."""
@@ -341,6 +343,17 @@ class DisparityExtenderNode(Node):
             cmd.angular.z = 0.0
             self.cmd_pub.publish(cmd)
             self.get_logger().info('3 Laps Completed! Bot Stopped.', throttle_duration_sec=1.0)
+            return
+
+        # ── LIDAR WATCHDOG ──
+        if self.last_scan_time > 0.0 and (time.time() - self.last_scan_time) > 0.2:
+            cmd = Twist()
+            cmd.linear.x = 0.0
+            cmd.angular.z = 0.0
+            self.cmd_pub.publish(cmd)
+            self.get_logger().error(
+                'LiDAR timeout! No /scan for >200ms — emergency stop.',
+                throttle_duration_sec=1.0)
             return
 
         cmd = Twist()
@@ -586,23 +599,53 @@ class DisparityExtenderNode(Node):
 
     def danger_sense(self, target_ang_deg):
         """
-        If any obstacle is within danger_dist at side angles [25°, 90°],
-        and the target angle is toward the obstacle, reduce steering by 1/3.
+        If any obstacle is within danger_dist at side angles
+        [danger_angle_min, danger_angle_max], and the current heading steers
+        toward it, apply a proportional corrective steer AWAY from the obstacle.
+
+        Severity scales linearly with proximity:
+          - At the danger boundary: no correction (severity = 0)
+          - At contact distance:    full corrective override (severity = 1)
+
+        The correction blends between the original target heading and a fixed
+        escape angle (half of str_ang_thresh toward the safe side).
         """
         n = len(self.ranges)
-        for i in range(n):
+        closest_left_dist = float('inf')
+        closest_right_dist = float('inf')
+
+        # Only scan the two side danger zones instead of all N rays
+        left_zone = self.ind_range(
+            math.radians(self.danger_angle_min),
+            math.radians(self.danger_angle_max))
+        right_zone = self.ind_range(
+            math.radians(-self.danger_angle_max),
+            math.radians(-self.danger_angle_min))
+
+        for i in list(range(left_zone[0], left_zone[1])) + list(range(right_zone[0], right_zone[1])):
+            if i < 0 or i >= n:
+                continue
             if self.intensities[i] <= 0.05 or self.ranges[i] > 3.0:
                 continue
             if self.ranges[i] < self.danger_dist:
                 ang = math.degrees(self.i2a(i))
-                # Left danger zone
-                if self.danger_angle_min < ang < self.danger_angle_max:
-                    if target_ang_deg > 0:  # Heading toward danger
-                        return target_ang_deg / 3.0
-                # Right danger zone
-                if -self.danger_angle_max < ang < -self.danger_angle_min:
-                    if target_ang_deg < 0:  # Heading toward danger
-                        return target_ang_deg / 3.0
+                if ang > 0 and self.ranges[i] < closest_left_dist:
+                    closest_left_dist = self.ranges[i]
+                elif ang < 0 and self.ranges[i] < closest_right_dist:
+                    closest_right_dist = self.ranges[i]
+
+        escape_angle = self.str_ang_thresh * 0.5  # Max corrective steer (30° default)
+
+        # Left danger: obstacle on left side, heading steers left → push right
+        if closest_left_dist < self.danger_dist and target_ang_deg > 0:
+            severity = 1.0 - (closest_left_dist / self.danger_dist)
+            return target_ang_deg * (1.0 - severity) + (-escape_angle) * severity
+
+        # Right danger: obstacle on right side, heading steers right → push left
+        if closest_right_dist < self.danger_dist and target_ang_deg < 0:
+            severity = 1.0 - (closest_right_dist / self.danger_dist)
+            return target_ang_deg * (1.0 - severity) + escape_angle * severity
+
         return target_ang_deg
 
     # ══════════════════════════════════════════════════════════════════
