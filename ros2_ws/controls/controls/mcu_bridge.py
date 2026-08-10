@@ -1,5 +1,6 @@
 import geometry_msgs
 import rclpy
+from rclpy.duration import Duration
 from rclpy.node import Node
 from pymavlink import mavutil
 from controls import mcu_to_ros2
@@ -24,6 +25,14 @@ SONAR_ENABLED_DEFAULTS = {'front': False, 'left': False, 'right': False, 'rear':
 # encoder_direction on the wire: 0 = stopped, 1 = forward, 2 = reverse (see firmware/src/main.cpp)
 WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
 
+# the drivetrain does not make enough torque at cruise throttle to break static
+# friction, so the command that starts a move from a standstill gets scaled up
+# for a moment. once the bot is rolling, momentum carries it and the commanded
+# velocity goes through untouched.
+LAUNCH_BOOST_GAIN = 2
+LAUNCH_BOOST_DURATION_S = 1  # 0.0 -> boost only the single command that starts the move
+LAUNCH_IDLE_TIMEOUT_S = 0.5  # no cmd_vel for this long counts as stopped, so the boost re-arms
+
 # how long to wait after opening the port before announcing ourselves to the MCU.
 # long enough for the esp32 to clear its bootloader if opening the port reset it.
 MCU_CONNECT_NOTICE_DELAY_S = 1.0
@@ -43,6 +52,18 @@ class MCUBridgeNode(Node):
             param = f'sonar_{name}_enabled'
             self.declare_parameter(param, SONAR_ENABLED_DEFAULTS[name])
             self.sonar_enabled.append(bool(self.get_parameter(param).value))
+
+        self.declare_parameter('launch_boost_gain', LAUNCH_BOOST_GAIN)
+        self.declare_parameter('launch_boost_duration', LAUNCH_BOOST_DURATION_S)
+        self.declare_parameter('launch_idle_timeout', LAUNCH_IDLE_TIMEOUT_S)
+        self.launch_boost_gain = float(self.get_parameter('launch_boost_gain').value)
+        self.launch_boost_duration = float(self.get_parameter('launch_boost_duration').value)
+        self.launch_idle_timeout = float(self.get_parameter('launch_idle_timeout').value)
+        # launch boost state: are we rolling, until when is the kick live, and when
+        # did the last cmd_vel land (a gap means the bot coasted to a stop)
+        self.is_moving = False
+        self.launch_boost_until = None
+        self.last_cmd_vel_time = None
 
         self.sonar_pubs = [
             self.create_publisher(Range, topic, 10) if on else None
@@ -105,12 +126,47 @@ class MCUBridgeNode(Node):
         except Exception as e:
             self.get_logger().error(f'Failed to announce connection to MCU: {e}')
 
+    def apply_launch_boost(self, linear_x, now):
+        """Scale up the throttle that gets the bot moving again from a standstill.
+
+        The first non-zero linear.x after a stop is multiplied by the boost gain
+        (and every command within launch_boost_duration of it, so the kick is not
+        gone in one 20 ms frame). After that the bot is rolling and the commanded
+        velocity is passed straight through.
+        """
+        # a gap in cmd_vel means nobody is driving, so the bot rolled to a stop
+        if (self.last_cmd_vel_time is not None
+                and (now - self.last_cmd_vel_time) > Duration(seconds=self.launch_idle_timeout)):
+            self.is_moving = False
+            self.launch_boost_until = None
+        self.last_cmd_vel_time = now
+
+        if linear_x == 0.0:
+            # commanded stop: next non-zero command starts a new move
+            self.is_moving = False
+            self.launch_boost_until = None
+            return linear_x
+
+        if not self.is_moving:
+            self.is_moving = True
+            self.launch_boost_until = now + Duration(seconds=self.launch_boost_duration)
+            self.get_logger().info(
+                f'Launch boost: x{self.launch_boost_gain} for {self.launch_boost_duration}s')
+            return linear_x * self.launch_boost_gain
+
+        if self.launch_boost_until is not None:
+            if now < self.launch_boost_until:
+                return linear_x * self.launch_boost_gain
+            self.launch_boost_until = None  # boosted long enough, back to normal
+        return linear_x
+
     def handle_cmd_vel(self,msg:Twist):
         try:
             # if not self.mcu_connected: #handle the case where the MCU is not connected
             #     self.get_logger().error("MCU is not connected. cannot send command.")
             #     return;
-            throttle = int(max(-128, min(127, msg.linear.x * 100)))  # Scale linear.x to -128-127
+            linear_x = self.apply_launch_boost(msg.linear.x, self.get_clock().now())
+            throttle = int(max(-128, min(127, linear_x * 100)))  # Scale linear.x to -128-127
             steering = max(45, min(135, int(90+ msg.angular.z * 45)))  # Scale angular.z to 45-135 degrees
             self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
             if self.mcu_connected:

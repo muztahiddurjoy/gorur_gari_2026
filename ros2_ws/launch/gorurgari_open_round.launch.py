@@ -7,6 +7,7 @@ Open round: the full driving stack, no obstacles on the mat.
     vector_odom         controls    encoder/count + heading -> /odom_vector
                                     (and the odom -> base_link TF)
     lap_counter         autonomy    /heading corners -> /lap_count, /turn_count
+    rplidar_c1          sensors     serial link to LiDAR - drives /scan out
     disparity_extender  autonomy    /scan -> /cmd_vel, and stops the car once
                                     /lap_count reaches the round's lap target.
                                     Starts in standby: it only drives 3 s after
@@ -15,8 +16,7 @@ Open round: the full driving stack, no obstacles on the mat.
                                     status LED once a second over that delay
 
 Everything talks on relative topic names in the root namespace, so the nodes
-wire up to each other with no remaps. The LiDAR driver itself is NOT started
-here - bring up whatever publishes /scan separately, this file only consumes it.
+wire up to each other with no remaps. 
 
 Run it from the workspace root:
 
@@ -92,6 +92,14 @@ def generate_launch_description():
             'start_delay_sec', default_value='3.0',
             description='Seconds between the start button press and the first movement. '
                         'The MCU blinks its status LED once a second through it.'),
+                        
+        # LiDAR Arguments
+        DeclareLaunchArgument(
+            'lidar_serial_port', default_value='/dev/ttyUSB0',
+            description='Serial port for the RPLidar C1.'),
+        DeclareLaunchArgument(
+            'lidar_frame_id', default_value='laser',
+            description='Frame ID for the LiDAR scans.'),
     ]
 
     # one launch argument per sonar, mirroring the firmware SONAR_*_ENABLED flags
@@ -149,6 +157,23 @@ def generate_launch_description():
         }],
     )
 
+    # RPLidar C1 Node using rplidar_ros
+    rplidar_c1 = Node(
+        package='rplidar_ros',
+        executable='rplidar_node',
+        name='rplidar_node',
+        output='screen',
+        emulate_tty=True,
+        parameters=[{
+            'channel_type': 'serial',
+            'serial_port': LaunchConfiguration('lidar_serial_port'),
+            'serial_baudrate': 460800,  # Specific baudrate required for RPLidar C1
+            'frame_id': LaunchConfiguration('lidar_frame_id'),
+            'inverted': False,
+            'angle_compensate': True,
+        }],
+    )
+
     # The node name has to stay disparity_extender_node - that is the key the
     # tuning yaml is written under, and a rename silently drops every value.
     disparity_extender = Node(
@@ -171,5 +196,6 @@ def generate_launch_description():
         mcu_bridge,
         vector_odom,
         lap_counter,
+        rplidar_c1,
         disparity_extender,
     ])
