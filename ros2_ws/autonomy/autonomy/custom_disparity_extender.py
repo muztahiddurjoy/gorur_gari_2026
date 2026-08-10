@@ -122,7 +122,7 @@ class CustomDisparityExtender(Node):
         self.sub = self.create_subscription(
             LaserScan, scan_topic, self.lidr_callback, 10)
         self.marker_pub = self.create_publisher(MarkerArray, '/tower_markers', 10)
-        self.target_pub = self.create_publisher(Marker, '/custom_disparity/target', 10)
+        self.target_pub = self.create_publisher(MarkerArray, '/custom_disparity/target', 10)
         self.cmd_pub = self.create_publisher(Twist, cmd_topic, 10)
 
         # A silent /scan must never leave the MCU on a stale throttle.
@@ -566,22 +566,49 @@ class CustomDisparityExtender(Node):
         return m
 
     def publish_target_marker(self, angle: float, dist: float):
-        m = Marker()
-        m.header.frame_id = self.frame_id
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = 'nav_target'
-        m.id = 0
-        m.type = Marker.ARROW
-        m.action = Marker.ADD
-        m.pose.orientation.z = math.sin(angle / 2.0)
-        m.pose.orientation.w = math.cos(angle / 2.0)
-        m.scale.x = float(dist)
-        m.scale.y = 0.04
-        m.scale.z = 0.04
-        m.color.g = 1.0
-        m.color.a = 0.9
-        m.lifetime.nanosec = int(0.3 * 1e9)
-        self.target_pub.publish(m)
+        """Arrow along the chosen heading + a sphere ON the point the bot is
+        driving toward, so the intent is unambiguous in RViz."""
+        stamp = self.get_clock().now().to_msg()
+
+        arrow = Marker()
+        arrow.header.frame_id = self.frame_id
+        arrow.header.stamp = stamp
+        arrow.ns = 'nav_target'
+        arrow.id = 0
+        arrow.type = Marker.ARROW
+        arrow.action = Marker.ADD
+        arrow.pose.orientation.z = math.sin(angle / 2.0)
+        arrow.pose.orientation.w = math.cos(angle / 2.0)
+        arrow.scale.x = float(dist)
+        arrow.scale.y = 0.04
+        arrow.scale.z = 0.04
+        arrow.color.g = 1.0
+        arrow.color.a = 0.9
+        arrow.lifetime.nanosec = int(0.3 * 1e9)
+
+        point = Marker()
+        point.header.frame_id = self.frame_id
+        point.header.stamp = stamp
+        point.ns = 'nav_target'
+        point.id = 1
+        point.type = Marker.SPHERE
+        point.action = Marker.ADD
+        point.pose.position.x = dist * math.cos(angle)
+        point.pose.position.y = dist * math.sin(angle)
+        point.pose.position.z = 0.0
+        point.pose.orientation.w = 1.0
+        point.scale.x = 0.08
+        point.scale.y = 0.08
+        point.scale.z = 0.08
+        point.color.g = 1.0
+        point.color.b = 0.4
+        point.color.a = 0.9
+        point.lifetime.nanosec = int(0.3 * 1e9)
+
+        arr = MarkerArray()
+        arr.markers.append(arrow)
+        arr.markers.append(point)
+        self.target_pub.publish(arr)
 
 
 def main(args=None):
