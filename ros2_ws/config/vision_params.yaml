@@ -1,23 +1,56 @@
 vision_node:
   ros__parameters:
-    # ── Topics ──
+    # ── Performance & Modes ──────────────────────────────────────────
+    efficient_mode: true         # Set to true for competition (320x240 @ 15fps, no debug img). Set false for full debug.
+    publish_debug_image: false   # Auto-enabled if efficient_mode is false
+    process_every_n_frames: 2   # Frame skip (only active when efficient_mode: true)
+    processing_width: 320       # Target resolution width
+    processing_height: 240      # Target resolution height
+
+    # ── Topics ──────────────────────────────────────────────────────
     camera_topic: "/camera/image_raw"
     obstacles_topic: "/closest_obj"
-    publish_debug_image: true
 
-    # ── Region of Interest & Filtering ──
-    roi_top_crop: 0.40           # Fraction of top frame to ignore (e.g. 0.4 means keep bottom 60%)
+    # ── Region of Interest & Geometry Filtering ─────────────────────
+    roi_top_crop: 0.4            # Fraction of top frame to ignore (keeps bottom 60%)
     min_contour_area: 250        # Minimum pixel area to consider a block valid
+    min_aspect_ratio: 1.0        # Min height/width aspect ratio (1.0 filters out horizontal skin/noise)
+    max_aspect_ratio: 3.5        # Max height/width aspect ratio
+    min_solidity: 0.40           # Min contour solidity
 
     # ── HSV Color Thresholds (OpenCV Scale: H=0-180, S=0-255, V=0-255) ──
-    
-    # Green Pillar
-    green_lower: [35, 80, 0]
+    green_lower: [35, 80, 50]
     green_upper: [85, 255, 255]
 
-    # Red Pillar (Requires two ranges due to hue wrap-around at 0/180)
-    red_lower_1: [0, 95, 50]
+    red_lower_1: [0, 255, 87]
     red_upper_1: [12, 255, 255]
-    
-    red_lower_2: [165, 95, 50]
+    red_lower_2: [165, 255, 87]
+    red_upper_2: [180, 255, 255]
+
+camera_push_detector:
+  ros__parameters:
+    # ── Performance & Modes ──────────────────────────────────────────
+    efficient_mode: true
+    publish_debug_image: false
+    process_every_n_frames: 2
+    processing_width: 320
+    processing_height: 240
+
+    # ── Topics ──────────────────────────────────────────────────────
+    camera_topic: "/camera/image_raw"
+    push_direction_topic: "/vision/push_direction"
+    debug_image_topic: "/vision/push_debug_image"
+
+    # ── Region of Interest & Detection ──────────────────────────────
+    roi_top_crop: 0.4
+    min_contour_area: 250
+    deadzone_px: 20
+
+    # ── HSV Color Thresholds ─────────────────────────────────────────
+    green_lower: [35, 80, 50]
+    green_upper: [85, 255, 255]
+
+    red_lower_1: [0, 255, 87]
+    red_upper_1: [12, 255, 255]
+    red_lower_2: [165, 255, 87]
     red_upper_2: [180, 255, 255]

@@ -12,6 +12,8 @@ Usage:
 import argparse
 import os
 import sys
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 import cv2
@@ -45,6 +47,8 @@ class HSVTuningApp:
         self.detector = PillarDetector()
         self.cap = None
         self.frame_static = None
+        self.latest_frame = None
+        self.frame_lock = threading.Lock()
         self.is_running = True
 
         if image_path:
@@ -53,8 +57,9 @@ class HSVTuningApp:
                 messagebox.showerror("Error", f"Could not load image: {image_path}")
                 sys.exit(1)
         elif webcam_id is not None:
-            # Force V4L2 backend for Linux and set a fast, low resolution
+            # Force V4L2 backend with MJPG hardware compression for zero-lag capture
             self.cap = cv2.VideoCapture(webcam_id, cv2.CAP_V4L2)
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
@@ -63,8 +68,22 @@ class HSVTuningApp:
                 messagebox.showerror("Error", f"Could not open webcam device {webcam_id}")
                 sys.exit(1)
 
+            # Start background thread for non-blocking camera reads
+            self.cam_thread = threading.Thread(target=self._webcam_capture_thread, daemon=True)
+            self.cam_thread.start()
+
         self._build_ui()
         self.root.after(100, self.update_loop)
+
+    def _webcam_capture_thread(self):
+        """Dedicated background thread to continuously fetch frames without blocking GUI."""
+        while self.is_running and self.cap and self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if ret and frame is not None:
+                with self.frame_lock:
+                    self.latest_frame = frame
+            else:
+                time.sleep(0.01)
 
     def _build_ui(self):
         # Apply dark theme styling
@@ -198,12 +217,18 @@ class HSVTuningApp:
         if self.frame_static is not None:
             frame = self.frame_static.copy()
         elif self.cap is not None:
-            ret, frame = self.cap.read()
-            if not ret:
-                self.root.after(30, self.update_loop)
-                return
+            with self.frame_lock:
+                if self.latest_frame is None:
+                    self.root.after(15, self.update_loop)
+                    return
+                frame = self.latest_frame.copy()
         else:
             return
+
+        # Downscale large webcam frames for fast real-time tuning (e.g. 1080p -> 640x480)
+        h, w = frame.shape[:2]
+        if w > 640 or h > 480:
+            frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_NEAREST)
 
         # Read values safely from Tkinter sliders
         self.detector.GREEN_LOWER[0] = int(self.g_h_low.get())
@@ -221,28 +246,28 @@ class HSVTuningApp:
         self.detector.ROI_TOP_CROP = self.roi_crop.get() / 100.0
         self.detector.MIN_CONTOUR_AREA = max(10, int(self.min_area.get()))
 
+        # Store HSV for click inspector
+        self.current_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
         # Perform detection
         detections = self.detector.detect(frame)
         annotated = self.detector.draw_detections(frame, detections)
 
-        # Generate combined mask preview
-        roi, y_offset = self.detector._preprocess(frame)
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        # Generate combined mask preview using current_hsv
+        roi_top = int(frame.shape[0] * self.detector.ROI_TOP_CROP)
+        roi_hsv = self.current_hsv[roi_top:, :]
         
-        # Store full frame HSV for click inspector (reconstructing full size)
-        self.current_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        
-        g_mask = self.detector._create_green_mask(hsv)
-        r_mask = self.detector._create_red_mask(hsv)
+        g_mask = self.detector._create_green_mask(roi_hsv)
+        r_mask = self.detector._create_red_mask(roi_hsv)
         combined_mask = cv2.bitwise_or(g_mask, r_mask)
         mask_bgr = cv2.cvtColor(combined_mask, cv2.COLOR_GRAY2BGR)
 
-        # Render images in Tkinter canvas
+        # Fast render to Tkinter canvas
         self._render_to_label(annotated, self.viewfinder_label, max_h=340)
         self._render_to_label(mask_bgr, self.mask_label, max_h=260)
 
-        # Schedule next loop (~30 FPS)
-        self.root.after(30, self.update_loop)
+        # Schedule next loop (~30-60 FPS)
+        self.root.after(15, self.update_loop)
 
     def _render_to_label(self, cv_img, label_widget, max_h=350):
         h, w = cv_img.shape[:2]
@@ -251,11 +276,7 @@ class HSVTuningApp:
         aspect = w / h
 
         widget_h = label_widget.winfo_height()
-        if widget_h < 50:
-            target_h = max_h
-        else:
-            target_h = min(max_h, widget_h)
-
+        target_h = max_h if widget_h < 50 else min(max_h, widget_h)
         target_w = max(100, int(target_h * aspect))
 
         if label_widget is self.viewfinder_label:
@@ -266,7 +287,8 @@ class HSVTuningApp:
             self._vf_offset_x = max(0, (label_w - target_w) // 2)
             self._vf_offset_y = max(0, (label_h - target_h) // 2)
 
-        resized = cv2.resize(cv_img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+        # Fast INTER_NEAREST resize for maximum performance
+        resized = cv2.resize(cv_img, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(rgb)
         img_tk = ImageTk.PhotoImage(image=pil_img)

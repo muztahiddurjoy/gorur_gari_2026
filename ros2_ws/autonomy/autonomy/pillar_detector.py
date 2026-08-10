@@ -35,10 +35,9 @@ class PillarDetector:
     GREEN_UPPER = np.array([85, 255, 255], dtype=np.uint8)
 
     # Red Pillar — Target RGB(238, 39, 55) → HSV center ≈ (178, 213, 238)
-    # Saturation threshold (95) catches indoor plastic/printed blocks while rejecting skin (S < 80)
-    RED_LOWER_1 = np.array([0, 95, 50], dtype=np.uint8)
+    RED_LOWER_1 = np.array([0, 255, 87], dtype=np.uint8)
     RED_UPPER_1 = np.array([12, 255, 255], dtype=np.uint8)
-    RED_LOWER_2 = np.array([165, 95, 50], dtype=np.uint8)
+    RED_LOWER_2 = np.array([165, 255, 87], dtype=np.uint8)
     RED_UPPER_2 = np.array([180, 255, 255], dtype=np.uint8)
 
     # ------------------------------------------------------------------ #
@@ -46,9 +45,10 @@ class PillarDetector:
     # ------------------------------------------------------------------ #
     MIN_CONTOUR_AREA = 250
 
-    # Aspect Ratio (Height / Width): 0.4 - 4.5 handles any orientation of blocks
-    MIN_ASPECT_RATIO = 0.4
-    MAX_ASPECT_RATIO = 4.5
+    # Aspect Ratio (Height / Width): Vertical 10cm x 5cm pillars have aspect ratio ~2.0
+    # Range 1.0 - 3.5 accepts standing pillars while rejecting horizontal fingers (ratio < 1.0)
+    MIN_ASPECT_RATIO = 1.0
+    MAX_ASPECT_RATIO = 3.5
 
     # Solidity (Contour Area / Bounding Box Area): 0.4 allows hollowed/LEGO-style blocks
     MIN_SOLIDITY = 0.40
@@ -67,13 +67,18 @@ class PillarDetector:
         min_area: int = None,
         roi_top_crop: float = None,
         blur_kernel: tuple = None,
+        min_aspect_ratio: float = None,
+        max_aspect_ratio: float = None,
+        min_solidity: float = None,
+        green_lower: np.ndarray = None,
+        green_upper: np.ndarray = None,
+        red_lower_1: np.ndarray = None,
+        red_upper_1: np.ndarray = None,
+        red_lower_2: np.ndarray = None,
+        red_upper_2: np.ndarray = None,
     ) -> None:
         """
         Optionally override class-level defaults at instantiation.
-
-        :param min_area:      Override MIN_CONTOUR_AREA threshold.
-        :param roi_top_crop:  Override ROI_TOP_CROP fraction (0.0–1.0).
-        :param blur_kernel:   Override BLUR_KERNEL size tuple, e.g. (3, 3).
         """
         if min_area is not None:
             self.MIN_CONTOUR_AREA = min_area
@@ -81,6 +86,25 @@ class PillarDetector:
             self.ROI_TOP_CROP = roi_top_crop
         if blur_kernel is not None:
             self.BLUR_KERNEL = blur_kernel
+        if min_aspect_ratio is not None:
+            self.MIN_ASPECT_RATIO = min_aspect_ratio
+        if max_aspect_ratio is not None:
+            self.MAX_ASPECT_RATIO = max_aspect_ratio
+        if min_solidity is not None:
+            self.MIN_SOLIDITY = min_solidity
+
+        if green_lower is not None:
+            self.GREEN_LOWER = np.array(green_lower, dtype=np.uint8)
+        if green_upper is not None:
+            self.GREEN_UPPER = np.array(green_upper, dtype=np.uint8)
+        if red_lower_1 is not None:
+            self.RED_LOWER_1 = np.array(red_lower_1, dtype=np.uint8)
+        if red_upper_1 is not None:
+            self.RED_UPPER_1 = np.array(red_upper_1, dtype=np.uint8)
+        if red_lower_2 is not None:
+            self.RED_LOWER_2 = np.array(red_lower_2, dtype=np.uint8)
+        if red_upper_2 is not None:
+            self.RED_UPPER_2 = np.array(red_upper_2, dtype=np.uint8)
 
     # ================================================================== #
     #                        PUBLIC API                                   #

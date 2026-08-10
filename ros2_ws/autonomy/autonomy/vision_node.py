@@ -8,6 +8,7 @@ and publishes identified obstacles to /vision/obstacles.
 Designed with non-blocking callback groups and sensor-optimized QoS for low latency.
 """
 
+import cv2
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
@@ -46,12 +47,20 @@ class VisionNode(Node):
     def __init__(self) -> None:
         super().__init__('vision_node')
         
+        self.declare_parameter('efficient_mode', True)         # Toggle CPU optimization vs Full Realtime Debug mode
         self.declare_parameter('camera_topic', '/camera/image_raw')
         self.declare_parameter('obstacles_topic', '/closest_obj')
         self.declare_parameter('min_contour_area', 250)
         self.declare_parameter('roi_top_crop', 0.40)
-        self.declare_parameter('publish_debug_image', True)
+        self.declare_parameter('publish_debug_image', False)  # Auto-overridden to True when efficient_mode is False
+        self.declare_parameter('process_every_n_frames', 2)   # Throttle processing when efficient_mode is True
+        self.declare_parameter('processing_width', 320)       # Downscale resolution when efficient_mode is True
+        self.declare_parameter('processing_height', 240)
         
+        self.declare_parameter('min_aspect_ratio', 1.0)
+        self.declare_parameter('max_aspect_ratio', 3.5)
+        self.declare_parameter('min_solidity', 0.40)
+
         # --- HSV Parameter Declarations ---
         self.declare_parameter('green_lower', [35, 80, 0])
         self.declare_parameter('green_upper', [85, 255, 255])
@@ -60,11 +69,26 @@ class VisionNode(Node):
         self.declare_parameter('red_lower_2', [165, 95, 50])
         self.declare_parameter('red_upper_2', [180, 255, 255])
         
+        self.efficient_mode = bool(self.get_parameter('efficient_mode').value)
         camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
         obstacles_topic = self.get_parameter('obstacles_topic').get_parameter_value().string_value
         min_area = self.get_parameter('min_contour_area').get_parameter_value().integer_value
         roi_crop = self.get_parameter('roi_top_crop').get_parameter_value().double_value
-        self.publish_debug = self.get_parameter('publish_debug_image').get_parameter_value().bool_value
+        min_ar = float(self.get_parameter('min_aspect_ratio').value)
+        max_ar = float(self.get_parameter('max_aspect_ratio').value)
+        min_sol = float(self.get_parameter('min_solidity').value)
+
+        # When efficient_mode is False, auto-enable debug image for real-time visualization
+        if not self.efficient_mode:
+            self.publish_debug = True
+        else:
+            self.publish_debug = self.get_parameter('publish_debug_image').get_parameter_value().bool_value
+
+        self.frame_skip_n = int(self.get_parameter('process_every_n_frames').value)
+        self.target_w = int(self.get_parameter('processing_width').value)
+        self.target_h = int(self.get_parameter('processing_height').value)
+
+        self.frame_counter = 0
 
         # --- Callback Group Setup (Non-Blocking Concurrency) ---
         # Dedicated callback group so camera callbacks run independently without blocking other timers/subscriptions
@@ -80,19 +104,20 @@ class VisionNode(Node):
         )
 
         # --- OpenCV Pillar Detector ---
+        import numpy as np
         self.detector = PillarDetector(
             min_area=min_area,
             roi_top_crop=roi_crop,
+            min_aspect_ratio=min_ar,
+            max_aspect_ratio=max_ar,
+            min_solidity=min_sol,
+            green_lower=np.array(self.get_parameter('green_lower').value, dtype=np.uint8),
+            green_upper=np.array(self.get_parameter('green_upper').value, dtype=np.uint8),
+            red_lower_1=np.array(self.get_parameter('red_lower_1').value, dtype=np.uint8),
+            red_upper_1=np.array(self.get_parameter('red_upper_1').value, dtype=np.uint8),
+            red_lower_2=np.array(self.get_parameter('red_lower_2').value, dtype=np.uint8),
+            red_upper_2=np.array(self.get_parameter('red_upper_2').value, dtype=np.uint8),
         )
-        
-        # Inject HSV Tuned Parameters
-        import numpy as np
-        self.detector.GREEN_LOWER = np.array(self.get_parameter('green_lower').value, dtype=np.uint8)
-        self.detector.GREEN_UPPER = np.array(self.get_parameter('green_upper').value, dtype=np.uint8)
-        self.detector.RED_LOWER_1 = np.array(self.get_parameter('red_lower_1').value, dtype=np.uint8)
-        self.detector.RED_UPPER_1 = np.array(self.get_parameter('red_upper_1').value, dtype=np.uint8)
-        self.detector.RED_LOWER_2 = np.array(self.get_parameter('red_lower_2').value, dtype=np.uint8)
-        self.detector.RED_UPPER_2 = np.array(self.get_parameter('red_upper_2').value, dtype=np.uint8)
 
         # --- Publishers & Subscribers ---
         self.bridge = CvBridge() if CV_BRIDGE_AVAILABLE else None
@@ -126,6 +151,11 @@ class VisionNode(Node):
         Callback triggered when a new camera frame is received.
         Processes frame using OpenCV HSV color masking via PillarDetector.
         """
+        # 1. Frame Skipping / Throttling Optimization (Only active when efficient_mode is True)
+        self.frame_counter += 1
+        if self.efficient_mode and (self.frame_counter % max(1, self.frame_skip_n) != 0):
+            return
+
         if not CV_BRIDGE_AVAILABLE:
             self.get_logger().warn_once('cv_bridge is not available! Cannot convert ROS Image to OpenCV format.')
             return
@@ -136,6 +166,11 @@ class VisionNode(Node):
         except Exception as e:
             self.get_logger().error(f'Failed to convert image frame: {str(e)}')
             return
+
+        # 2. Resolution Downscaling / Hard-Limiting Optimization (Only active when efficient_mode is True)
+        h, w, _ = cv_image.shape
+        if self.efficient_mode and (w > self.target_w or h > self.target_h):
+            cv_image = cv2.resize(cv_image, (self.target_w, self.target_h), interpolation=cv2.INTER_NEAREST)
 
         # Run the standalone OpenCV detection pipeline
         detections = self.detector.detect(cv_image)

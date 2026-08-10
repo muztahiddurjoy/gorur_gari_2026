@@ -1,8 +1,8 @@
 disparity_extender_node:
   ros__parameters:
     # ── Vehicle Geometry (Circle Cast) ──────────────────────────────
-    cast_range_min: 0.26        # Min robot half-width at low speed (m)
-    cast_range_max: 0.30        # Max robot half-width at high speed (m)
+    cast_range_min: 0.15        # Min robot half-width at low speed (m) - 21cm width / 2 + 4.5cm margin
+    cast_range_max: 0.20        # Max robot half-width at high speed (m) - Dynamic expansion for corners
     cast_precision: 81          # Neighbor window size (indices) for marching
     cast_skip: 4                # Skip factor for coarse FOV scan
     cast_skip_fine: 1           # Skip factor for fine marching neighbors
@@ -24,7 +24,7 @@ disparity_extender_node:
     tower_width_max: 0.10       # Max physical width to classify as tower (m)
 
     # ── Safety ─────────────────────────────────────────────────────
-    danger_dist: 0.50           # Emergency avoidance trigger distance (m)
+    danger_dist: 0.30           # Emergency avoidance trigger distance (m) (for 31cm long bot)
     danger_angle_min: 15.0      # Start of side danger zone (degrees)
     danger_angle_max: 90.0      # End of side danger zone (degrees)
 
