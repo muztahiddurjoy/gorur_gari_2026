@@ -1165,7 +1165,7 @@ class OpenRoundRunNode(Node):
             self.publish_target_marker()
             return
 
-        # 4. Smooth target angle (LazyGo's dual lerp)
+        # 4. Smooth target angle (dual lerp)
         delta = abs(t_ang - self.target_ang)
         if delta > 0.5:
             self.target_ang = t_ang

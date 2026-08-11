@@ -1,0 +1,111 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Grid1
+        - /Raw LiDAR Scan (/scan)1
+        - /Open Round Processed Scan (/open_round/scan_processed)1
+        - /Open Round Target Marker (/open_round/target_marker)1
+        - /Custom Disparity Target (/custom_disparity/target)1
+        - /Tower Markers (/tower_markers)1
+      Splitter Ratio: 0.5
+    Tree Height: 557
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Value: true
+      Cell Size: 0.5
+      Color: 160; 160; 160
+      Normal Cell Count: 0
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: laser
+    - Class: rviz_default_plugins/LaserScan
+      Name: Raw LiDAR Scan (/scan)
+      Value: true
+      Topic:
+        Value: /scan
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+      Color: 255; 50; 50
+      Size (m): 0.04
+      Style: Points
+      Selectable: true
+    - Class: rviz_default_plugins/LaserScan
+      Name: Open Round Processed Scan (/open_round/scan_processed)
+      Value: true
+      Topic:
+        Value: /open_round/scan_processed
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+      Color: 0; 255; 255
+      Size (m): 0.05
+      Style: Points
+      Selectable: true
+    - Class: rviz_default_plugins/Marker
+      Name: Open Round Target Marker (/open_round/target_marker)
+      Value: true
+      Topic:
+        Value: /open_round/target_marker
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+      Namespaces:
+        open_round_target: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Custom Disparity Target (/custom_disparity/target)
+      Value: true
+      Topic:
+        Value: /custom_disparity/target
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Tower Markers (/tower_markers)
+      Value: true
+      Topic:
+        Value: /tower_markers
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+    - Class: rviz_default_plugins/Marker
+      Name: Disparity Target Marker (/disparity/target_marker)
+      Value: true
+      Topic:
+        Value: /disparity/target_marker
+        Depth: 5
+        Reliability: Reliable
+        Durability: Volatile
+  Global Options:
+    Background Color: 30; 30; 35
+    Fixed Frame: laser
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 4.5
+      Focal Point: 0; 0; 0
+      Name: Current View
+      Pitch: 0.8
+      Value: Orbit (rviz_default)
+      Yaw: 3.14
+Window Geometry:
+  Width: 1280
+  Height: 800

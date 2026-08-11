@@ -33,7 +33,6 @@ def remap(old_val, old_min, old_max, new_min, new_max):
     new_val = (new_max - new_min) * (old_val - old_min) / (old_max - old_min) + new_min
     return clamp(new_val, new_min, new_max)
 
-
 def lerp(a, b, t):
     """Linear interpolation between a and b by factor t, clamped."""
     return clamp(a + (b - a) * t, a, b)
@@ -190,7 +189,7 @@ class DisparityExtenderNode(Node):
         self.create_timer(0.05, self.calc_lidar_step)
 
         self.get_logger().info(
-            f'[LazyGo Disparity Extender] Initialized | '
+            f'[Disparity Extender] Initialized | '
             f'Cast: [{self.cast_range_min:.2f}m – {self.cast_range_max:.2f}m] | '
             f'FOV: ±{math.degrees(self.look_range_rad):.0f}° | '
             f'Chase Mode: {self.chase_tower_mode}'
@@ -359,7 +358,7 @@ class DisparityExtenderNode(Node):
         return [self.a2i(ang_min_rad), self.a2i(ang_max_rad)]
 
     # ══════════════════════════════════════════════════════════════════
-    # Missing Data Interpolation (from LazyGo's LidarHandler)
+    # Missing Data Interpolation
     # ══════════════════════════════════════════════════════════════════
 
     def fix_missing(self, i):
@@ -427,7 +426,7 @@ class DisparityExtenderNode(Node):
             self.ranges[i] = self.fix_missing(i)
 
     # ══════════════════════════════════════════════════════════════════
-    # Circle-Cast Ray Marching (LazyGo's core algorithm)
+    # Circle-Cast Ray Marching (core algorithm)
     # ══════════════════════════════════════════════════════════════════
 
     def hit_circle(self, ray_ang, check_dst, check_ang, radius):

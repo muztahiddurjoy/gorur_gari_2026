@@ -84,3 +84,27 @@ python3 autonomy/autonomy/tune_hsv.py --webcam 2
 cd ~/Documents/GitHub/gorur_gari_2026
 python3 draft_vision_node_pillar_color_detection/src/wro_autodrive/wro_autodrive/tune_hsv.py --webcam 2
 ```
+
+
+#### RUN Rviz for open round
+cd ~/Documents/GitHub/gorur_gari_2026/ros2_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+rviz2 -d config/open_round_view.rviz
+
+
+#### RUN open round for debug 
+cd ~/Documents/GitHub/gorur_gari_2026/ros2_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 run autonomy open_round_run --ros-args \
+  -p require_button_start:=false \
+  -p enable_auto_steering:=false
+
+### Custom disparity extender
+##### Set enable_drive to false for safe bench testing
+ros2 run autonomy custom_disparity_extender --ros-args \
+    --params-file config/bot_config.yaml \
+    -p enable_drive:=false
+

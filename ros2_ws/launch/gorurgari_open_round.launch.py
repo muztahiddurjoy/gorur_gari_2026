@@ -8,8 +8,8 @@ Open round: the full driving stack, no obstacles on the mat.
                                     (and the odom -> base_link TF)
     lap_counter         autonomy    /heading corners -> /lap_count, /turn_count
     rplidar_c1          sensors     serial link to LiDAR - drives /scan out
-    disparity_extender  autonomy    /scan -> /cmd_vel, and stops the car once
-                                    /lap_count reaches the round's lap target.
+    open_round_run      autonomy    /scan + /odom_vector + /heading -> /cmd_vel,
+                                    laps -> return to start position (homing).
                                     Starts in standby: it only drives 3 s after
                                     the start button on the car is pressed
                                     (/button_status), and the MCU blinks its
@@ -22,7 +22,7 @@ Run it from the workspace root:
 
     ros2 launch launch/gorurgari_open_round.launch.py
 
-Tuning for disparity_extender lives in config/disparity_extender_params.yaml
+Tuning for open_round_run lives in config/bot_config.yaml
 and is loaded by default; point the disparity_params argument somewhere else to
 try an alternative set without editing the file.
 """
@@ -36,8 +36,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 # This file sits in <workspace>/launch, the tuning yamls in <workspace>/config.
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_DISPARITY_PARAMS = os.path.join(
-    WORKSPACE_DIR, 'config', 'disparity_extender_params.yaml')
+DEFAULT_BOT_CONFIG = os.path.join(
+    WORKSPACE_DIR, 'config', 'bot_config.yaml')
 
 # Measure the wheel before a run - it scales every distance odometry reports.
 DEFAULT_WHEEL_DIAMETER_M = '0.065'
@@ -78,15 +78,15 @@ def generate_launch_description():
             description='Corners in one lap. 4 * 90 = one full loop of the mat.'),
 
         DeclareLaunchArgument(
-            'disparity_params', default_value=DEFAULT_DISPARITY_PARAMS,
-            description='YAML of disparity_extender tuning parameters.'),
+            'disparity_params', default_value=DEFAULT_BOT_CONFIG,
+            description='YAML of open_round_run and bot configuration (config/bot_config.yaml).'),
         DeclareLaunchArgument(
             'enable_auto_steering', default_value='true',
-            description='Let disparity_extender drive /cmd_vel. False to watch it '
+            description='Let open_round_run drive /cmd_vel. False to watch it '
                         'plan without the car moving.'),
         DeclareLaunchArgument(
             'require_button_start', default_value='true',
-            description='Hold disparity_extender in standby until the start button on '
+            description='Hold open_round_run in standby until the start button on '
                         'the car is pressed. False to drive as soon as scans arrive.'),
         DeclareLaunchArgument(
             'start_delay_sec', default_value='3.0',
@@ -174,12 +174,10 @@ def generate_launch_description():
         }],
     )
 
-    # The node name has to stay disparity_extender_node - that is the key the
-    # tuning yaml is written under, and a rename silently drops every value.
-    disparity_extender = Node(
+    open_round_run = Node(
         package='autonomy',
-        executable='disparity_extender',
-        name='disparity_extender_node',
+        executable='open_round_run',
+        name='open_round_run',
         output='screen',
         emulate_tty=True,
         parameters=[
@@ -197,5 +195,5 @@ def generate_launch_description():
         vector_odom,
         lap_counter,
         rplidar_c1,
-        disparity_extender,
+        open_round_run,
     ])
