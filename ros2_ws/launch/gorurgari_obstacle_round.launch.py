@@ -24,6 +24,7 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_BOT_CONFIG = os.path.join(WORKSPACE_DIR, 'config', 'bot_config.yaml')
 DEFAULT_DISPARITY_PARAMS = os.path.join(WORKSPACE_DIR, 'config', 'disparity_extender_params.yaml')
 DEFAULT_VISION_PARAMS = os.path.join(WORKSPACE_DIR, 'config', 'vision_params.yaml')
 
@@ -101,10 +102,15 @@ def generate_launch_description():
         name='mcu_bridge',
         output='screen',
         emulate_tty=True,
-        parameters=[{
-            f'sonar_{name}_enabled': typed(f'sonar_{name}_enabled', bool)
-            for name in SONARS
-        }],
+        parameters=[
+            # serial port and /cmd_vel drive limits (throttle/steering
+            # scaling and clamps) come from the mcu_bridge section here
+            DEFAULT_BOT_CONFIG,
+            {
+                f'sonar_{name}_enabled': typed(f'sonar_{name}_enabled', bool)
+                for name in SONARS
+            },
+        ],
     )
 
     vector_odom = Node(

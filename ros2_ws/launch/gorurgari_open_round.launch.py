@@ -121,10 +121,15 @@ def generate_launch_description():
         name='mcu_bridge',
         output='screen',
         emulate_tty=True,
-        parameters=[{
-            f'sonar_{name}_enabled': typed(f'sonar_{name}_enabled', bool)
-            for name in SONARS
-        }],
+        parameters=[
+            # serial port and /cmd_vel drive limits (throttle/steering
+            # scaling and clamps) come from the mcu_bridge section here
+            DEFAULT_BOT_CONFIG,
+            {
+                f'sonar_{name}_enabled': typed(f'sonar_{name}_enabled', bool)
+                for name in SONARS
+            },
+        ],
     )
 
     vector_odom = Node(

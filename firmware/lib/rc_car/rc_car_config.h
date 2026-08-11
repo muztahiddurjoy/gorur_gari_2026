@@ -27,4 +27,11 @@ const unsigned long RC_WIFI_CONNECT_TIMEOUT_MS = 15000;
 const unsigned long RC_FAILSAFE_MS = 500; // silence for this long and the car stops itself
 const unsigned long RC_TELEMETRY_INTERVAL_MS = 100;
 
+// full-lock swing and top duty for the websocket joystick, which sends
+// normalised -1..1 sticks. only this bench-test controller uses them - on the
+// real (mavlink) drive path ROS2 sends raw servo angles and duty, with the
+// limits configured in ros2_ws/config/bot_config.yaml.
+const int STEERING_MAX_ANGLE = 60; // how far the wheels swing either side of centre
+const int MOTOR_MAX_SPEED = 255;
+
 #endif // RC_CAR_CONFIG_H

@@ -33,6 +33,29 @@
         width_m: 0.05            # pillar face width (50 mm)
         min_separation_m: 0.15   # closest possible pillar centre-to-centre gap
 
+mcu_bridge:
+  ros__parameters:
+    # ── Serial link to the ESP32-S3 ───────────────────────────────
+    port: /dev/esp32_s3          # udev alias for the native USB CDC port
+    baudrate: 115200
+
+    # ── /cmd_vel -> wire command scaling ──────────────────────────
+    # The firmware applies whatever throttle/steering arrives on the
+    # wire (firmware/src/main.cpp), so these are THE drive limits —
+    # there is no second clamp on the MCU.
+    throttle_scale: 100.0        # wire throttle = linear.x * this
+    throttle_min: -128           # int8 wire field floor (full reverse)
+    throttle_max: 127            # int8 wire field ceiling (full forward)
+    steering_center_deg: 90      # servo angle that rolls straight
+    steering_gain_deg: 60.0      # wire angle = center + angular.z * this
+    steering_min_deg: 0          # servo clamp, full left
+    steering_max_deg: 180        # servo clamp, full right
+
+    # ── Launch boost (kick to break static friction) ──────────────
+    launch_boost_gain: 2.0       # multiplier on the command that starts a move
+    launch_boost_duration: 1.0   # seconds the kick stays live
+    launch_idle_timeout: 0.5     # cmd_vel silence that counts as stopped
+
 open_round_run:
   ros__parameters:
     # Master switch: the node never publishes /cmd_vel unless this is

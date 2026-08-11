@@ -25,12 +25,28 @@ SONAR_ENABLED_DEFAULTS = {'front': False, 'left': False, 'right': False, 'rear':
 # encoder_direction on the wire: 0 = stopped, 1 = forward, 2 = reverse (see firmware/src/main.cpp)
 WIRE_DIRECTION_TO_SIGN = {0: 0, 1: 1, 2: -1}
 
+# /cmd_vel -> wire command scaling. the firmware applies whatever throttle and
+# steering arrive on the wire (firmware/src/main.cpp), so this node is the only
+# place the drive limits are enforced. these in-code values are fallbacks - the
+# real tuning is the mcu_bridge section of ros2_ws/config/bot_config.yaml,
+# which the launch files load.
+THROTTLE_SCALE = 100.0    # wire throttle = linear.x * this
+THROTTLE_MIN = -128       # int8 wire field floor (full reverse)
+THROTTLE_MAX = 127        # int8 wire field ceiling (full forward)
+STEERING_CENTER_DEG = 90  # servo angle that rolls straight
+STEERING_GAIN_DEG = 60.0  # wire angle = center + angular.z * this
+STEERING_MIN_DEG = 0      # servo clamp, full left
+STEERING_MAX_DEG = 180    # servo clamp, full right
+
+MCU_PORT = '/dev/esp32_s3'  # udev alias for the ESP32-S3 native USB CDC port
+MCU_BAUDRATE = 115200
+
 # the drivetrain does not make enough torque at cruise throttle to break static
 # friction, so the command that starts a move from a standstill gets scaled up
 # for a moment. once the bot is rolling, momentum carries it and the commanded
 # velocity goes through untouched.
-LAUNCH_BOOST_GAIN = 2
-LAUNCH_BOOST_DURATION_S = 1  # 0.0 -> boost only the single command that starts the move
+LAUNCH_BOOST_GAIN = 2.0
+LAUNCH_BOOST_DURATION_S = 1.0  # 0.0 -> boost only the single command that starts the move
 LAUNCH_IDLE_TIMEOUT_S = 0.5  # no cmd_vel for this long counts as stopped, so the boost re-arms
 
 # how long to wait after opening the port before announcing ourselves to the MCU.
@@ -40,10 +56,29 @@ MCU_CONNECT_NOTICE_DELAY_S = 1.0
 class MCUBridgeNode(Node):
     def __init__(self):
         super().__init__('mcu_bridge')
-        self.port = '/dev/esp32_s3'
-        self.baudrate = 115200
+        self.declare_parameter('port', MCU_PORT)
+        self.declare_parameter('baudrate', MCU_BAUDRATE)
+        self.port = str(self.get_parameter('port').value)
+        self.baudrate = int(self.get_parameter('baudrate').value)
         self.get_logger().info(f'Connecting to MCU on {self.port} at {self.baudrate} baud.')
         self.mcu_connected = False;
+
+        # /cmd_vel scaling and clamps, see the mcu_bridge section of
+        # ros2_ws/config/bot_config.yaml
+        self.declare_parameter('throttle_scale', THROTTLE_SCALE)
+        self.declare_parameter('throttle_min', THROTTLE_MIN)
+        self.declare_parameter('throttle_max', THROTTLE_MAX)
+        self.declare_parameter('steering_center_deg', STEERING_CENTER_DEG)
+        self.declare_parameter('steering_gain_deg', STEERING_GAIN_DEG)
+        self.declare_parameter('steering_min_deg', STEERING_MIN_DEG)
+        self.declare_parameter('steering_max_deg', STEERING_MAX_DEG)
+        self.throttle_scale = float(self.get_parameter('throttle_scale').value)
+        self.throttle_min = int(self.get_parameter('throttle_min').value)
+        self.throttle_max = int(self.get_parameter('throttle_max').value)
+        self.steering_center_deg = int(self.get_parameter('steering_center_deg').value)
+        self.steering_gain_deg = float(self.get_parameter('steering_gain_deg').value)
+        self.steering_min_deg = int(self.get_parameter('steering_min_deg').value)
+        self.steering_max_deg = int(self.get_parameter('steering_max_deg').value)
 
         # override without editing code, e.g.
         #   ros2 run controls mcu_bridge --ros-args -p sonar_front_enabled:=true
@@ -166,8 +201,11 @@ class MCUBridgeNode(Node):
             #     self.get_logger().error("MCU is not connected. cannot send command.")
             #     return;
             linear_x = self.apply_launch_boost(msg.linear.x, self.get_clock().now())
-            throttle = int(max(-128, min(127, linear_x * 100)))  # Scale linear.x to -128-127
-            steering = max(0, min(180, int(90+ msg.angular.z * 60)))  # Scale angular.z to 0-180 degrees
+            throttle = int(max(self.throttle_min,
+                               min(self.throttle_max, linear_x * self.throttle_scale)))
+            steering = max(self.steering_min_deg,
+                           min(self.steering_max_deg,
+                               int(self.steering_center_deg + msg.angular.z * self.steering_gain_deg)))
             self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
             if self.mcu_connected:
                 self.mav_tx.gorur_gari_ros2_to_mcu_msg_send(
