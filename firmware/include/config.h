@@ -4,7 +4,7 @@
 //servo
 const int SERVO_FREQUENCY_HZ = 50;
 const int STEERING_CENTER_ANGLE = 90;
-const int STEERING_MAX_ANGLE = 35; // how far the wheels swing either side of centre
+const int STEERING_MAX_ANGLE = 60; // how far the wheels swing either side of centre
 
 //motor
 const int MOTOR_PWM_FREQUENCY_HZ = 20000; // above hearing range so the motor stays quiet

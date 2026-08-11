@@ -167,7 +167,7 @@ class MCUBridgeNode(Node):
             #     return;
             linear_x = self.apply_launch_boost(msg.linear.x, self.get_clock().now())
             throttle = int(max(-128, min(127, linear_x * 100)))  # Scale linear.x to -128-127
-            steering = max(45, min(135, int(90+ msg.angular.z * 45)))  # Scale angular.z to 45-135 degrees
+            steering = max(0, min(180, int(90+ msg.angular.z * 60)))  # Scale angular.z to 0-180 degrees
             self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
             if self.mcu_connected:
                 self.mav_tx.gorur_gari_ros2_to_mcu_msg_send(
