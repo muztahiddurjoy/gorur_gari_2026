@@ -33,6 +33,41 @@
         width_m: 0.05            # pillar face width (50 mm)
         min_separation_m: 0.15   # closest possible pillar centre-to-centre gap
 
+open_round_run:
+  ros__parameters:
+    # Master switch: the node never publishes /cmd_vel unless this is
+    # true. The in-code default is false, so a bare `ros2 run` without
+    # this file can never move the car.
+    enable_auto_steering: true
+
+    # ── Round ─────────────────────────────────────────────────────
+    target_laps: 3
+    # Lap-complete signals within this many seconds of GO are stale
+    # counts from a previous run and are ignored.
+    min_run_time_sec: 5.0
+
+    # ── Wall hugging ──────────────────────────────────────────────
+    wall_hug_enable: true
+    wall_target_dist_m: 0.35     # held off the outer wall on straights
+    wall_side: auto              # auto latches from lap direction; or left/right
+    wall_kp_deg_per_m: 40.0      # heading trim per metre of wall error
+    wall_max_correction_deg: 12.0
+    wall_hug_gate_deg: 25.0      # trim only while target is this straight
+    wall_valid_max_dist_m: 1.2   # farther side readings are openings, not wall
+
+    # ── Return to start (after the laps) ──────────────────────────
+    odom_units: cm               # MUST match vector_odom's output_units
+    home_radius_m: 0.05          # park within 5 cm of the start point
+    homing_max_speed: 0.30
+    homing_min_speed: 0.25       # creep floor while closing in
+    homing_slowdown_dist_m: 0.60
+    homing_timeout_sec: 45.0
+    max_gear_flips: 6            # anti-hunting: settle after this many reversals
+
+    # ── Heading convention (must match vector_odom) ───────────────
+    heading_clockwise: true
+    heading_offset_deg: 0.0
+
 custom_disparity_extender:
   ros__parameters:
     # Master switch: the node never publishes /cmd_vel unless this is

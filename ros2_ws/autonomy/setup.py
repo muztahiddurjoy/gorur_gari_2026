@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'goto_controller = autonomy.goto_controller:main',
             'disparity_extender = autonomy.disparity_extender:main',
+            'open_round_run = autonomy.open_round_run:main',
             'vision_node = autonomy.vision_node:main',
             'lap_counter = autonomy.lap_counter:main',
             'tune_hsv = autonomy.tune_hsv:main',
