@@ -16,12 +16,12 @@
 /**:
   ros__parameters:
     bot:
-      width_m: 0.21              # chassis width including wheels
-      length_m: 0.31             # bumper to bumper
-      wheel_diameter_m: 0.065    # drive wheel diameter
+      width_m: 0.12              # chassis width including wheels
+      length_m: 0.21             # bumper to bumper
+      wheel_diameter_m: 0.050    # drive wheel diameter
       encoder_counts_per_rev: 363
       max_steer_deg: 60.0        # physical steering lock (one side)
-      safety_margin_m: 0.06      # clearance kept on EACH side of the bot
+      safety_margin_m: 0.01      # clearance kept on EACH side of the bot
       max_speed_mps: 0.6         # cruise ceiling on open track
       min_speed_mps: 0.25        # creep floor while threading gaps
       lidar:
@@ -29,7 +29,7 @@
         forward_offset_m: 0.0    # lidar origin ahead(+)/behind(-) of bot centre
       tower:
         width_m: 0.05            # pillar face width (50 mm)
-        min_separation_m: 0.10   # closest possible pillar centre-to-centre gap
+        min_separation_m: 0.15   # closest possible pillar centre-to-centre gap
 
 custom_disparity_extender:
   ros__parameters:
@@ -42,9 +42,9 @@ custom_disparity_extender:
     cmd_vel_topic: /cmd_vel
 
     # ── Edge detection (tower finder) ─────────────────────────────
-    spike_threshold_m: 0.06      # disparity at spike_ref_dist_m
-    spike_ref_dist_m: 0.8        # threshold scales linearly beyond this
-    edge_stride: 6               # compare ranges[i] vs ranges[i-stride]
+    spike_threshold_m: 0.02      # disparity at spike_ref_dist_m
+    spike_ref_dist_m: 0.05        # threshold scales linearly beyond this
+    edge_stride: 3               # compare ranges[i] vs ranges[i-stride]
     detect_fov_half_deg: 90.0    # half-angle searched for towers
     width_min_cm: 3.0            # coarse segment floor (1 ray of noise)
     width_max_cm: 25.0           # coarse ceiling (200 mm parking wall + slack)

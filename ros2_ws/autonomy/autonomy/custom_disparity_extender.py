@@ -23,12 +23,18 @@ shared by every node via the /** wildcard, so re-dimensioning the bot is a
 config edit, not a code edit.
 
 Run:
+  ros2 run autonomy custom_disparity_extender
+
+bot_config.yaml is located and loaded automatically (see find_bot_config).
+Passing an explicit --params-file overrides the automatic one:
   ros2 run autonomy custom_disparity_extender --ros-args \
       --params-file config/bot_config.yaml
 """
 
 import math
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import rclpy
@@ -40,6 +46,24 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 def clamp(val, lo, hi):
     return max(lo, min(hi, val))
+
+
+def find_bot_config():
+    """Locate config/bot_config.yaml by walking up from this file.
+
+    The node can execute from the source tree, build/autonomy (symlink
+    install) or install/autonomy — all of them live somewhere under the
+    workspace root, and the workspace root is the directory that contains
+    config/bot_config.yaml. Walking parents finds the LIVE file the user
+    edits, never a stale colcon copy.
+    """
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / 'config' / 'bot_config.yaml'
+        if candidate.is_file():
+            return str(candidate)
+    # Last resort: the documented way to run is from the workspace root.
+    candidate = Path.cwd() / 'config' / 'bot_config.yaml'
+    return str(candidate) if candidate.is_file() else None
 
 
 class CustomDisparityExtender(Node):
@@ -612,8 +636,28 @@ class CustomDisparityExtender(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    argv = list(sys.argv if args is None else args)
+
+    # Auto-wire bot_config.yaml: unless the caller already supplied a params
+    # file (launch file / manual --ros-args), find the workspace config and
+    # inject it, so a bare `ros2 run` gets the same tuning as everything else.
+    config_path = None
+    if '--params-file' not in argv:
+        config_path = find_bot_config()
+        if config_path:
+            argv += ['--ros-args', '--params-file', config_path]
+
+    rclpy.init(args=argv)
     node = CustomDisparityExtender()
+
+    if config_path:
+        node.get_logger().info(f'Parameters auto-loaded from {config_path}')
+    elif '--params-file' in argv:
+        node.get_logger().info('Parameters from caller-supplied --params-file.')
+    else:
+        node.get_logger().warn(
+            'bot_config.yaml NOT found — running on in-code defaults '
+            '(drive stays disabled).')
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
