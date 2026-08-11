@@ -27,6 +27,8 @@
       lidar:
         frame_id: laser          # must match the C1 driver's frame_id
         forward_offset_m: 0.0    # lidar origin ahead(+)/behind(-) of bot centre
+        yaw_deg: 0.0             # lidar 0-deg ray relative to bot-forward;
+                                 # set 180.0 for a cable-forward mount
       tower:
         width_m: 0.05            # pillar face width (50 mm)
         min_separation_m: 0.15   # closest possible pillar centre-to-centre gap
@@ -55,6 +57,6 @@ custom_disparity_extender:
       fov_half_deg: 80.0         # steering search half-angle
       max_range_m: 3.0           # scan cap; no-return rays count as this
       disparity_threshold_m: 0.25 # min neighbour step that is an edge
-      stop_distance_m: 0.35      # blocked stop-cone trigger (bot is 31 cm long)
+      stop_distance_m: 0.15      # blocked stop-cone trigger (bot is 31 cm long)
       stop_cone_half_deg: 20.0   # half-angle of the forward stop cone
       steer_speed_drop: 0.4      # speed loss fraction at full steering lock

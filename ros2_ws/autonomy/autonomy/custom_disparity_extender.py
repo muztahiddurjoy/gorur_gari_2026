@@ -22,6 +22,18 @@ band, tower spec) comes from config/bot_config.yaml. The bot.* section is
 shared by every node via the /** wildcard, so re-dimensioning the bot is a
 config edit, not a code edit.
 
+Topics:
+  /scan                     in   sensor_msgs/LaserScan   the LiDAR fan
+  /cmd_vel                  out  geometry_msgs/Twist     speed + steering
+  /tower_markers            out  MarkerArray             red disk per tower
+  /custom_disparity/target  out  MarkerArray             arrow + sphere at
+                                                         the steering target
+
+A beginner-friendly, block-by-block walkthrough of this whole file lives
+in docs/custom_disparity_extender.md (Part 1 startup, Part 2 parameters,
+Part 3 scan intake and safety, Part 4 navigation, Part 5 detection,
+Part 6 measurement and markers).
+
 Run:
   ros2 run autonomy custom_disparity_extender
 
@@ -40,6 +52,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -69,6 +82,13 @@ def find_bot_config():
 class CustomDisparityExtender(Node):
 
     def __init__(self):
+        """Declare every parameter, derive the working geometry, wire up I/O.
+
+        The 25 parameters arrive in three groups (docs Part 2 covers each):
+          bot.*      physical geometry shared by every node (/** in the YAML)
+          nav.*      disparity-extender tuning (this node's own YAML section)
+          top-level  detection tuning, topic names, and the enable_drive gate
+        """
         super().__init__('custom_disparity_extender')
 
         p = self._param
@@ -85,6 +105,13 @@ class CustomDisparityExtender(Node):
         # C1 drivers publish either 'laser' or 'laser_frame'; a mismatch
         # makes markers vanish silently.
         self.frame_id = str(p('bot.lidar.frame_id', 'laser'))
+
+        # Heading of the lidar's 0-deg ray relative to bot-forward, same
+        # convention as e_stop's lidar_yaw. A lidar mounted rotated (e.g.
+        # cable-forward = 180) shifts every ray by this angle; without the
+        # correction the FOV window, stop cone and steering target are all
+        # computed on the wrong heading.
+        self.lidar_yaw = math.radians(float(p('bot.lidar.yaw_deg', 0.0)))
 
         tower_w = float(p('bot.tower.width_m', 0.05))
 
@@ -128,7 +155,7 @@ class CustomDisparityExtender(Node):
 
         # Drive gate. Default OFF in code so a bare `ros2 run` without the
         # config file can never move the car; bot_config.yaml enables it.
-        self.enable_drive = bool(p('enable_drive', False))
+        self.enable_drive = bool(p('enable_drive', True))
 
         scan_topic = str(p('scan_topic', '/scan'))
         cmd_topic = str(p('cmd_vel_topic', '/cmd_vel'))
@@ -142,9 +169,18 @@ class CustomDisparityExtender(Node):
         self.valid = np.empty(0, dtype=bool)
         self.last_scan_time = 0.0
 
+        # Per-scan yaw correction actually applied (index shift and the
+        # angle it corresponds to). Zero until the first scan arrives.
+        self.yaw_shift = 0
+        self.yaw_applied = 0.0
+
         # ── I/O ───────────────────────────────────────────────────
+        # sensor-data QoS (BEST_EFFORT), NOT the default depth-10 RELIABLE:
+        # the C1 driver publishes BEST_EFFORT and a RELIABLE subscriber never
+        # matches it — the callback simply never fires and no marker or
+        # cmd_vel ever appears (same failure e_stop's FIX 2 documents).
         self.sub = self.create_subscription(
-            LaserScan, scan_topic, self.lidr_callback, 10)
+            LaserScan, scan_topic, self.lidr_callback, qos_profile_sensor_data)
         self.marker_pub = self.create_publisher(MarkerArray, '/tower_markers', 10)
         self.target_pub = self.create_publisher(MarkerArray, '/custom_disparity/target', 10)
         self.cmd_pub = self.create_publisher(Twist, cmd_topic, 10)
@@ -181,24 +217,48 @@ class CustomDisparityExtender(Node):
     # ──────────────────────────────────────────────────────────────
 
     def lidr_callback(self, msg: LaserScan):
+        """Per-scan entry point. Refresh the scan geometry, clean the ranges,
+        then run both pipelines: detection (find_objects -> is_tower gate ->
+        dedup -> /tower_markers) and navigation (drive_step)."""
         # Read geometry from the message every frame. Hardcoding min_ang = -pi
         # breaks a2i() on any LiDAR publishing 0..2pi: the index goes negative
         # and Python silently wraps to the end of the array.
         self.min_ang = msg.angle_min
         self.max_ang = msg.angle_max
         self.ang_inc = msg.angle_increment
+        # Stamped before the sanity check below on purpose: even a malformed
+        # scan proves the driver is alive, and alive-ness is all the watchdog
+        # measures.
         self.last_scan_time = time.time()
 
         if self.ang_inc <= 0.0:
             self.get_logger().warn('angle_increment is non-positive; dropping scan.')
             return
 
-        r = np.array(msg.ranges, dtype=np.float32)
+        raw = np.array(msg.ranges, dtype=np.float32)
+        if raw.size == 0:
+            return
+
+        # Rotate the scan into bot-forward heading. Rolling the (full-circle)
+        # array by the yaw's index equivalent keeps a2i/i2a and every window
+        # [lo, hi] contiguous — even a 180-deg mount stays a simple shift
+        # instead of a window split across both ends of the array.
+        self.yaw_shift = 0
+        if self.lidar_yaw != 0.0:
+            span = (self.max_ang - self.min_ang) + self.ang_inc
+            if abs(span - 2.0 * math.pi) < 0.2:
+                self.yaw_shift = int(round(self.lidar_yaw / self.ang_inc))
+                raw = np.roll(raw, self.yaw_shift)
+            else:
+                self.get_logger().warn(
+                    'bot.lidar.yaw_deg is set but the scan is not full-circle; '
+                    'heading correction skipped.', throttle_duration_sec=5.0)
+        self.yaw_applied = self.yaw_shift * self.ang_inc
 
         # ONE sentinel for every kind of invalid reading. Mapping nan -> inf and
         # inf -> 0 would turn "nothing in range" into "obstacle at 0 m" and
         # manufacture a disparity against the neighbouring ray.
-        r = np.nan_to_num(r, nan=0.0, posinf=0.0, neginf=0.0)
+        r = np.nan_to_num(raw, nan=0.0, posinf=0.0, neginf=0.0)
 
         upper = min(float(msg.range_max), self.max_useful_range)
         valid = (r > max(float(msg.range_min), 0.01)) & (r < upper)
@@ -228,15 +288,17 @@ class CustomDisparityExtender(Node):
                 throttle_duration_sec=0.5,
             )
 
-        self.drive_step(msg)
+        self.drive_step(msg, raw)
 
     # ──────────────────────────────────────────────────────────────
     # Navigation: disparity extension over the raw scan
     # ──────────────────────────────────────────────────────────────
 
-    def build_nav_ranges(self, msg: LaserScan):
+    def build_nav_ranges(self, msg: LaserScan, raw):
         """
-        Nav view of the scan, distinct from the detection mask:
+        Nav view of the scan, distinct from the detection mask. `raw` is the
+        already yaw-corrected float array from lidr_callback (re-reading
+        msg.ranges here would silently drop the heading correction):
 
           - inf / beyond nav_max_range  -> OPEN space at nav_max_range.
             (Detection treats these as invalid; for driving, "no return"
@@ -245,7 +307,6 @@ class CustomDisparityExtender(Node):
           - nan / below range_min       -> dropout; interpolated from the
             nearest valid rays so one dead ray doesn't split a real gap.
         """
-        raw = np.array(msg.ranges, dtype=np.float32)
         if raw.size == 0:
             return None
 
@@ -326,13 +387,23 @@ class CustomDisparityExtender(Node):
         idx = int(cand[np.argmin(np.abs(cand - centre))])
         return idx, float(d[idx])
 
-    def drive_step(self, msg: LaserScan):
-        if not self.enable_drive:
-            return
+    def drive_step(self, msg: LaserScan, raw):
+        """One navigation step: nav view -> extend disparities -> pick the
+        target ray -> stop-cone gate -> publish speed and steering.
 
-        nav = self.build_nav_ranges(msg)
+        The heading is computed and its RViz marker published on EVERY scan,
+        even with drive disabled or the bot blocked — otherwise the target
+        arrow is invisible exactly when you are bench-testing. Only /cmd_vel
+        is gated behind enable_drive.
+
+        Note the units on /cmd_vel: linear.x is m/s, but angular.z is NOT
+        an angular velocity — it is steering as a fraction [-1, 1] of the
+        physical lock, the convention the MCU bridge expects.
+        """
+        nav = self.build_nav_ranges(msg, raw)
         if nav is None:
-            self.publish_stop('no usable rays in scan')
+            if self.enable_drive:
+                self.publish_stop('no usable rays in scan')
             return
 
         extended = self.extend_disparities(nav)
@@ -344,15 +415,25 @@ class CustomDisparityExtender(Node):
         c1 = min(nav.size - 1, self.a2i(self.stop_cone_half))
         clearance = float(nav[c0:c1 + 1].min()) if c1 > c0 else 0.0
 
-        if pick is None or clearance < self.stop_distance:
+        target_ang = None
+        if pick is not None:
+            idx, free_dist = pick
+            target_ang = self.i2a(idx)
+            # Marker back in the lidar's own convention so the arrow overlays
+            # the raw /scan display in RViz regardless of mount yaw.
+            self.publish_target_marker(target_ang - self.yaw_applied, free_dist)
+
+        if not self.enable_drive:
+            return
+
+        if target_ang is None or clearance < self.stop_distance:
             self.publish_stop(f'blocked, clearance {clearance:.2f} m')
             return
 
-        idx, free_dist = pick
-        target_ang = self.i2a(idx)
-
         # REP-103: +angle = left = +angular.z. Normalised to [-1, 1] of the
         # physical lock, same convention the MCU bridge expects on /cmd_vel.
+        # The clamp is reachable: the nav FOV allows targets out to +-80 deg
+        # while the physical lock is only +-60 deg.
         steer = clamp(target_ang / self.max_steer_rad, -1.0, 1.0)
 
         open_frac = clamp(
@@ -367,7 +448,6 @@ class CustomDisparityExtender(Node):
         cmd.angular.z = float(steer)
         self.cmd_pub.publish(cmd)
 
-        self.publish_target_marker(target_ang, free_dist)
         self.get_logger().info(
             f'[NAV] {math.degrees(target_ang):+6.1f} deg | free {free_dist:.2f} m | '
             f'clear {clearance:.2f} m | v {speed:.2f} m/s',
@@ -375,6 +455,7 @@ class CustomDisparityExtender(Node):
         )
 
     def publish_stop(self, reason: str):
+        """Publish an all-zero Twist (full stop) and say why, at most 1/s."""
         self.cmd_pub.publish(Twist())
         self.get_logger().warn(f'STOP — {reason}.', throttle_duration_sec=1.0)
 
@@ -557,6 +638,7 @@ class CustomDisparityExtender(Node):
     # ──────────────────────────────────────────────────────────────
 
     def make_marker(self, obj: dict, marker_id: int) -> Marker:
+        """One flat red disk per detected tower, for RViz."""
         m = Marker()
         m.header.frame_id = self.frame_id
         m.header.stamp = self.get_clock().now().to_msg()
@@ -565,8 +647,12 @@ class CustomDisparityExtender(Node):
         m.type = Marker.CYLINDER
         m.action = Marker.ADD
 
-        m.pose.position.x = obj['x']
-        m.pose.position.y = obj['y']
+        # obj x/y are in bot-forward convention (yaw-corrected scan); the
+        # marker lives in the lidar's frame, so rotate back by the applied
+        # yaw to overlay the raw /scan display.
+        ya = self.yaw_applied
+        m.pose.position.x = obj['x'] * math.cos(ya) + obj['y'] * math.sin(ya)
+        m.pose.position.y = -obj['x'] * math.sin(ya) + obj['y'] * math.cos(ya)
         m.pose.position.z = 0.0
         m.pose.orientation.w = 1.0   # identity: no rotation needed for a flat disk
 
@@ -636,6 +722,7 @@ class CustomDisparityExtender(Node):
 
 
 def main(args=None):
+    """Entry point: auto-wire bot_config.yaml, start the node, spin forever."""
     argv = list(sys.argv if args is None else args)
 
     # Auto-wire bot_config.yaml: unless the caller already supplied a params

@@ -1,30 +1,3 @@
-"""
-Modified Disparity Extender Algorithm — Ported from LazyGo WRO2025.
-
-This node implements Team LazyGo's Circle-Cast Ray Marching algorithm for
-autonomous navigation, adapted to the gorur_gari_2026 ROS 2 workspace.
-
-Core Algorithm:
-1. For every candidate ray in the forward FOV, "march" a circle of the robot's
-   half-width along it. If any neighboring ray's obstacle point falls within
-   that circle, shorten the candidate's safe distance.
-2. Pick the ray with the maximum safe distance → that's the target heading.
-3. Detect towers via edge contrast (falling/rising slope pairs) and filter by
-   physical width (s = r·θ ≈ 5cm).
-4. Apply WRO color rules: Green = pass left, Red = pass right.
-5. Boost speed on clear straights, emergency override on close side obstacles.
-
-Start gate:
-The node never drives on its own. It comes up in STANDBY - spinning, processing
-LiDAR, publishing debug topics, but holding the car at zero. Pressing the start
-button on the car (MCU publishes /button_status) moves it to ARMING, and after
-start_delay_sec it goes RUNNING and the algorithm above takes the wheel. The
-MCU blinks its status LED once per second through that same delay, so the
-countdown is visible on the car itself (see firmware/src/main.cpp).
-
-Reference: https://github.com/A-N-M-Noor/LazyGo_WRO2025
-"""
-
 import math
 import time
 from threading import Lock, Thread
