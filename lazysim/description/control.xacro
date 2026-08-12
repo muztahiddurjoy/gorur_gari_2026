@@ -1,0 +1,162 @@
+<?xml version="1.0"?>
+<!--
+  Actuation, joint feedback and ground-truth odometry.
+
+  The old model drove the car through gazebo_ros2_control. That plugin
+  (and controller_manager, and the velocity/position controllers it
+  spawns) is not installed and is Gazebo-Classic-only, so the joints are
+  driven by Ignition's own controller plugins instead. Every command
+  topic below is an ignition.msgs.Double that ros_gz_bridge exposes to
+  ROS as a std_msgs/Float64 — see config/ros_gz_bridge.yaml.
+
+    /lazybot/steer_left    rad, +ve steers LEFT   front left kingpin
+    /lazybot/steer_right   rad, +ve steers LEFT   front right kingpin
+    /lazybot/cam_servo     rad                    camera pan servo
+    /lazybot/drive_left    rad/s, +ve is forward  rear axle
+    /lazybot/drive_right   rad/s, +ve is forward  rear axle
+
+  lazybridge owns the Ackermann split that turns one /cmd_vel into those
+  five numbers, exactly as the firmware + steering linkage do on the real
+  car.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+
+    <!-- ══ Steering ═══════════════════════════════════════════════════
+         Torque mode, with gains stiff enough that a loaded front tyre
+         does not drag the wheel off its setpoint.
+
+         Do NOT set <use_velocity_commands>true</use_velocity_commands>
+         here. It looks like the right model for a servo — hold the
+         angle, do not negotiate with the load — but this plugin's
+         velocity mode feeds the position error back with the wrong
+         sign in Fortress. The result is positive feedback: whichever
+         way a kingpin happens to be sitting, it accelerates that way and
+         parks itself hard against its limit, and it stays there while
+         the commanded angle reads 0.0. It fails silently, because the
+         command topic still carries exactly the right number.
+
+         The gains are high on purpose. Turning a loaded tyre on the spot
+         costs almost nothing in reality — a 25 mm wheel carrying 2.3 N
+         has a contact patch a few millimetres across, so the drilling
+         torque works out around 0.005 N·m — but the contact solver
+         resolves that patch as a set of stiff points and charges far
+         more for it. Modest gains leave the kingpins sitting 5 to 10
+         degrees off wherever they were asked to go, including a
+         permanent offset at centre. The servo on the car has no trouble
+         steering a 950 g vehicle standing still, so the model should not
+         either. cmd_max matches the joint effort limit in
+         lazyBotCore.xacro. -->
+    <xacro:macro name="steer_controller" params="joint topic">
+        <gazebo>
+            <plugin filename="ignition-gazebo-joint-position-controller-system"
+                    name="ignition::gazebo::systems::JointPositionController">
+                <joint_name>${joint}</joint_name>
+                <topic>${topic}</topic>
+                <!-- The integral is the term that matters here and it
+                     has to be bounded tightly. Contact stiction stops
+                     the kingpin a few degrees short and then resists
+                     restarting, which proportional gain alone never
+                     clears — it just sits there with 24 N·m against a
+                     joint that will not break away. An integral walks
+                     through it. But give it a large i_max and it winds
+                     up over a full-lock step, then unwinds at under half
+                     a degree a second, leaving the steering chasing a
+                     command from several seconds ago. i_max is therefore
+                     set just above what it takes to break stiction.
+                     d_gain stays small: heavy damping is what parks the
+                     joint short of its setpoint in the first place. -->
+                <p_gain>200.0</p_gain>
+                <i_gain>15.0</i_gain>
+                <d_gain>0.1</d_gain>
+                <i_max>8.0</i_max>
+                <i_min>-8.0</i_min>
+                <cmd_max>100.0</cmd_max>
+                <cmd_min>-100.0</cmd_min>
+            </plugin>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:steer_controller joint="base_to_front_left_hinge"  topic="/lazybot/steer_left" />
+    <xacro:steer_controller joint="base_to_front_right_hinge" topic="/lazybot/steer_right" />
+
+    <!-- Camera pan servo — same idea, lighter load. -->
+    <gazebo>
+        <plugin filename="ignition-gazebo-joint-position-controller-system"
+                name="ignition::gazebo::systems::JointPositionController">
+            <joint_name>chassis_to_cam_servo</joint_name>
+            <topic>/lazybot/cam_servo</topic>
+            <p_gain>10.0</p_gain>
+            <i_gain>1.0</i_gain>
+            <d_gain>0.3</d_gain>
+            <i_max>1.0</i_max>
+            <i_min>-1.0</i_min>
+            <cmd_max>5.0</cmd_max>
+            <cmd_min>-5.0</cmd_min>
+        </plugin>
+    </gazebo>
+
+    <!-- ══ Rear axle ══════════════════════════════════════════════════
+         Direct velocity commands (use_force_commands left off), so the
+         wheels turn at exactly the rate asked for and traction against
+         the mat is what moves the car. That keeps the encoder tick
+         stream lazybridge derives from these joints clean, which is the
+         whole point: vector_odom's dead reckoning is only as good as its
+         ticks, and a PID hunting around the setpoint would inject drift
+         the real car does not have. -->
+    <xacro:macro name="drive_controller" params="joint topic">
+        <gazebo>
+            <plugin filename="ignition-gazebo-joint-controller-system"
+                    name="ignition::gazebo::systems::JointController">
+                <joint_name>${joint}</joint_name>
+                <topic>${topic}</topic>
+                <initial_velocity>0.0</initial_velocity>
+            </plugin>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:drive_controller joint="base_to_back_left_wheel"  topic="/lazybot/drive_left" />
+    <xacro:drive_controller joint="base_to_back_right_wheel" topic="/lazybot/drive_right" />
+
+    <!-- ══ Joint feedback ═════════════════════════════════════════════
+         Feeds robot_state_publisher (so the wheels and kingpins move in
+         RViz) and lazybridge (which integrates the rear wheel angle into
+         an encoder count). -->
+    <gazebo>
+        <plugin filename="ignition-gazebo-joint-state-publisher-system"
+                name="ignition::gazebo::systems::JointStatePublisher">
+            <!-- Same name on both sides of ros_gz_bridge, which maps a
+                 topic one-to-one and cannot rename. lazybridge is what
+                 turns this into /joint_states at a sane rate. -->
+            <topic>/lazybot/joint_states</topic>
+            <joint_name>base_to_back_left_wheel</joint_name>
+            <joint_name>base_to_back_right_wheel</joint_name>
+            <joint_name>base_to_front_left_hinge</joint_name>
+            <joint_name>base_to_front_right_hinge</joint_name>
+            <joint_name>front_left_hinge_to_wheel</joint_name>
+            <joint_name>front_right_hinge_to_wheel</joint_name>
+            <joint_name>chassis_to_cam_servo</joint_name>
+        </plugin>
+    </gazebo>
+
+    <!-- ══ Ground truth ═══════════════════════════════════════════════
+         Published as /lazybot/odom and bridged to /odom for
+         disparity_extender (which wants a nav_msgs/Odometry) and for
+         scoring how far vector_odom's dead reckoning has drifted.
+
+         tf_topic is deliberately parked on a topic nobody bridges: the
+         odom -> base_link transform belongs to vector_odom, and having
+         the simulator publish a perfect one as well would hide exactly
+         the drift the sim exists to expose. -->
+    <gazebo>
+        <plugin filename="ignition-gazebo-odometry-publisher-system"
+                name="ignition::gazebo::systems::OdometryPublisher">
+            <odom_frame>odom</odom_frame>
+            <robot_base_frame>base_link</robot_base_frame>
+            <odom_topic>/lazybot/odom</odom_topic>
+            <tf_topic>/lazybot/ground_truth_tf</tf_topic>
+            <odom_publish_frequency>50</odom_publish_frequency>
+            <dimensions>2</dimensions>
+        </plugin>
+    </gazebo>
+
+</robot>

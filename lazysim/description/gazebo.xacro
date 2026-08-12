@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!--
+  Surface properties.
+
+  Note there are no <material>Gazebo/Blue</material> tags here any more.
+  Those name Ogre material scripts from Gazebo Classic's media library,
+  which Ignition does not ship; colours now come from the plain URDF
+  <material><color rgba="..."/> blocks in lazyBotCore.xacro, which
+  sdformat converts into SDF ambient/diffuse/specular on its own.
+
+  Friction is what actually decides whether the car turns or ploughs
+  straight on. The rear wheels are commanded to an exact angular
+  velocity, so grip here is what converts that spin into forward motion,
+  and the front tyres' grip is what generates the cornering force.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+
+    <xacro:macro name="tyre_surface" params="link">
+        <gazebo reference="${link}">
+            <mu1>1.1</mu1>
+            <mu2>1.1</mu2>
+            <kp>1e6</kp>
+            <kd>50.0</kd>
+            <minDepth>0.0005</minDepth>
+            <maxVel>1.0</maxVel>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:tyre_surface link="back_left_wheel" />
+    <xacro:tyre_surface link="back_right_wheel" />
+    <xacro:tyre_surface link="front_left_wheel" />
+    <xacro:tyre_surface link="front_right_wheel" />
+
+    <!-- The body should skate, not grip, if it ever scrapes a wall —
+         a high-friction chassis snags on the 30 mm mat walls and stops
+         the car dead in a way the real one does not. -->
+    <gazebo reference="base_link">
+        <mu1>0.1</mu1>
+        <mu2>0.1</mu2>
+    </gazebo>
+
+</robot>

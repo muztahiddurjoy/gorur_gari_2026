@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<!--
+  Bosch BNO055 — absolute heading.
+
+  On the real car this chip is read by the ESP32 and arrives in ROS as a
+  single std_msgs/Float32 on /heading, in DEGREES, growing CLOCKWISE,
+  and referenced to whatever attitude the chip powered up in (it reads 0
+  at boot however it is bolted on — see the heading_offset_deg note in
+  controls/vector_odom.py).
+
+  Ignition publishes a full sensor_msgs/Imu with a world-referenced
+  quaternion instead, so lazybridge does the conversion: it captures the
+  first yaw it sees as the zero and republishes -degrees(yaw - zero) as
+  /heading. That reproduces both the sign convention and the
+  power-on-relative behaviour, so vector_odom and lap_counter can run
+  against the sim completely unchanged.
+
+  Update rate is 50 Hz to match mcu_bridge's 0.02 s telemetry poll.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+
+    <!-- Mounted INSIDE the chassis, not on the lid. On the real car the
+         BNO055 is a chip on the board, and in simulation the difference
+         matters for a second reason: at lid height the 20 mm package
+         top sits at exactly 78 mm, which is the LiDAR's ray plane, so it
+         grazed the beam and put a permanent 5 cm return directly behind
+         the car. Yaw is identical anywhere on a rigid body, so there is
+         nothing to lose by tucking it away. -->
+    <joint name="base_to_imu" type="fixed">
+        <parent link="base_link" />
+        <child link="imu_link" />
+        <origin xyz="${imu_x} 0 ${ground_offset + body_height/2}" />
+    </joint>
+
+    <link name="imu_link">
+        <visual>
+            <geometry>
+                <box size="${imu_size} ${imu_size} ${imu_size/2}" />
+            </geometry>
+            <material name="black" />
+        </visual>
+        <inertial>
+            <mass value="${imu_mass}" />
+            <inertia ixx="1e-6" iyy="1e-6" izz="1e-6" ixy="0" ixz="0" iyz="0" />
+        </inertial>
+    </link>
+
+    <gazebo reference="imu_link">
+        <disableFixedJointLumping>true</disableFixedJointLumping>
+
+        <sensor name="imu" type="imu">
+            <topic>imu</topic>
+            <ignition_frame_id>imu_link</ignition_frame_id>
+            <update_rate>50</update_rate>
+            <always_on>1</always_on>
+            <visualize>false</visualize>
+            <imu>
+                <!-- The BNO055 runs Bosch's own fusion and reports a
+                     stable yaw, so the noise here is deliberately small:
+                     enough that the heading is not a perfect number, not
+                     so much that lap_counter's corner detector trips. -->
+                <angular_velocity>
+                    <x><noise type="gaussian"><mean>0.0</mean><stddev>0.001</stddev></noise></x>
+                    <y><noise type="gaussian"><mean>0.0</mean><stddev>0.001</stddev></noise></y>
+                    <z><noise type="gaussian"><mean>0.0</mean><stddev>0.001</stddev></noise></z>
+                </angular_velocity>
+                <linear_acceleration>
+                    <x><noise type="gaussian"><mean>0.0</mean><stddev>0.01</stddev></noise></x>
+                    <y><noise type="gaussian"><mean>0.0</mean><stddev>0.01</stddev></noise></y>
+                    <z><noise type="gaussian"><mean>0.0</mean><stddev>0.01</stddev></noise></z>
+                </linear_acceleration>
+            </imu>
+        </sensor>
+    </gazebo>
+</robot>

@@ -1,0 +1,194 @@
+# ════════════════════════════════════════════════════════════════════
+# Simulation tuning — mirrors ros2_ws/config/bot_config.yaml.
+#
+# Everything the autonomy stack reads is copied here verbatim so the sim
+# behaves like the car. The DELTAS from the real config are marked
+# "SIM:" below and there are only four of them; if you retune the real
+# bot, re-sync this file and keep those four.
+#
+# Point the launch files at the real file instead with:
+#   ros2 launch lazysim open_round_sim.launch.py \
+#       bot_config:=/path/to/ros2_ws/config/bot_config.yaml
+# ════════════════════════════════════════════════════════════════════
+
+/**:
+  ros__parameters:
+    bot:
+      width_m: 0.12              # chassis width including wheels
+      length_m: 0.21             # bumper to bumper
+      wheel_diameter_m: 0.050    # drive wheel diameter
+      encoder_counts_per_rev: 363
+      max_steer_deg: 60.0        # physical steering lock (one side)
+      safety_margin_m: 0.01      # clearance kept on EACH side of the bot
+      max_speed_mps: 0.6         # cruise ceiling on open track
+      min_speed_mps: 0.25        # creep floor while threading gaps
+      lidar:
+        frame_id: laser
+        forward_offset_m: 0.0
+        yaw_deg: 0.0
+      tower:
+        width_m: 0.05
+        min_separation_m: 0.15
+
+# ── The simulator's stand-in for mcu_bridge ─────────────────────────
+# Geometry must agree with description/lazyBot.xacro or the car steers
+# differently from the model on screen.
+lazybridge:
+  ros__parameters:
+    wheelbase_m: 0.140           # ⚠ UNVERIFIED — measure the real axle spacing
+    track_m: 0.106
+    wheel_radius_m: 0.025        # 50 mm diameter
+    hinge_inset_m: 0.012
+    max_steer_deg: 60.0
+
+    # linear.x of 1.0 commands this many m/s. The stack's speeds come
+    # from bot.max_speed_mps (0.6), so this makes that mean 0.6 m/s.
+    # Drive a measured straight line on the real car at a known
+    # linear.x and correct this if the sim runs fast or slow.
+    cmd_to_mps: 1.0
+
+    # Identical to the mcu_bridge block below, so a command that
+    # saturates the real int8 throttle or the servo clamp saturates here.
+    throttle_scale: 100.0
+    throttle_min: -128
+    throttle_max: 127
+    steering_center_deg: 90
+    steering_gain_deg: 60.0
+    steering_min_deg: 0
+    steering_max_deg: 180
+
+    encoder_counts_per_rev: 363  # ticks per WHEEL rev, at the tick stream
+    rpm_counts_per_rev: 1320     # what the firmware uses for its rpm field
+
+    heading_clockwise: true      # BNO055 convention
+    zero_heading_on_start: true  # the chip reads 0 at power-on
+
+    auto_start_sec: 0.0          # >0 presses the start button by itself
+    cmd_timeout_sec: 1.0
+
+# ── Dead reckoning ──────────────────────────────────────────────────
+vector_odometry:
+  ros__parameters:
+    # SIM: 0.050, not the 0.065 both ros2_ws launch files still pass.
+    # 50 mm is the measured wheel (bot.wheel_diameter_m) and it is what
+    # lazybridge generates ticks from, so the sim has to agree with
+    # itself. See the README note in this package.
+    wheel_diameter_m: 0.050
+    encoder_counts_per_rev: 363
+    # SIM: 1.0, not 0.976. That factor corrects real-world tyre slip
+    # measured with a tape; the simulated axle is velocity-controlled
+    # and barely slips, so applying it would add error rather than
+    # remove it.
+    distance_scale: 1.0
+    output_units: cm
+    heading_clockwise: true
+    heading_offset_deg: 0.0
+    zero_heading_on_start: false
+    log_period_sec: 2.0
+
+lap_counter:
+  ros__parameters:
+    turn_angle_deg: 90.0
+    turns_per_lap: 4
+    heading_clockwise: true
+    odom_distance_units: cm
+
+open_round_run:
+  ros__parameters:
+    enable_auto_steering: true
+    # SIM: false. There is no physical button on the mat; lazybridge
+    # exposes /lazybot/press_start instead, and the launch files can
+    # auto-press it. Set true and use that service to rehearse the real
+    # start sequence.
+    require_button_start: false
+    start_delay_sec: 3.0
+
+    target_laps: 3
+    min_run_time_sec: 5.0
+
+    wall_hug_enable: true
+    wall_target_dist_m: 0.35
+    wall_side: auto
+    wall_kp_deg_per_m: 40.0
+    wall_max_correction_deg: 12.0
+    wall_hug_gate_deg: 25.0
+    wall_valid_max_dist_m: 1.2
+
+    odom_units: cm
+    home_radius_m: 0.05
+    homing_max_speed: 0.30
+    homing_min_speed: 0.25
+    homing_slowdown_dist_m: 0.60
+    homing_timeout_sec: 45.0
+    max_gear_flips: 6
+
+    heading_clockwise: true
+    heading_offset_deg: 0.0
+
+custom_disparity_extender:
+  ros__parameters:
+    enable_drive: true
+    scan_topic: /scan
+    cmd_vel_topic: /cmd_vel
+
+    spike_threshold_m: 0.02
+    spike_ref_dist_m: 0.05
+    edge_stride: 3
+    detect_fov_half_deg: 90.0
+    width_min_cm: 3.0
+    width_max_cm: 25.0
+    max_useful_range_m: 2.0
+
+    nav:
+      fov_half_deg: 80.0
+      max_range_m: 3.0
+      disparity_threshold_m: 0.25
+      stop_distance_m: 0.15
+      stop_cone_half_deg: 20.0
+      steer_speed_drop: 0.4
+
+disparity_extender_node:
+  ros__parameters:
+    # SIM: false, same reasoning as open_round_run above.
+    require_button_start: false
+    enable_auto_steering: true
+    start_delay_sec: 3.0
+    scan_topic: /scan
+    odom_topic: /odom
+    cmd_vel_topic: /cmd_vel
+
+# ── Pillar colour detection ─────────────────────────────────────────
+# Copied verbatim from ros2_ws/config/vision_params.yaml, including the
+# very tight red thresholds (S must be exactly 255). Those work here
+# because the simulated pillars are rendered with zero green and zero
+# blue in both their ambient and diffuse terms and a black specular, so
+# every lit pixel comes out fully saturated. If you loosen the real
+# thresholds after tuning against the actual camera, copy them here too.
+vision_node:
+  ros__parameters:
+    efficient_mode: true
+    publish_debug_image: false
+    process_every_n_frames: 2
+    processing_width: 320
+    processing_height: 240
+
+    camera_topic: "/camera/image_raw"
+    obstacles_topic: "/closest_obj"
+    # Must equal <horizontal_fov> in description/camera.xacro, or the
+    # bearing vision_node computes for a blob will not line up with the
+    # LiDAR tower at the same angle.
+    camera_hfov_deg: 60.0
+
+    roi_top_crop: 0.4
+    min_contour_area: 250
+    min_aspect_ratio: 1.0
+    max_aspect_ratio: 3.5
+    min_solidity: 0.40
+
+    green_lower: [35, 80, 50]
+    green_upper: [85, 255, 255]
+
+    red_lower_1: [0, 255, 87]
+    red_upper_1: [12, 255, 255]
+    red_lower_2: [165, 255, 87]
+    red_upper_2: [180, 255, 255]

@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<!--
+  Traffic pillar template, spawned by track_maker through the Ignition
+  /world/lazyWorld/create service. Python str.format fills {name},
+  {ambient} and {diffuse}.
+
+  50 x 50 x 100 mm is the WRO Future Engineers traffic sign, and it is
+  also bot.tower.width_m = 0.05 in ros2_ws/config/bot_config.yaml — the
+  face width the LiDAR tower finder in custom_disparity_extender sizes
+  its segments against.
+
+  Not static and deliberately light (50 g), so the car knocks one over
+  if it clips it rather than bouncing off. That is the behaviour worth
+  simulating: a knocked pillar is a scored penalty, not a bump.
+
+  The Ogre script material the Classic version used (a Gazebo/COLOUR
+  name out of gazebo.material) does not exist in Ignition, hence the
+  inline colours.
+
+  Careful with braces in this file: str.format walks the whole template,
+  comments included, so any stray brace has to be doubled.
+-->
+<sdf version="1.8">
+    <model name="{name}">
+        <static>false</static>
+        <link name="link">
+            <inertial>
+                <mass>0.05</mass>
+                <inertia>
+                    <ixx>5.21e-5</ixx>
+                    <iyy>5.21e-5</iyy>
+                    <izz>2.08e-5</izz>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyz>0</iyz>
+                </inertia>
+            </inertial>
+            <visual name="visual">
+                <!-- open_round_run.ray_valid() drops any ray whose
+                     intensity is <= 0.05, so a surface with no
+                     laser_retro is invisible to the navigation code even
+                     though the range comes back correctly. -->
+                <laser_retro>180</laser_retro>
+                <geometry>
+                    <box><size>0.05 0.05 0.1</size></box>
+                </geometry>
+                <!-- Specular is deliberately BLACK. vision_params.yaml
+                     thresholds red at S=255 exactly (red_lower_1 is
+                     [0, 255, 87]), and a white specular highlight lifts
+                     the green and blue channels off zero, which drops
+                     saturation below 255 and makes the pillar invisible
+                     to vision_node. Keeping the off-channels at zero in
+                     both ambient and diffuse is what guarantees a fully
+                     saturated pixel whatever the lighting does. -->
+                <material>
+                    <ambient>{ambient}</ambient>
+                    <diffuse>{diffuse}</diffuse>
+                    <specular>0 0 0 1</specular>
+                </material>
+            </visual>
+            <collision name="collision">
+                <geometry>
+                    <box><size>0.05 0.05 0.1</size></box>
+                </geometry>
+                <surface>
+                    <friction>
+                        <ode>
+                            <mu>0.8</mu>
+                            <mu2>0.8</mu2>
+                        </ode>
+                    </friction>
+                </surface>
+            </collision>
+        </link>
+    </model>
+</sdf>

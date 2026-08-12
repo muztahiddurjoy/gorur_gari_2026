@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!--
+  Parking-lot barrier template, spawned by track_maker through the
+  Ignition /world/lazyWorld/create service. Python str.format fills
+  {name}, {sz_x}, {sz_y}, {static}, {ambient} and {diffuse}.
+
+  The obstacle round finishes with a parallel park between two of these.
+  They are 200 mm long and magenta on the real mat, and they are NOT
+  static for the same reason the pillars are not: nudging one out of
+  place has to be visible, because it costs points.
+-->
+<sdf version="1.8">
+    <model name="{name}">
+        <static>{static}</static>
+        <link name="link">
+            <inertial>
+                <mass>0.15</mass>
+                <inertia>
+                    <ixx>1.0e-4</ixx>
+                    <iyy>1.0e-4</iyy>
+                    <izz>1.0e-4</izz>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyz>0</iyz>
+                </inertia>
+            </inertial>
+            <visual name="visual">
+                <!-- See the note in object_template.sdf: no laser_retro
+                     means the navigation code cannot see it. -->
+                <laser_retro>220</laser_retro>
+                <geometry>
+                    <box><size>{sz_x} {sz_y} 0.1</size></box>
+                </geometry>
+                <material>
+                    <ambient>{ambient}</ambient>
+                    <diffuse>{diffuse}</diffuse>
+                    <specular>0.05 0.05 0.05 1</specular>
+                </material>
+            </visual>
+            <collision name="collision">
+                <geometry>
+                    <box><size>{sz_x} {sz_y} 0.1</size></box>
+                </geometry>
+            </collision>
+        </link>
+    </model>
+</sdf>

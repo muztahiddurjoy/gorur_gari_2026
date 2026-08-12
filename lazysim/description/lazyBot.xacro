@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<!--
+  ════════════════════════════════════════════════════════════════════
+  lazyBot — simulation model of the Gorur Gari 2026 car.
+
+  Every dimension below is the REAL car, so the sim and the track agree
+  on what fits through a gap. The source of truth for the shared numbers
+  is ros2_ws/config/bot_config.yaml — if you change one, change both.
+  The cross-references are noted per property.
+
+  Target simulator: Ignition Gazebo Fortress (6.x), driven through
+  ros_gz_sim / ros_gz_bridge. There is no ros2_control here; the joints
+  are driven by Ignition's own controller plugins (see control.xacro).
+  ════════════════════════════════════════════════════════════════════
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+
+    <!-- ══ Chassis envelope ═══════════════════════════════════════════
+         bot.length_m / bot.width_m in bot_config.yaml. `width` is the
+         envelope OVER THE WHEELS, which is what the gap-finding code
+         cares about, so the body box itself is narrower and the tyres
+         make up the difference. -->
+    <xacro:property name="length"        value="0.210" />  <!-- bumper to bumper -->
+    <xacro:property name="width"         value="0.120" />  <!-- across the tyres -->
+    <xacro:property name="body_width"    value="0.090" />  <!-- the box between the wheels -->
+    <xacro:property name="body_height"   value="0.060" />
+    <xacro:property name="ground_offset" value="0.008" />  <!-- underside to floor -->
+
+    <!-- ══ Drivetrain geometry ════════════════════════════════════════
+         wheel_diameter 50 mm = bot.wheel_diameter_m. NOTE this disagrees
+         with the 0.065 both ros2_ws launch files still pass to
+         vector_odom; 50 mm is the measured wheel, see the README note in
+         this package. -->
+    <xacro:property name="wheel_radius"  value="0.025" />  <!-- 50 mm diameter -->
+    <xacro:property name="wheel_width"   value="0.014" />
+
+    <!-- Wheel centre to wheel centre, so the tyres just reach `width`. -->
+    <xacro:property name="track"         value="${width - wheel_width}" />
+
+    <!-- ⚠ THE ONE MEASUREMENT THAT IS NOT RECORDED ANYWHERE IN THE REPO.
+         Not in bot_config.yaml, not in the README table, and cad_files/
+         is empty. 0.140 m is a plausible value for a 210 mm car (it
+         leaves 35 mm of overhang at each end) but it drives the turning
+         circle, so measure the real axle-to-axle distance and correct
+         it here before trusting any tight-gap result from the sim. -->
+    <xacro:property name="wheelbase"     value="0.140" />
+
+    <!-- Steering knuckle inboard offset: how far the kingpin sits from
+         the wheel centre plane. Only affects the Ackermann split. -->
+    <xacro:property name="hinge_inset"   value="0.012" />
+
+    <!-- Physical steering lock, one side. bot.max_steer_deg. -->
+    <xacro:property name="max_steer_deg" value="60.0" />
+    <xacro:property name="max_steer"     value="${radians(max_steer_deg)}" />
+
+    <!-- ══ Sensor mounting ════════════════════════════════════════════
+         base_link is the CENTRE of the footprint at ground level, so
+         bot.lidar.forward_offset_m = 0.0 means the lidar sits exactly
+         over base_link — which is what these values encode. -->
+    <xacro:property name="lidar_x"       value="0.0" />    <!-- bot.lidar.forward_offset_m -->
+    <xacro:property name="lidar_yaw"     value="0.0" />    <!-- bot.lidar.yaw_deg -->
+    <xacro:property name="lidar_height"  value="0.020" />
+    <xacro:property name="lidar_radius"  value="0.027" />  <!-- RPLIDAR C1 body -->
+
+    <xacro:property name="imu_x"         value="-0.060" /> <!-- BNO055 sits at the rear -->
+    <xacro:property name="imu_size"      value="0.020" />
+
+    <!-- USB camera on the pan servo, looking forward and slightly down. -->
+    <xacro:property name="camera_x"      value="0.060" />
+    <xacro:property name="camera_z"      value="0.115" />
+    <xacro:property name="camera_pitch"  value="${radians(8.0)}" />
+
+    <!-- ══ Masses ═════════════════════════════════════════════════════
+         Total ~0.95 kg. The real car has not been weighed (the README
+         still says [Placeholder]); these are sane values that keep the
+         car planted without making it sluggish. -->
+    <xacro:property name="base_mass"     value="0.800" />
+    <xacro:property name="wheel_mass"    value="0.030" />
+    <xacro:property name="hinge_mass"    value="0.010" />
+    <xacro:property name="laser_mass"    value="0.050" />
+    <xacro:property name="imu_mass"      value="0.005" />
+
+    <!-- ══ Model name, must match the <name> ros_gz_sim spawns it as,
+         because the Ignition plugin topics are scoped by model name. -->
+    <xacro:property name="model_name"    value="lazyBot" />
+
+    <xacro:include filename="lazyBotCore.xacro" />
+    <xacro:include filename="lidar.xacro" />
+    <xacro:include filename="IMU.xacro" />
+    <xacro:include filename="camera.xacro" />
+    <xacro:include filename="control.xacro" />
+    <xacro:include filename="gazebo.xacro" />
+
+</robot>

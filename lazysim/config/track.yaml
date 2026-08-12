@@ -1,0 +1,79 @@
+# ════════════════════════════════════════════════════════════════════
+# Track layout, applied by track_maker once Ignition is up.
+#
+# Coordinates are world metres. The mat in worlds/lazyWorld.sdf is a 3 m
+# square centred on (0, 1) with a 1 m square block in the middle, so the
+# driving corridor is the 1 m ring between them:
+#
+#     y=2.5  ┌───────────────────────────┐
+#            │   TOP STRAIGHT            │
+#            │      ┌─────────┐          │
+#            │ LEFT │  block  │ RIGHT    │
+#            │      └─────────┘          │
+#            │   BOTTOM STRAIGHT         │
+#     y=-0.5 └───────────────────────────┘
+#          x=-1.5                     x=1.5
+#
+#   bottom straight  y in [-0.5, 0.5]
+#   top straight     y in [ 1.5, 2.5]
+#   right straight   x in [ 0.5, 1.5]
+#   left straight    x in [-1.5,-0.5]
+#
+# Keep pillars at least bot.tower.min_separation_m (0.15 m) apart, and
+# no closer than about 0.1 m to a wall, or the car cannot physically fit
+# past them.
+# ════════════════════════════════════════════════════════════════════
+
+# false leaves the mat bare — that is the Open Round.
+objects: true
+
+# Where the car starts. `pos` is where the NOSE of the car sits; the
+# model origin is pulled back nose_offset_m along the heading, so the
+# car starts fully behind the line rather than straddling it.
+# angle is degrees counter-clockwise, 0 = facing +X.
+start:
+    model: lazyBot
+    nose_offset_m: 0.105        # half of bot.length_m
+    pos:
+        x: 0.0
+        y: 0.0
+    angle: 0
+
+# Parallel parking bay for the end of the obstacle round. `size` is the
+# clear space between the two barriers.
+parking:
+    enabled: false
+    size: 0.3
+    pos:
+        x: -1.05
+        y: 0.0
+    angle: 0.0
+
+# Red pillars are passed on the RIGHT, green on the LEFT.
+# Colours are matched to vision_node's HSV thresholds — see
+# config/object_template.sdf.
+towers:
+    -   color: "Red"
+        pos:
+            x: 1.1
+            y: 0.5
+    -   color: "Green"
+        pos:
+            x: 1.1
+            y: 1.5
+    -   color: "Green"
+        pos:
+            x: 0.5
+            y: 1.9
+    -   color: "Red"
+        pos:
+            x: -0.5
+            y: 1.9
+    -   color: "Red"
+        pos:
+            x: -1.1
+            y: 1.0
+    -   color: "Green"
+        pos:
+            x: -0.5
+            y: 0.1

@@ -1,0 +1,164 @@
+<?xml version="1.0"?>
+<!--
+  Chassis and running gear.
+
+  base_link is the CENTRE of the footprint at ground level:
+
+        +X (forward)
+            ▲
+     ┌──────┼──────┐        rear axle  at x = -wheelbase/2
+     │      │      │        front axle at x = +wheelbase/2
+     ◎──────●──────◎ ──▶ +Y is LEFT (REP-103)
+     │   base_link │
+     └──────┼──────┘
+  ◎ = steered front wheel, ● = origin
+
+  Positive rotation about +Z is counter-clockwise seen from above, so a
+  POSITIVE steering hinge angle turns the car LEFT. That matches the
+  /cmd_vel convention the autonomy stack uses (angular.z > 0 aims at a
+  target on the left, see open_round_run.remap of target_deg), so the
+  sign chain from planner to tyre is consistent end to end.
+
+  Both rear wheels rotate POSITIVELY when the car drives forward, which
+  is what lets lazybridge treat them as one solid axle and count
+  encoder ticks off either of them.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+
+    <material name="black"><color rgba="0.15 0.15 0.15 1.0" /></material>
+    <material name="blue"><color rgba="0.30 0.57 1.00 1.0" /></material>
+    <material name="red"><color rgba="0.90 0.10 0.10 1.0" /></material>
+    <material name="grey"><color rgba="0.50 0.50 0.50 1.0" /></material>
+
+    <!-- ══ Wheel macro ════════════════════════════════════════════════
+         `flip` is +1 for the left wheels and -1 for the right, so both
+         sides end up spinning positive-for-forward. -->
+    <xacro:macro name="wheel_link" params="name">
+        <link name="${name}">
+            <visual>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}" />
+                </geometry>
+                <material name="black" />
+            </visual>
+            <collision>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}" />
+                </geometry>
+            </collision>
+            <inertial>
+                <mass value="${wheel_mass}" />
+                <inertia
+                    ixx="${(wheel_mass/12)*(3*wheel_radius*wheel_radius + wheel_width*wheel_width)}"
+                    iyy="${(wheel_mass/12)*(3*wheel_radius*wheel_radius + wheel_width*wheel_width)}"
+                    izz="${(wheel_mass/2)*wheel_radius*wheel_radius}"
+                    ixy="0" ixz="0" iyz="0" />
+            </inertial>
+        </link>
+    </xacro:macro>
+
+    <xacro:macro name="steer_hinge_link" params="name">
+        <link name="${name}">
+            <inertial>
+                <mass value="${hinge_mass}" />
+                <inertia ixx="1e-5" iyy="1e-5" izz="1e-5" ixy="0" ixz="0" iyz="0" />
+            </inertial>
+        </link>
+    </xacro:macro>
+
+    <!-- ══ Chassis ════════════════════════════════════════════════════
+         One link, no separate base_footprint/chassis pair: the old model
+         needed a static_transform_publisher to paper over that split.
+         The inertial origin sits BELOW the box centre because the
+         battery and motor live on the floor of the car, and a low centre
+         of mass is what stops it rolling over on a full-lock corner. -->
+    <link name="base_link">
+        <visual>
+            <origin xyz="0 0 ${ground_offset + body_height/2}" />
+            <geometry>
+                <box size="${length} ${body_width} ${body_height}" />
+            </geometry>
+            <material name="blue" />
+        </visual>
+        <collision>
+            <origin xyz="0 0 ${ground_offset + body_height/2}" />
+            <geometry>
+                <box size="${length} ${body_width} ${body_height}" />
+            </geometry>
+        </collision>
+        <inertial>
+            <origin xyz="0 0 ${ground_offset + body_height/4}" />
+            <mass value="${base_mass}" />
+            <inertia
+                ixx="${(base_mass/12)*(body_width*body_width + body_height*body_height)}"
+                iyy="${(base_mass/12)*(length*length + body_height*body_height)}"
+                izz="${(base_mass/12)*(length*length + body_width*body_width)}"
+                ixy="0" ixz="0" iyz="0" />
+        </inertial>
+    </link>
+
+    <!-- ══ Rear axle (driven, solid — no differential) ════════════════
+         WRO rules require the driven wheels to be physically coupled,
+         so lazybridge commands both of these at the SAME speed. -->
+    <joint name="base_to_back_left_wheel" type="continuous">
+        <parent link="base_link" />
+        <child link="back_left_wheel" />
+        <origin xyz="${-wheelbase/2} ${track/2} ${wheel_radius}" rpy="${-pi/2} 0 0" />
+        <axis xyz="0 0 1" />
+        <dynamics damping="0.001" friction="0.001" />
+    </joint>
+    <xacro:wheel_link name="back_left_wheel" />
+
+    <joint name="base_to_back_right_wheel" type="continuous">
+        <parent link="base_link" />
+        <child link="back_right_wheel" />
+        <origin xyz="${-wheelbase/2} ${-track/2} ${wheel_radius}" rpy="${pi/2} 0 0" />
+        <axis xyz="0 0 -1" />
+        <dynamics damping="0.001" friction="0.001" />
+    </joint>
+    <xacro:wheel_link name="back_right_wheel" />
+
+    <!-- ══ Front axle (steered, free-rolling) ═════════════════════════
+         The limits are the real servo's ±60° lock (bot.max_steer_deg).
+         lazybridge never commands past them, but the joint enforces it
+         anyway so a bad command cannot bend the model into a shape the
+         real car could not make. -->
+    <joint name="base_to_front_left_hinge" type="revolute">
+        <parent link="base_link" />
+        <child link="front_left_hinge" />
+        <origin xyz="${wheelbase/2} ${track/2 - hinge_inset} ${wheel_radius}" />
+        <axis xyz="0 0 1" />
+        <limit lower="${-max_steer}" upper="${max_steer}" effort="100" velocity="12" />
+        <dynamics damping="0.01" friction="0.01" />
+    </joint>
+    <xacro:steer_hinge_link name="front_left_hinge" />
+
+    <joint name="front_left_hinge_to_wheel" type="continuous">
+        <parent link="front_left_hinge" />
+        <child link="front_left_wheel" />
+        <origin xyz="0 ${hinge_inset} 0" rpy="${-pi/2} 0 0" />
+        <axis xyz="0 0 1" />
+        <dynamics damping="0.001" friction="0.001" />
+    </joint>
+    <xacro:wheel_link name="front_left_wheel" />
+
+    <joint name="base_to_front_right_hinge" type="revolute">
+        <parent link="base_link" />
+        <child link="front_right_hinge" />
+        <origin xyz="${wheelbase/2} ${-(track/2 - hinge_inset)} ${wheel_radius}" />
+        <axis xyz="0 0 1" />
+        <limit lower="${-max_steer}" upper="${max_steer}" effort="100" velocity="12" />
+        <dynamics damping="0.01" friction="0.01" />
+    </joint>
+    <xacro:steer_hinge_link name="front_right_hinge" />
+
+    <joint name="front_right_hinge_to_wheel" type="continuous">
+        <parent link="front_right_hinge" />
+        <child link="front_right_wheel" />
+        <origin xyz="0 ${-hinge_inset} 0" rpy="${pi/2} 0 0" />
+        <axis xyz="0 0 -1" />
+        <dynamics damping="0.001" friction="0.001" />
+    </joint>
+    <xacro:wheel_link name="front_right_wheel" />
+
+</robot>

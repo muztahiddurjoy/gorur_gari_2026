@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<!--
+  RPLIDAR C1 — the car's primary sensor.
+
+  Configured to match what rplidar_ros actually publishes on the real
+  car, because open_round_run and disparity_extender index straight into
+  ranges[] and derive angles from angle_min/angle_increment. If the ray
+  count or the angular span drift from the hardware, every tuned
+  threshold in bot_config.yaml (spike_threshold_m, edge_stride,
+  width_min_cm ...) quietly means something different in the sim.
+
+  Datasheet / driver settings this mirrors:
+    launch arg serial_baudrate  460800
+    launch arg angle_compensate true   -> fixed 720-ray grid
+    launch arg inverted         false  -> standard REP-103 CCW ordering
+    scan rate                   10 Hz
+    range                       0.05 m .. 12 m
+    accuracy                    ~±30 mm  -> gaussian stddev 0.01 m
+
+  frame_id must stay `laser`: it is bot.lidar.frame_id in
+  ros2_ws/config/bot_config.yaml and the frame RViz resolves scans in.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+
+    <!-- bot.lidar.forward_offset_m = 0.0 and yaw_deg = 0.0, so the unit
+         sits over base_link with its 0° ray pointing straight ahead. -->
+    <joint name="base_to_laser" type="fixed">
+        <parent link="base_link" />
+        <child link="laser" />
+        <origin xyz="${lidar_x} 0 ${ground_offset + body_height + lidar_height/2}"
+                rpy="0 0 ${lidar_yaw}" />
+    </joint>
+
+    <link name="laser">
+        <visual>
+            <geometry>
+                <cylinder radius="${lidar_radius}" length="${lidar_height}" />
+            </geometry>
+            <material name="grey" />
+        </visual>
+        <collision>
+            <geometry>
+                <cylinder radius="${lidar_radius}" length="${lidar_height}" />
+            </geometry>
+        </collision>
+        <inertial>
+            <mass value="${laser_mass}" />
+            <inertia
+                ixx="${(laser_mass/12)*(3*lidar_radius*lidar_radius + lidar_height*lidar_height)}"
+                iyy="${(laser_mass/12)*(3*lidar_radius*lidar_radius + lidar_height*lidar_height)}"
+                izz="${(laser_mass/2)*lidar_radius*lidar_radius}"
+                ixy="0" ixz="0" iyz="0" />
+        </inertial>
+    </link>
+
+    <gazebo reference="laser">
+        <!-- Keep `laser` as a real link in the converted SDF instead of
+             letting sdformat fold it into base_link, so the sensor frame
+             and the TF frame carry the same name. -->
+        <disableFixedJointLumping>true</disableFixedJointLumping>
+
+        <sensor name="lidar" type="gpu_lidar">
+            <topic>scan</topic>
+            <ignition_frame_id>laser</ignition_frame_id>
+            <update_rate>10</update_rate>
+            <always_on>1</always_on>
+            <visualize>true</visualize>
+            <lidar>
+                <scan>
+                    <horizontal>
+                        <samples>720</samples>
+                        <resolution>1</resolution>
+                        <min_angle>${-pi}</min_angle>
+                        <max_angle>${pi}</max_angle>
+                    </horizontal>
+                    <vertical>
+                        <samples>1</samples>
+                        <resolution>1</resolution>
+                        <min_angle>0</min_angle>
+                        <max_angle>0</max_angle>
+                    </vertical>
+                </scan>
+                <range>
+                    <min>0.05</min>
+                    <max>12.0</max>
+                    <resolution>0.01</resolution>
+                </range>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.01</stddev>
+                </noise>
+            </lidar>
+        </sensor>
+    </gazebo>
+</robot>
