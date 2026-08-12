@@ -1,4 +1,4 @@
-# rc_car — websocket RC test rig
+# rc_car: websocket RC test rig
 
 Test scaffolding, not flight code. Joins wifi, hosts a mobile controller page on
 `http://gorurgari.local` and drives the car over a websocket. It exists to shake
@@ -33,13 +33,13 @@ Car replies every 100 ms:
 {"rpm":123.4,"ticks":5678,"dir":1,"rssi":-52}
 ```
 
-Nothing is applied straight from the socket callback — that runs on the AsyncTCP
+Nothing is applied straight from the socket callback; that runs on the AsyncTCP
 task. Commands are recorded and `update()` writes the hardware from `loop()`.
 If commands stop for `RC_FAILSAFE_MS` the car brakes and centres itself.
 
 ## Remove it
 
-Dependencies only point inward — `motor_control`, `encoder_reader` and
+Dependencies only point inward: `motor_control`, `encoder_reader` and
 `steering_control` have never heard of this library. To rip it out:
 
 1. `rm -rf firmware/lib/rc_car`

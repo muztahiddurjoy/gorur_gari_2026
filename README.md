@@ -167,12 +167,48 @@ Here's a breakdown of the project folders:
 
 ## Algorithm and Software
 
-ROS 2 underpins our whole control system, letting us split the problem into small nodes that each do one thing. Here is the short version of how a LiDAR scan becomes a steering command:
+ROS 2 underpins our whole control system, letting us split the problem into small nodes that each do one thing. Here is the short version of how sensor data becomes a steering command:
 
-```
-RPLIDAR C1 ──> /scan ──> navigation node ──> /cmd_vel ──> mcu_bridge ──> MAVLink over USB ──> ESP32-S3 ──> motor + servo
-                                ▲
-     encoder + IMU ──> /odom_vector, /heading
+```mermaid
+flowchart LR
+    subgraph Sensors
+        LIDAR[RPLIDAR C1]
+        ENC[Wheel Encoder]
+        IMU[BNO055 IMU]
+        CAM[USB Camera]
+    end
+
+    subgraph Pi["Raspberry Pi 4B — ROS 2"]
+        SCAN["/scan"]
+        NAV["Navigation Node
+        disparity extender +
+        stop cone + speed scaling"]
+        ODOM[vector_odom]
+        VISION["vision_node
+        HSV segmentation"]
+        LAP[lap_counter]
+        CMDVEL["/cmd_vel"]
+        BRIDGE[mcu_bridge]
+    end
+
+    subgraph ESP["ESP32-S3 — Firmware"]
+        MAV[MAVLink parser]
+        MOTOR[Motor PWM]
+        SERVO[Steering Servo]
+    end
+
+    LIDAR --> SCAN --> NAV
+    ENC --> ODOM
+    IMU --> ODOM
+    IMU --> LAP
+    CAM --> VISION
+    VISION -->|"R / G / N on /closest_obj"| NAV
+    ODOM -->|"/odom_vector, /heading"| NAV
+    LAP -->|lap complete| NAV
+    NAV --> CMDVEL --> BRIDGE
+    BRIDGE -->|MAVLink over USB| MAV
+    MAV --> MOTOR
+    MAV --> SERVO
 ```
 
 ### Two brains, one car
@@ -196,8 +232,14 @@ Calibrating this taught us not to trust datasheets. On paper, the encoder gives 
 
 The open round node is a state machine with five states:
 
-```
-STANDBY ──button──> ARMING ──3 s countdown──> RUNNING ──3 laps──> HOMING ──within 5 cm──> FINISHED
+```mermaid
+stateDiagram-v2
+    [*] --> STANDBY
+    STANDBY --> ARMING: start button pressed
+    ARMING --> RUNNING: 3s countdown complete
+    RUNNING --> HOMING: 3 laps complete
+    HOMING --> FINISHED: within 5cm of home
+    FINISHED --> [*]
 ```
 
 - **STANDBY**: Everything is initialized and the LiDAR is spinning, but the node publishes zero velocity. A config flag (`enable_auto_steering`) defaults to *off*, so the car physically cannot move from a bare `ros2 run`. This is a safety habit we picked up after one runaway test.
