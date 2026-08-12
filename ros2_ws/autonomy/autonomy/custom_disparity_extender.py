@@ -54,6 +54,7 @@ from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
+from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -184,6 +185,9 @@ class CustomDisparityExtender(Node):
         self.marker_pub = self.create_publisher(MarkerArray, '/tower_markers', 10)
         self.target_pub = self.create_publisher(MarkerArray, '/custom_disparity/target', 10)
         self.cmd_pub = self.create_publisher(Twist, cmd_topic, 10)
+        self.vision_sub = self.create_subscription(
+            Float32MultiArray, '/closest_obj', self.vision_callback, qos_profile_sensor_data)
+        self.vision_colors = []
 
         # A silent /scan must never leave the MCU on a stale throttle.
         self.create_timer(0.1, self.watchdog)
@@ -198,6 +202,10 @@ class CustomDisparityExtender(Node):
         """Declare with a default and read back the (possibly overridden) value."""
         self.declare_parameter(name, default)
         return self.get_parameter(name).value
+
+    def vision_callback(self, msg: Float32MultiArray):
+        """Update the list of detected pillar colors from the vision node."""
+        self.vision_colors = list(msg.data)
 
     # ──────────────────────────────────────────────────────────────
     # Index <-> angle helpers
@@ -271,6 +279,12 @@ class CustomDisparityExtender(Node):
         objects = [o for o in self.find_objects() if self.is_tower(o)]
         objects.sort(key=lambda o: o["dist"])
         towers = self.deduplicate(objects)
+        
+        for i, t in enumerate(towers):
+            if i < len(self.vision_colors):
+                t["color"] = self.vision_colors[i]
+            else:
+                t["color"] = 0.0
 
         marker_array = MarkerArray()
         for i, o in enumerate(towers):
@@ -281,14 +295,16 @@ class CustomDisparityExtender(Node):
 
         if towers:
             target = towers[0]
+            color_str = "Red" if target.get("color") == 1.0 else "Green" if target.get("color") == 2.0 else "Yellow"
             self.get_logger().info(
                 f"{len(towers)} tower(s); closest at {target['dist']:.2f} m, "
                 f"width {target['width_cm']:.1f} cm, "
-                f"angle {target['angle_deg']:.1f} deg.",
+                f"angle {target['angle_deg']:.1f} deg, "
+                f"color {color_str}",
                 throttle_duration_sec=0.5,
             )
 
-        self.drive_step(msg, raw)
+        self.drive_step(msg, raw, towers)
 
     # ──────────────────────────────────────────────────────────────
     # Navigation: disparity extension over the raw scan
@@ -387,7 +403,7 @@ class CustomDisparityExtender(Node):
         idx = int(cand[np.argmin(np.abs(cand - centre))])
         return idx, float(d[idx])
 
-    def drive_step(self, msg: LaserScan, raw):
+    def drive_step(self, msg: LaserScan, raw, towers=None):
         """One navigation step: nav view -> extend disparities -> pick the
         target ray -> stop-cone gate -> publish speed and steering.
 
@@ -404,16 +420,29 @@ class CustomDisparityExtender(Node):
         if nav is None:
             if self.enable_drive:
                 self.publish_stop('no usable rays in scan')
-            return
-
-        extended = self.extend_disparities(nav)
-        pick = self.pick_target(extended)
-
         # Forward stop-cone: raw nav distances, not extended ones — the
         # extension is for steering choice, physical clearance is physical.
+        # Compute clearance BEFORE trimming the nav array!
         c0 = max(0, self.a2i(-self.stop_cone_half))
         c1 = min(nav.size - 1, self.a2i(self.stop_cone_half))
         clearance = float(nav[c0:c1 + 1].min()) if c1 > c0 else 0.0
+
+        # ── WRO Pillar Trimming ──
+        # Trim the opposite side lidar values to force passing on the correct side
+        if towers:
+            closest_tower = towers[0]
+            tower_idx = self.a2i(math.radians(closest_tower["angle_deg"]))
+            color = closest_tower.get("color", 0.0)
+            
+            if color == 1.0:
+                # RED -> Pass Right. Trim the LEFT side (indices > tower_idx)
+                nav[tower_idx:] = 0.0
+            elif color == 2.0:
+                # GREEN -> Pass Left. Trim the RIGHT side (indices < tower_idx)
+                nav[:tower_idx] = 0.0
+
+        extended = self.extend_disparities(nav)
+        pick = self.pick_target(extended)
 
         target_ang = None
         if pick is not None:
@@ -663,9 +692,23 @@ class CustomDisparityExtender(Node):
         m.scale.y = diameter
         m.scale.z = 0.02             # thin: sits like a flat disk on the ground
 
-        m.color.r = 1.0
-        m.color.g = 0.2
-        m.color.b = 0.2
+        color_code = obj.get("color", 0.0)
+        if color_code == 1.0:
+            # Red
+            m.color.r = 1.0
+            m.color.g = 0.0
+            m.color.b = 0.0
+        elif color_code == 2.0:
+            # Green
+            m.color.r = 0.0
+            m.color.g = 1.0
+            m.color.b = 0.0
+        else:
+            # Yellow (LiDAR only, unknown color)
+            m.color.r = 1.0
+            m.color.g = 1.0
+            m.color.b = 0.0
+            
         m.color.a = 0.8
 
         # Markers persist until overwritten or deleted. A short lifetime means

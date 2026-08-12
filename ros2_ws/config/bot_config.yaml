@@ -96,7 +96,7 @@ custom_disparity_extender:
     # Master switch: the node never publishes /cmd_vel unless this is
     # true. The in-code default is false, so a bare `ros2 run` without
     # this file can never move the car.
-    enable_drive: true
+    enable_drive: false
 
     scan_topic: /scan
     cmd_vel_topic: /cmd_vel

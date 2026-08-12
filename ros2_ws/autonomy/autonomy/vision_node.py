@@ -52,7 +52,7 @@ class VisionNode(Node):
         self.declare_parameter('obstacles_topic', '/closest_obj')
         self.declare_parameter('min_contour_area', 250)
         self.declare_parameter('roi_top_crop', 0.40)
-        self.declare_parameter('publish_debug_image', False)  # Auto-overridden to True when efficient_mode is False
+        self.declare_parameter('publish_debug_image', True)  # Auto-overridden to True when efficient_mode is False
         self.declare_parameter('process_every_n_frames', 2)   # Throttle processing when efficient_mode is True
         self.declare_parameter('processing_width', 320)       # Downscale resolution when efficient_mode is True
         self.declare_parameter('processing_height', 240)
@@ -178,25 +178,14 @@ class VisionNode(Node):
         # Run the standalone OpenCV detection pipeline
         detections = self.detector.detect(cv_image)
 
-        # Convert detection dicts to ROS 2 String message for disparity extender
-        # We assume the largest bounding box (largest width * height) is the closest pillar
-        closest_color_code = 0.0 # 0=None, 1=Red, 2=Green
-        closest_angle = 0.0
-        max_area = 0
-        frame_w = cv_image.shape[1]
+        # Send only the color codes of detected towers, sorted by closest (largest area) to furthest
+        sorted_dets = sorted(detections, key=lambda d: d['bbox'][2] * d['bbox'][3], reverse=True)
         
-        for det in detections:
-            x, y, w, h = det['bbox']
-            area = w * h
-            if area > max_area:
-                max_area = area
-                closest_color_code = 1.0 if det['color'] == 'red' else 2.0
-                closest_angle = ((det['centroid_x'] - frame_w / 2) / (frame_w / 2)) * (self.camera_hfov_deg / 2)
-
         msg_out = Float32MultiArray()
-        msg_out.data = [closest_color_code, float(closest_angle)]
+        msg_out.data = [float(1.0 if det['color'] == 'red' else 2.0) for det in sorted_dets]
+
         self.obstacle_pub.publish(msg_out)
-        self.get_logger().debug(f'Published closest object color code: {closest_color_code}, angle: {closest_angle}')
+        self.get_logger().debug(f'Published tower colors: {msg_out.data}')
 
         # Publish visual debug frame if enabled
         if self.publish_debug and self.bridge:
