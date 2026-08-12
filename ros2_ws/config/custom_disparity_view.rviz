@@ -1,0 +1,100 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Grid1
+        - /Raw LiDAR Scan1
+        - /Detected Towers (Pillars)1
+        - /Target Heading & Sphere1
+        - /Camera Vision Debug1
+      Splitter Ratio: 0.5
+    Tree Height: 557
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Value: true
+      Cell Size: 0.5
+      Color: 160; 160; 160
+      Normal Cell Count: 0
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: laser
+    - Class: rviz_default_plugins/LaserScan
+      Name: Raw LiDAR Scan
+      Value: true
+      Topic:
+        Depth: 5
+        Durability: Volatile
+        History Policy: Keep Last
+        Reliability: Best Effort
+        Value: /scan
+      Color: 220; 220; 220
+      Color Transformer: FlatColor
+      Size (m): 0.03
+      Style: Points
+      Selectable: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Detected Towers (Pillars)
+      Value: true
+      Topic:
+        Depth: 10
+        Durability: Volatile
+        History Policy: Keep Last
+        Reliability: Reliable
+        Value: /tower_markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Target Heading & Sphere
+      Value: true
+      Topic:
+        Depth: 10
+        Durability: Volatile
+        History Policy: Keep Last
+        Reliability: Reliable
+        Value: /custom_disparity/target
+    - Class: rviz_default_plugins/Image
+      Name: Camera Vision Debug
+      Value: true
+      Topic:
+        Depth: 5
+        Durability: Volatile
+        History Policy: Keep Last
+        Reliability: Best Effort
+        Value: /vision/debug_image
+    - Class: rviz_default_plugins/TF
+      Name: TF Tree
+      Value: false
+      Frame Timeout: 15
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+  Global Options:
+    Background Color: 30; 30; 30
+    Fixed Frame: laser
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 4.5
+      Focal Point: 0; 0; 0
+      Name: Current View
+      Pitch: 0.8
+      Value: Orbit (rviz_default)
+      Yaw: 3.14
+Window Geometry:
+  Width: 1440
+  Height: 900
