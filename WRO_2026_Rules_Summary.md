@@ -1,143 +1,155 @@
-# WRO 2026 Future Engineers: Self-Driving Cars — Rulebook & Project Guidelines Summary
+# WRO 2026 Future Engineers: Self-Driving Cars, Rulebook & Project Guidelines Summary
 
-> **Document Summary**: Comprehensive breakdown of the official *World Robot Olympiad (WRO) 2026 Future Engineers — Self-Driving Cars* General Rules (`WRO-2026-Future-Engineers-Self-Driving-Cars-General-Rules (1).pdf`). Tailored for team **gorur_gari_2026** to guide vehicle design, software architecture, competition operations, and GitHub documentation compliance.
-
----
-
-## 1. Overview & Competition Format
-
-- **Category**: WRO Future Engineers — Self-Driving Cars (Age 14–22, born 2004–2012 for the 2026 season).
-- **Team Composition**: 2–3 students + 1 coach (Coach must be $\ge$ 18 years old).
-- **Core Format**: Time Attack autonomous racing (single car on track per attempt).
-- **Total Maximum Score**: **122 Points**
-  - ~75% Vehicle Field Performance (92 pts max: 30 pts Open + 62 pts Obstacle)
-  - ~25% Engineering Journal & GitHub Documentation (30 pts max)
-- **Surprise Rule**: Expected to be introduced for international finals (can modify/add specific challenge rules prior to the event).
+> **Document summary**: A breakdown of the official *World Robot Olympiad (WRO) 2026 Future Engineers, Self-Driving Cars* General Rules (`WRO-2026-Future-Engineers-Self-Driving-Cars-General-Rules (1).pdf`), tailored for team **gorur_gari_2026** to guide vehicle design, software architecture, competition operations, and GitHub documentation compliance.
 
 ---
 
-## 2. Vehicle Regulations & Hardware Constraints (CRITICAL)
+## 1. Overview and competition format
 
-### 📐 Physical Dimensions & Weight
-| Parameter | Maximum Limit | Notes / Enforcement |
+- **Category**: WRO Future Engineers, Self-Driving Cars (Age 14-22, born 2004-2012 for the 2026 season).
+- **Team composition**: 2-3 students plus 1 coach (the coach must be at least 18 years old).
+- **Core format**: Time Attack autonomous racing, one car on the track per attempt.
+- **Total maximum score**: **122 points**
+  - Roughly 75% of that is vehicle field performance (92 pts max: 30 pts Open + 62 pts Obstacle).
+  - Roughly 25% is the Engineering Journal and GitHub documentation (30 pts max).
+- **Surprise rule**: A surprise rule is expected for the international finals. Organizers can modify or add specific challenge rules shortly before the event.
+
+The score is split three ways, so documentation is not an afterthought, it's worth about as much as an entire round:
+
+```mermaid
+pie showData
+    title Maximum score breakdown (122 pts)
+    "Open Challenge" : 30
+    "Obstacle Challenge" : 62
+    "Documentation" : 30
+```
+
+---
+
+## 2. Vehicle regulations and hardware constraints (critical)
+
+### Physical dimensions and weight
+
+| Parameter | Maximum limit | Notes / enforcement |
 | :--- | :--- | :--- |
 | **Length** | **300 mm** | Checked during vehicle check and repair times |
 | **Width** | **200 mm** | Checked during vehicle check and repair times |
 | **Height** | **300 mm** | Checked during vehicle check and repair times |
 | **Weight** | **1.5 kg** | Strictly enforced at vehicle check |
 
-### 🚗 Drivetrain & Kinematics Requirements
-- **Kinematic Structure**: Must be a **4-wheeled vehicle** with **exactly one driving axle** (FWD, RWD, or 4WD) and **one steering actuator** (e.g., servo motor for Ackermann steering).
-- **PROHIBITED Configurations**:
-  - ❌ **NO Differential Drive Robots** (skid-steer / two-wheel drive turning via differential motor speeds).
-  - ❌ **NO Electronic Differentials** (using one motor per side to steer/turn).
-  - ❌ **NO Omni-wheels, Ball Casters, or Spherical Wheels**.
-- **Driving Motors**: Maximum of **2 driving motors**. Both driving motors **must be physically coupled** (directly or via a shared gearbox/axle) to the driven wheels. They cannot be driven independently per wheel.
+### Drivetrain and kinematics requirements
 
-### ⚡ Electronics, Controllers & Wireless Restrictions
-- **Controllers**: Any Single-Board Computer (SBC, e.g., Raspberry Pi 4/5, Jetson Nano) and/or Single-Board Microcontroller (SBM, e.g., Arduino, ESP32, STM32). Multiple controllers allowed.
-- **Sensors**: Unlimited quantity, brand, or type (LiDAR, Depth/RGB Cameras, ToF distance sensors, IMU, Color/Line sensors). Smartphones are allowed as cameras/processors.
-- **Wireless Rule (STRICT)**: ❌ **ALL wireless communication (Wi-Fi, Bluetooth, RF) MUST BE DISABLED** during competition rounds. If built-in on SBC/SBM, it must be turned off in OS/firmware. Wire-only communication between components.
+- **Kinematic structure**: Must be a **4-wheeled vehicle** with **exactly one driving axle** (FWD, RWD, or 4WD) and **one steering actuator** (for example a servo motor driving Ackermann steering).
+- **Prohibited configurations**:
+  - No differential drive robots (skid-steer, or two-wheel drive that turns via differential motor speeds).
+  - No electronic differentials (one motor per side used to steer or turn).
+  - No omni-wheels, ball casters, or spherical wheels.
+- **Driving motors**: Maximum of **2 driving motors**. Both must be physically coupled, directly or via a shared gearbox/axle, to the driven wheels. They cannot be driven independently per wheel.
 
----
+### Electronics, controllers, and wireless restrictions
 
-## 3. Mandatory Start & Control Button Procedure
-
-The vehicle **must** strictly implement the 2-button startup procedure:
-
-```
-[Vehicle Switch OFF] 
-         │
-         ▼  (Turn Main Power Switch ON)
-[Power Turned ON] ───> Entering Waiting State
-         │
-         ▼  (Judge signals "3, 2, 1, GO!" ──> Team presses Start Push Button)
-[Program Execution Starts & Vehicle Moves]
-```
-
-1. **Power Switch**: Exactly **1 main switch** to power on the SBC/microcontroller.
-2. **Start Button**: Exactly **1 physical Push Button** (or single screen touch / EV3 button) to initiate program execution.
-3. **No Interaction**: No sensor calibration, physical pre-adjustments to pass data, switch configuration coding, or wireless triggering is permitted before or during the start.
+- **Controllers**: Any single-board computer (SBC, e.g. Raspberry Pi 4/5, Jetson Nano) and/or single-board microcontroller (SBM, e.g. Arduino, ESP32, STM32). Multiple controllers are allowed.
+- **Sensors**: Unlimited quantity, brand, or type (LiDAR, depth/RGB cameras, ToF distance sensors, IMU, color/line sensors). Smartphones are allowed as cameras or processors.
+- **Wireless rule (strict)**: All wireless communication (Wi-Fi, Bluetooth, RF) must be disabled during competition rounds. If it's built into the SBC/SBM, it has to be turned off in the OS or firmware. Only wired communication between components is allowed.
 
 ---
 
-## 4. Challenge Round Specifications
+## 3. Mandatory start and control button procedure
 
-### 🏁 4.1 Open Challenge (Duration: 3 Minutes)
-- **Goal**: Complete **3 full laps** in the random challenge direction (Clockwise or Counter-Clockwise) as fast as possible and stop autonomously.
-- **Track Layout**:
-  - Distance between walls: Dynamically set per round to **600 mm (narrow)** or **1000 mm (wide)** ($\pm 100\text{ mm}$).
-  - No traffic signs (pillars) present.
-  - **Outer Wall Rule**: The vehicle **must NOT touch the outer boundary wall** during Open Challenge rounds.
-- **Finish Condition**: Stop completely inside the finish section after 3 laps (within 15 seconds), or cross into the corner section past the finish.
+The vehicle must strictly implement the two-button startup procedure:
 
----
-
-### 🚦 4.2 Obstacle Challenge (Duration: 3 Minutes)
-
-- **Goal**: Complete **3 full laps** navigating around red and green traffic sign pillars, then perform **Parallel Parking** in the designated parking lot.
-- **Track Layout**:
-  - Distance between walls: Fixed at **1000 mm** ($\pm 10\text{ mm}$).
-  - Traffic signs: Up to 7 Red and 7 Green parallelepiped pillars ($50 \times 50 \times 100\text{ mm}$).
-- **Traffic Sign Obedience Rules**:
-  - 🔴 **Red Pillar**: Must pass on the **RIGHT** side.
-  - 🟢 **Green Pillar**: Must pass on the **LEFT** side.
-  - *Post-Lap 3 Note*: After completing 3 laps, pillars on the way to the parking lot can be bypassed on either side, provided they are not moved.
-
-```
-       [Green Pillar]                [Red Pillar]
-            │                             │
-    ◀───────┘ (Pass LEFT)         (Pass RIGHT) └───────►
-   [Vehicle]                             [Vehicle]
+```mermaid
+flowchart TD
+    A[Vehicle switch OFF] -->|Turn main power switch ON| B[Power turned ON, entering waiting state]
+    B -->|Judge signals '3, 2, 1, GO!'| C[Team presses Start push button]
+    C --> D[Program execution starts, vehicle moves]
 ```
 
-- **Pillar Displacement & Fault Thresholds**:
-  - **Allowed**: Touching/moving a pillar *as long as* its base projection remains inside the **85 mm diameter circle** around its seat.
-  - ❌ **Round Stop Penalty**: Moving/knocking a pillar completely outside the 85 mm circle immediately terminates the attempt.
-  - ❌ **Wrong-Side Passing Threshold**: Passing a pillar on the wrong side ends the round as soon as the vehicle completely crosses the radial line running from the inner wall to the outer wall at that pillar's location.
-
-- **Parallel Parking Regulations**:
-  - **Parking Lot Location**: Located in the starting section. Width: **20 cm**; Length: **$1.5 \times \text{Vehicle Length}$**.
-  - **Boundaries**: Bounded by two magenta wooden blocks ($200 \times 20 \times 100\text{ mm}$). Touching either magenta block immediately terminates the round with zero parking points.
-  - **Fully Parked Criteria**: Vehicle projection completely inside the parking box **AND** parallel to the outer wall (wheel distance difference to outer wall $\le 2\text{ cm}$).
-  - **Start Bonus**: Starting from inside the parking lot scores additional bonus points (awarded only if at least 1 full lap is completed).
+1. **Power switch**: Exactly **1 main switch** to power on the SBC/microcontroller.
+2. **Start button**: Exactly **1 physical push button** (or a single screen touch / EV3 button) to start program execution.
+3. **No interaction**: No sensor calibration, physical pre-adjustments to pass data, switch-configuration coding, or wireless triggering is permitted before or during the start.
 
 ---
 
-## 5. Repairing Actions & Penalties
+## 4. Challenge round specifications
 
-- **Permission**: Granted **once per round** only if the vehicle is completely stopped (stuck against wall, electronic glitch, etc.). Cannot be requested during the 3rd lap or while moving ($>50\text{ mm}$ in 5 seconds).
-- **Execution**: Vehicle is removed, repaired (mechanically/electronically), placed in the center of the same section, powered ON, and restarted via the Start button.
-- **Penalty**: **The total score for that round is divided by 2** (timer continues running during repairs). No code uploading or data input is allowed during repair.
+### 4.1 Open Challenge (duration: 3 minutes)
+
+- **Goal**: Complete **3 full laps** in the randomly chosen challenge direction (clockwise or counter-clockwise) as fast as possible, then stop autonomously.
+- **Track layout**:
+  - Distance between walls is set per round to either **600 mm (narrow)** or **1000 mm (wide)**, ±100 mm.
+  - No traffic signs (pillars) are present.
+  - **Outer wall rule**: The vehicle must not touch the outer boundary wall during Open Challenge rounds.
+- **Finish condition**: Stop completely inside the finish section within 15 seconds of completing 3 laps, or cross into the corner section past the finish.
 
 ---
 
-## 6. Scoring Matrix & Ranking Hierarchy
+### 4.2 Obstacle Challenge (duration: 3 minutes)
 
-### 📊 Point Breakdown
-| Category | Task / Milestone | Points | Max Total |
+- **Goal**: Complete **3 full laps** navigating around red and green traffic sign pillars, then perform **parallel parking** in the designated parking lot.
+- **Track layout**:
+  - Distance between walls is fixed at **1000 mm**, ±10 mm.
+  - Traffic signs: up to 7 red and 7 green parallelepiped pillars (50 x 50 x 100 mm).
+- **Traffic sign obedience rules**:
+  - **Red pillar**: must pass on the **right** side.
+  - **Green pillar**: must pass on the **left** side.
+  - *After lap 3*: once the 3 laps are complete, pillars on the way to the parking lot can be bypassed on either side, as long as they haven't been moved.
+
+```mermaid
+flowchart LR
+    G[Green pillar] -->|vehicle passes on the LEFT| V1((Vehicle))
+    R[Red pillar] -->|vehicle passes on the RIGHT| V2((Vehicle))
+```
+
+- **Pillar displacement and fault thresholds**:
+  - **Allowed**: touching or moving a pillar, as long as its base projection stays inside the **85 mm diameter circle** around its seat.
+  - **Round stop penalty**: moving or knocking a pillar completely outside that 85 mm circle immediately ends the attempt.
+  - **Wrong-side passing**: passing a pillar on the wrong side ends the round as soon as the vehicle fully crosses the radial line running from the inner wall to the outer wall at that pillar's location.
+
+- **Parallel parking regulations**:
+  - **Location**: in the starting section. Width **20 cm**, length **1.5x vehicle length**.
+  - **Boundaries**: two magenta wooden blocks (200 x 20 x 100 mm). Touching either block immediately ends the round with zero parking points.
+  - **Fully parked criteria**: the vehicle's projection is completely inside the parking box AND parallel to the outer wall (wheel-distance difference to the outer wall ≤ 2 cm).
+  - **Start bonus**: starting from inside the parking lot earns bonus points, but only if at least 1 full lap is completed.
+
+---
+
+## 5. Repair actions and penalties
+
+- **Permission**: Granted **once per round**, only if the vehicle is completely stopped (stuck against a wall, electronic glitch, etc). It cannot be requested during the 3rd lap or while the vehicle is moving (more than 50 mm in 5 seconds).
+- **Execution**: The vehicle is removed, repaired (mechanically or electronically), placed back in the center of the same section, powered on, and restarted via the Start button.
+- **Penalty**: the total score for that round is divided by 2, and the timer keeps running during the repair. No code uploading or data input is allowed while repairing.
+
+---
+
+## 6. Scoring matrix and ranking hierarchy
+
+### Point breakdown
+
+| Category | Task / milestone | Points | Max total |
 | :--- | :--- | :---: | :---: |
 | **Open Challenge** | Laps passed successfully (8 sections / lap) | 1 pt / section | 24 pts |
 | | Finish stop in start section after 3 laps | 3 pts | 3 pts |
 | | Driving out of start section in round direction | 1 pt / lap | 3 pts |
-| | **Open Challenge Subtotal** | | **30 pts** |
-| **Obstacle Challenge** | Base lap driving & section passage | Same as Open | 30 pts |
+| | **Open Challenge subtotal** | | **30 pts** |
+| **Obstacle Challenge** | Base lap driving and section passage | Same as Open | 30 pts |
 | | Traffic signs not moved during 3 laps | 10 pts | 10 pts |
-| | (Or traffic signs moved, but 3 laps completed) | (8 pts) | (8 pts) |
+| | (or traffic signs moved, but 3 laps completed) | (8 pts) | (8 pts) |
 | | Start from parking lot bonus (min 1 lap completed) | 7 pts | 7 pts |
-| | Parallel Parking — Fully inside & parallel ($\le 2\text{ cm}$) | 15 pts | 15 pts |
-| | (Parallel Parking — Partial / non-parallel) | (7 pts) | (7 pts) |
-| | **Obstacle Challenge Subtotal** | | **62 pts** |
-| **Documentation** | Engineering Journal + GitHub Repo (Appendix C) | Rubric | **30 pts** |
-| **GRAND TOTAL** | | | **122 pts** |
+| | Parallel parking, fully inside and parallel (≤ 2 cm) | 15 pts | 15 pts |
+| | (parallel parking, partial / non-parallel) | (7 pts) | (7 pts) |
+| | **Obstacle Challenge subtotal** | | **62 pts** |
+| **Documentation** | Engineering Journal + GitHub repo (Appendix C) | Rubric | **30 pts** |
+| **Grand total** | | | **122 pts** |
 
-### 🏆 Tie-Breaking Criteria (Priority Order)
-1. **Total Points** (Best Open + Best Obstacle + Documentation)
+### Tie-breaking criteria (priority order)
+
+1. **Total points** (best Open + best Obstacle + documentation)
 2. Points of the **best Obstacle Challenge round**
 3. Time of the **best Obstacle Challenge round**
 4. Points of the 2nd-best Obstacle Challenge round
 5. Time of the 2nd-best Obstacle Challenge round
-6. Points for **Engineering Journal & Documentation**
+6. Points for **Engineering Journal and documentation**
 7. Points of the best Open Challenge round
 8. Points of the 2nd-best Open Challenge round
 9. Time of the best Open Challenge round
@@ -145,58 +157,68 @@ The vehicle **must** strictly implement the 2-button startup procedure:
 
 ---
 
-## 7. Documentation & GitHub Submission Guidelines (30 Points)
+## 7. Documentation and GitHub submission guidelines (30 points)
 
-Documentation MUST be submitted via a public GitHub repository link **no later than 3 weeks before the competition** and remain public for **at least 12 months**.
+Documentation must be submitted via a public GitHub repository link no later than **3 weeks before the competition**, and must remain public for **at least 12 months**.
 
-### 📅 Mandatory Commit History Schedule
-- **Commit 1**: $\ge$ **2 months** before competition (Must contain $\ge \frac{1}{5}$ of final code).
-- **Commit 2**: $\ge$ **1 month** before competition.
-- **Commit 3**: $\ge$ **2 weeks** before competition (**Primary evaluation commit** for scoring).
+```mermaid
+timeline
+    title Commit and submission timeline (counting back from competition day)
+    2 months before : Commit 1 due (>= 1/5 of final code)
+    1 month before : Commit 2 due
+    3 weeks before : GitHub link submitted, repo set public
+    2 weeks before : Commit 3 due (primary evaluation commit)
+```
 
-### 📝 README.md Requirements
+### Mandatory commit history schedule
+
+- **Commit 1**: at least 2 months before the competition. Must contain at least 1/5 (20%) of the final code.
+- **Commit 2**: at least 1 month before the competition.
+- **Commit 3**: at least 2 weeks before the competition. This is the **primary evaluation commit** judges use for scoring; changes made after this point might not be scored.
+
+### README.md requirements
+
 - **Language**: English only.
-- **Minimum Length**: **5,000 characters**.
-- **Content**: Component overview, hardware/software interaction, detailed build/compile/upload instructions, 3D CAD files, and wiring diagrams.
+- **Minimum length**: **5,000 characters**.
+- **Content**: component overview, hardware/software interaction, detailed build/compile/upload instructions, 3D CAD files, and wiring diagrams.
 
-### 📋 Evaluation Rubric Breakdown (Appendix C — 5 Criteria @ 0, 2, 4, 6 pts each)
-1. **Mobility & Mechanical Design (6 pts)**:
-   - Torque/speed calculations, chassis selection tradeoffs, steering linkage design, CAD diagrams, test/iteration logs.
-2. **Power & Sensor Architecture (6 pts)**:
-   - Complete power budget, current draw calculations, voltage regulation, sensor placement justification (FOV, glare/shadow mitigation), wiring diagrams, calibration procedures.
-3. **Software Architecture & Obstacle Strategy (6 pts)**:
-   - State machine diagrams / flowcharts, algorithm justification (PID control, LiDAR disparity extender, vision pipelines), edge-case handling, performance tuning metrics.
-4. **Systems Thinking & Engineering Decisions (6 pts)**:
-   - Explicit project constraints, trade-off analysis ("Why we chose X over Y"), system failure modes and mitigations, versioning progression (v1 $\rightarrow$ v2 $\rightarrow$ v3).
-5. **Reproducibility & GitHub Quality (6 pts)**:
-   - Professional repository layout, clean commit messages, code comments, complete CAD/STL/schematics, step-by-step reproduction guide.
+### Evaluation rubric breakdown (Appendix C, 5 criteria at 0/2/4/6 pts each)
+
+1. **Mobility and mechanical design (6 pts)**: torque/speed calculations, chassis selection tradeoffs, steering linkage design, CAD diagrams, test/iteration logs.
+2. **Power and sensor architecture (6 pts)**: complete power budget, current draw calculations, voltage regulation, sensor placement justification (FOV, glare/shadow mitigation), wiring diagrams, calibration procedures.
+3. **Software architecture and obstacle strategy (6 pts)**: state machine diagrams/flowcharts, algorithm justification (PID control, LiDAR disparity extender, vision pipelines), edge-case handling, performance tuning metrics.
+4. **Systems thinking and engineering decisions (6 pts)**: explicit project constraints, tradeoff analysis ("why we chose X over Y"), system failure modes and mitigations, versioning progression (v1 to v2 to v3).
+5. **Reproducibility and GitHub quality (6 pts)**: professional repository layout, clean commit messages, code comments, complete CAD/STL/schematics, step-by-step reproduction guide.
 
 ---
 
-## 8. Actionable Technical Directives for `gorur_gari_2026`
+## 8. Actionable technical directives for `gorur_gari_2026`
 
-To ensure 100% compliance and maximum scoring efficiency for the `gorur_gari_2026` ROS 2 stack:
+To stay fully compliant and score well with the `gorur_gari_2026` ROS 2 stack:
 
-### 🛠️ Hardware & Mechanics
-- [ ] **Verify Drivetrain Kinematics**: Ensure front-wheel steering (servo) + single rear/front drive axle (or center diff 4WD). **Eliminate any differential/skid-steering logic**.
-- [ ] **Dimensions & Weight Verification**: Ensure robot dimensions are well under $300 \times 200 \times 300\text{ mm}$ and weight $< 1.5\text{ kg}$.
-- [ ] **Dual Control Interfaces**: Confirm 1 hard power switch + 1 dedicated Start Push Button connected to GPIO/microcontroller.
-- [ ] **Wireless Disable**: Add shell/OS scripts to disable Wi-Fi and Bluetooth on Raspberry Pi / Jetson upon boot during competition runs.
+### Hardware and mechanics
 
-### 💻 Software & Navigation Stack (ROS 2)
-- [ ] **Disparity Extender / Wall Follower (Open Challenge)**:
-  - Optimize dynamic track width handling ($600\text{ mm}$ vs $1000\text{ mm}$).
+- [ ] **Verify drivetrain kinematics**: front-wheel steering (servo) plus a single rear/front drive axle (or center-diff 4WD). Eliminate any differential/skid-steering logic.
+- [ ] **Dimensions and weight verification**: keep the robot comfortably under 300 x 200 x 300 mm and under 1.5 kg.
+- [ ] **Dual control interfaces**: confirm 1 hard power switch plus 1 dedicated Start push button, wired to GPIO/microcontroller.
+- [ ] **Wireless disable**: add shell/OS scripts that disable Wi-Fi and Bluetooth on the Raspberry Pi/Jetson at boot, for competition runs.
+
+### Software and navigation stack (ROS 2)
+
+- [ ] **Disparity extender / wall follower (Open Challenge)**:
+  - Optimize handling of the dynamic track width (600 mm vs 1000 mm).
   - Implement strict outer-wall avoidance logic (zero outer-wall touching allowed).
-- [ ] **Vision / LiDAR Pillar Classifier (Obstacle Challenge)**:
-  - Robust HSV / Color detection for **Red** (pass RIGHT) and **Green** (pass LEFT) pillars.
-  - Implement radial threshold monitoring to prevent crossing the pillar radius line on the wrong side.
-  - Track pillar position vs 85 mm safety margin to avoid knocking pillars out of bounds.
-- [ ] **Parallel Parking State Machine**:
-  - Implement precision odometry / ToF-guided parallel parking controller.
-  - Ensure wall clearance distance is measured for $< 2\text{ cm}$ parallel alignment.
-  - Avoid touching magenta boundary blocks.
+- [ ] **Vision / LiDAR pillar classifier (Obstacle Challenge)**:
+  - Robust HSV/color detection for red (pass right) and green (pass left) pillars.
+  - Implement radial threshold monitoring to prevent crossing the pillar's radius line on the wrong side.
+  - Track pillar position against the 85 mm safety margin to avoid knocking pillars out of bounds.
+- [ ] **Parallel parking state machine**:
+  - Implement a precision odometry / ToF-guided parallel parking controller.
+  - Measure wall clearance distance to keep parallel alignment under 2 cm.
+  - Avoid touching the magenta boundary blocks.
 
-### 📄 GitHub & Documentation Workflow
-- [ ] Maintain consistent Git commit history adhering to the 2-month, 1-month, and 2-week milestones.
-- [ ] Draft a comprehensive `README.md` ($\ge 5000$ chars) detailing ROS 2 nodes, wiring schematics, power budgets, and mechanical design rationale.
-- [ ] Maintain an Engineering Journal PDF detailing test iterations and tradeoffs.
+### GitHub and documentation workflow
+
+- [ ] Maintain a consistent Git commit history that hits the 2-month, 1-month, and 2-week milestones.
+- [ ] Draft a comprehensive `README.md` (at least 5,000 characters) covering ROS 2 nodes, wiring schematics, power budgets, and mechanical design rationale.
+- [ ] Maintain an Engineering Journal PDF documenting test iterations and tradeoffs.

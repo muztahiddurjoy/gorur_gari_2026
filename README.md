@@ -76,8 +76,8 @@ This repository includes all the files, designs, and code for our WRO 2026 robot
 
 Here's a breakdown of the project folders:
 
-- **[`firmware`](./firmware/)**: PlatformIO project for the ESP32-S3. Handles the motor, steering servo, encoder, IMU, OLED display, and the MAVLink serial link — everything that has to happen in real time.
-- **[`ros2_ws`](./ros2_ws/)**: The ROS 2 workspace that runs on the Raspberry Pi. Contains our three packages — `controls`, `autonomy`, and `sensors_processing` — plus launch files and tuning configs.
+- **[`firmware`](./firmware/)**: PlatformIO project for the ESP32-S3. Handles the motor, steering servo, encoder, IMU, OLED display, and the MAVLink serial link: everything that has to happen in real time.
+- **[`ros2_ws`](./ros2_ws/)**: The ROS 2 workspace that runs on the Raspberry Pi. Contains our three packages (`controls`, `autonomy`, and `sensors_processing`) plus launch files and tuning configs.
 - **[`mav_msg`](./mav_msg/)**: The MAVLink message definitions (XML) shared between the Pi and the microcontroller, so both sides always agree on what the bytes mean.
 - **[`circuit_diagram`](./circuit_diagram/)**: Wiring diagrams and the ESP32 pin map, plus the script that generates them.
 - **[`QUICKSTART.md`](./QUICKSTART.md)**: Copy-paste commands for running and debugging each part of the stack.
@@ -178,7 +178,7 @@ flowchart LR
         CAM[USB Camera]
     end
 
-    subgraph Pi["Raspberry Pi 4B — ROS 2"]
+    subgraph Pi["Raspberry Pi 4B (ROS 2)"]
         SCAN["/scan"]
         NAV["Navigation Node
         disparity extender +
@@ -191,7 +191,7 @@ flowchart LR
         BRIDGE[mcu_bridge]
     end
 
-    subgraph ESP["ESP32-S3 — Firmware"]
+    subgraph ESP["ESP32-S3 (Firmware)"]
         MAV[MAVLink parser]
         MOTOR[Motor PWM]
         SERVO[Steering Servo]
@@ -213,7 +213,7 @@ flowchart LR
 
 ### Two brains, one car
 
-The Raspberry Pi and the ESP32-S3 talk over a native USB serial link using the **MAVLink 2** protocol, with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked — until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
+The Raspberry Pi and the ESP32-S3 talk over a native USB serial link using the **MAVLink 2** protocol, with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked fine until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
 
 One hard-earned lesson lives in [`platformio.ini`](./firmware/platformio.ini): the Arduino core on the ESP32 logs I2C errors to the same serial port the MAVLink frames go out on. A single stray log line in the middle of a packet was enough to desync the parser on the Pi side, so the competition build silences the core logs entirely and sends our own debug output to a separate UART.
 
@@ -263,7 +263,7 @@ Two extra guards sit on top:
 
 The traffic pillars are only 5 cm wide, which makes them a distinctive shape in a laser scan. The detector looks for pairs of edges (sudden range jumps) and measures the width of the segment between them. Anything between **3 cm and 25 cm** wide, closer than 2 m, is a pillar candidate. Beyond 2 m, a 5 cm pillar is hit by so few rays it cannot be measured reliably, so we don't try.
 
-The LiDAR tells us *where* the pillar is, but not its color. That's the camera's whole job: `vision_node` segments the image in HSV space and publishes a single character — `R`, `G`, or `N` for nothing — on `/closest_obj`. The navigation node combines the two: red pillar means pass on the right, green means pass on the left. Tiny blobs are ignored so a red banner in the audience cannot steer the car.
+The LiDAR tells us *where* the pillar is, but not its color. That's the camera's whole job: `vision_node` segments the image in HSV space and publishes a single character (`R`, `G`, or `N` for nothing) on `/closest_obj`. The navigation node combines the two: red pillar means pass on the right, green means pass on the left. Tiny blobs are ignored so a red banner in the audience cannot steer the car.
 
 Color thresholds shift with venue lighting, so we wrote [`tune_hsv.py`](./ros2_ws/autonomy/autonomy/tune_hsv.py), an interactive tool with sliders that lets us re-tune the HSV ranges at the venue in a couple of minutes.
 
@@ -295,7 +295,7 @@ The car is a four-wheeled, rear-wheel-drive design with front-wheel Ackermann st
 
 A single DC gear motor drives the rear axle. We drive it through the TB6612FNG at a **20 kHz PWM frequency** (above the audible range), which got rid of the annoying motor whine at low speeds and noticeably smoothed out low-speed torque, which matters for the parking maneuver.
 
-The quadrature encoder sits on the motor shaft, before the gearbox, so it gets multiple counts per degree of wheel rotation — plenty of resolution for odometry.
+The quadrature encoder sits on the motor shaft, before the gearbox, so it gets multiple counts per degree of wheel rotation, plenty of resolution for odometry.
 
 One detail worth confessing: the encoder's A and B channels are wired *opposite* to the board's silkscreen. On purpose. Wired "correctly", the decoder counted down when the car drove forward, which flipped the sign of every distance in the odometry. Swapping the pins in [`pins.h`](./firmware/include/pins.h) was cleaner than negating values in three different places.
 
@@ -303,7 +303,7 @@ One detail worth confessing: the encoder's A and B channels are wired *opposite*
 
 A metal-gear micro servo drives the front steering linkage, with a physical lock of about **60 degrees to each side**. The firmware treats 90 degrees as straight ahead. The ROS side maps the normalized steering command onto that range. Software clamps guarantee the servo can never be commanded past its mechanical limits, no matter what the navigation node asks for.
 
-The drive wheel diameter is deliberately a launch parameter rather than a constant — we measure the wheels before a run, because a millimeter of error in diameter compounds into centimeters of odometry error over three laps.
+The drive wheel diameter is deliberately a launch parameter rather than a constant: we measure the wheels before a run, because a millimeter of error in diameter compounds into centimeters of odometry error over three laps.
 
 ## Power and Sense Management
 
@@ -311,13 +311,14 @@ The drive wheel diameter is deliberately a launch parameter rather than a consta
 
 Everything runs off a single LiPo battery, split into separate rails so the noisy loads cannot brown out the sensitive ones:
 
-```
-[ LiPo Battery ]
-      ├──> TB6612FNG motor driver ──> drive motor
-      └──> 5V step-down converter (UBEC)
-                ├──> Raspberry Pi 4B ──USB──> RPLIDAR C1
-                ├──> ESP32-S3 + sensors + OLED
-                └──> steering servo
+```mermaid
+flowchart LR
+    BATT[LiPo Battery] --> TB6612[TB6612FNG motor driver] --> MOTOR[Drive motor]
+    BATT --> UBEC[5V step-down converter, UBEC]
+    UBEC --> PI[Raspberry Pi 4B]
+    PI -->|USB| LIDAR[RPLIDAR C1]
+    UBEC --> ESP[ESP32-S3 + sensors + OLED]
+    UBEC --> SERVO[Steering servo]
 ```
 
 The important decision here: the drive motor draws directly from the battery through its own driver, while everything digital lives behind the regulator. When the motor stalls or the servo hits its end stop, the current spike stays on the battery side of the converter.
@@ -363,6 +364,15 @@ We spent a lot of time on the boring failure cases, because a robot that works 9
 
 You need Ubuntu 22.04 with **ROS 2 Humble**, plus **PlatformIO** for the firmware.
 
+```mermaid
+flowchart TD
+    A[Clone the repository] --> B[Flash the ESP32-S3 with PlatformIO]
+    B --> C[Build the ROS 2 workspace with colcon]
+    C --> D[Source install/setup.bash]
+    D --> E[Launch a round]
+    E --> F[Car waits in standby for the start button]
+```
+
 **1. Clone the repository**
 
 ```bash
@@ -396,7 +406,7 @@ ros2 launch launch/gorurgari_open_round.launch.py
 ros2 launch launch/gorurgari_obstacle_round.launch.py
 ```
 
-After launch the car sits in standby until the start button on the car is pressed. All tuning lives in [`ros2_ws/config/bot_config.yaml`](./ros2_ws/config/bot_config.yaml) — one file, commented, no magic numbers buried in code. For bench testing, every driving node has an enable flag that defaults to off, so nothing moves unless you explicitly ask it to. More copy-paste commands for individual nodes and debugging tools are in [`QUICKSTART.md`](./QUICKSTART.md).
+After launch the car sits in standby until the start button on the car is pressed. All tuning lives in [`ros2_ws/config/bot_config.yaml`](./ros2_ws/config/bot_config.yaml): one file, commented, no magic numbers buried in code. For bench testing, every driving node has an enable flag that defaults to off, so nothing moves unless you explicitly ask it to. More copy-paste commands for individual nodes and debugging tools are in [`QUICKSTART.md`](./QUICKSTART.md).
 
 ---
 

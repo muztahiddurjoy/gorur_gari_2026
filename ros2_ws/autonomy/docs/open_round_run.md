@@ -1,19 +1,26 @@
 # The Open Round Run Node, Explained
 
-*A part-by-part walkthrough of [`autonomy/open_round_run.py`](../autonomy/open_round_run.py) for anyone with basic Python knowledge and beginner-level ROS 2 knowledge. Every code block is covered — what it does, and more importantly, **why** it is written that way.*
+*A part-by-part walkthrough of [`autonomy/open_round_run.py`](../autonomy/open_round_run.py) for anyone with basic Python knowledge and beginner-level ROS 2 knowledge. Every code block is covered: what it does, and more importantly, **why** it is written that way.*
 
 This node drives the WRO **open round** (the mat with walls but *no* pillars) from button press to final park, in three phases:
 
-1. **Lap phase** — find the most open direction in the LiDAR scan using circle-cast ray marching (the same core algorithm as `disparity_extender.py`), and trim that heading with a **wall hugging** controller so the car holds a steady distance from the outer wall on straights.
-2. **Lap counting** — listen to `/lap_count` (published by the `lap_counter` node, which counts corners from the compass) until 3 laps are done.
-3. **Homing phase** — using the position vector from `vector_odom` (`/odom_vector`) and the compass heading (`/heading`), drive back to the exact spot the run started from and stop within a **5 cm radius** of it — reversing if the start point is behind the car.
+1. **Lap phase**: find the most open direction in the LiDAR scan using circle-cast ray marching (the same core algorithm as `disparity_extender.py`), and trim that heading with a **wall hugging** controller so the car holds a steady distance from the outer wall on straights.
+2. **Lap counting**: listen to `/lap_count` (published by the `lap_counter` node, which counts corners from the compass) until 3 laps are done.
+3. **Homing phase**: using the position vector from `vector_odom` (`/odom_vector`) and the compass heading (`/heading`), drive back to the exact spot the run started from and stop within a **5 cm radius** of it, reversing if the start point is behind the car.
+
+```mermaid
+flowchart LR
+    A([Button press]) --> B["Lap phase:\nopen-space steering + wall hugging"]
+    B -->|3 laps counted| C["Homing phase:\ndrive back to start using\nvector_odom + heading"]
+    C -->|within 5 cm, or timed out| D([Final park])
+```
 
 On top of that sit the same safety layers the obstacle-round node has (start button gate, LiDAR watchdog, lap-count reset, all-blocked stop), plus a set of homing-specific guards (stale odometry, blocked path, overshoot hunting, timeout).
 
 ## How to run it
 
 ```bash
-# From the workspace root — the config file supplies all tuning AND flips
+# From the workspace root. The config file supplies all tuning and flips
 # the master enable switch on:
 ros2 run autonomy open_round_run --ros-args \
     --params-file config/bot_config.yaml
@@ -21,7 +28,7 @@ ros2 run autonomy open_round_run --ros-args \
 
 Without the params file the node still runs, but `enable_auto_steering` defaults to `false`, so the car can never move from a bare `ros2 run`. That is deliberate: the whole pipeline (markers, debug scan, state logs) works in this mode, which is the safe way to test on a bench.
 
-The node expects the rest of the open-round stack to be up (same nodes as `gorurgari_open_round.launch.py`): `mcu_bridge`, `vector_odom`, `lap_counter`, and the LiDAR driver. **Do not run it together with `disparity_extender` or `custom_disparity_extender`** — all three publish `/cmd_vel` and would fight over the wheel.
+The node expects the rest of the open-round stack to be up (same nodes as `gorurgari_open_round.launch.py`): `mcu_bridge`, `vector_odom`, `lap_counter`, and the LiDAR driver. **Do not run it together with `disparity_extender` or `custom_disparity_extender`**: all three publish `/cmd_vel` and would fight over the wheel.
 
 ## Topics at a glance
 
@@ -42,47 +49,48 @@ The node expects the rest of the open-round stack to be up (same nodes as `gorur
 
 Everything the node does hangs off one string variable, `self.run_state`:
 
-```
-STANDBY ──button press──► ARMING ──start_delay_sec──► RUNNING
-                                                         │
-                                       lap_count ≥ 3 ────┘
-                                                         ▼
-                                    FINISHED ◄──────── HOMING
-                                    (inside 5 cm, or gave up safely)
+```mermaid
+stateDiagram-v2
+    [*] --> STANDBY
+    STANDBY --> ARMING: button press
+    ARMING --> RUNNING: start_delay_sec elapsed
+    RUNNING --> HOMING: lap_count >= 3
+    HOMING --> FINISHED: inside 5 cm, or gave up safely
+    FINISHED --> [*]
 ```
 
-- **STANDBY** — powered up, processing scans, holding the car at zero. Waiting for the button.
-- **ARMING** — button seen; counting down `start_delay_sec` (3 s), one log line per second, matching the MCU's LED blinks.
-- **RUNNING** — the lap phase: open-space steering + wall hugging, until 3 laps.
-- **HOMING** — laps done: drive back to the captured start point.
-- **FINISHED** — parked. Zero commands are republished slowly forever so the MCU can never latch a stale throttle.
+- **STANDBY**: powered up, processing scans, holding the car at zero. Waiting for the button.
+- **ARMING**: button seen; counting down `start_delay_sec` (3 s), one log line per second, matching the MCU's LED blinks.
+- **RUNNING**: the lap phase, open-space steering plus wall hugging, until 3 laps.
+- **HOMING**: laps done, drive back to the captured start point.
+- **FINISHED**: parked. Zero commands are republished slowly forever so the MCU can never latch a stale throttle.
 
-There is no transition *out* of FINISHED — the run is over; restart the node for another run.
+There is no transition *out* of FINISHED. The run is over; restart the node for another run.
 
 ## Reading guide
 
 The parts follow the file top to bottom, but each is self-contained enough to read alone:
 
-- **Part 1 — Module header, constants and helper functions.** The docstring, the state names, the unit table, and the five small math helpers everything else leans on.
-- **Part 2 — `__init__`: every knob explained.** All ~50 parameters in their groups, the fail-fast validation, the state variables, and the wiring (subscriptions, publishers, three timers).
-- **Part 3 — The input callbacks.** How `/odom_vector`, `/heading`, `/lap_count`, `/button_status` and `/scan` each get turned into clean internal state — including the compass-to-yaw conversion and the automatic wall-side latch.
-- **Part 4 — The start gate and state plumbing.** `update_run_state`, `begin_running`, `capture_home`, and the two stop publishers.
-- **Part 5 — The control loop.** The 40 Hz heartbeat: the exact order of its safety gates and how it dispatches to the lap phase or the homing phase.
-- **Part 6 — Homing.** The star of this node: the vector math, the reverse gear with hysteresis, the sign flip that makes reversing steer correctly, and every guard around it.
-- **Part 7 — The LiDAR toolbox.** Index↔angle helpers, ray validity, dropout repair (`fix_missing`), and the circle-cast core (`hit_circle`, `marching`, `get_max_d`).
-- **Part 8 — Wall hugging.** How the wall distance is measured robustly and turned into a small, safe heading trim.
-- **Part 9 — The safety senses.** `danger_sense` (sideways emergency steer) and `update_clearances` (the forward/rear cones homing relies on).
-- **Part 10 — The LiDAR pipeline.** `calc_lidar_step`, the 20 Hz function that strings Parts 7–9 together into a steering decision.
-- **Part 11 — Visualization and `main()`.**
-- **Part 12 — The edge-case catalogue, how the node was verified, and tuning notes.**
+- **Part 1, module header, constants and helper functions.** The docstring, the state names, the unit table, and the five small math helpers everything else leans on.
+- **Part 2, `__init__`: every knob explained.** All ~50 parameters in their groups, the fail-fast validation, the state variables, and the wiring (subscriptions, publishers, three timers).
+- **Part 3, the input callbacks.** How `/odom_vector`, `/heading`, `/lap_count`, `/button_status` and `/scan` each get turned into clean internal state, including the compass-to-yaw conversion and the automatic wall-side latch.
+- **Part 4, the start gate and state plumbing.** `update_run_state`, `begin_running`, `capture_home`, and the two stop publishers.
+- **Part 5, the control loop.** The 40 Hz heartbeat: the exact order of its safety gates and how it dispatches to the lap phase or the homing phase.
+- **Part 6, homing.** The star of this node: the vector math, the reverse gear with hysteresis, the sign flip that makes reversing steer correctly, and every guard around it.
+- **Part 7, the LiDAR toolbox.** Index-to-angle helpers, ray validity, dropout repair (`fix_missing`), and the circle-cast core (`hit_circle`, `marching`, `get_max_d`).
+- **Part 8, wall hugging.** How the wall distance is measured robustly and turned into a small, safe heading trim.
+- **Part 9, the safety senses.** `danger_sense` (sideways emergency steer) and `update_clearances` (the forward/rear cones homing relies on).
+- **Part 10, the LiDAR pipeline.** `calc_lidar_step`, the 20 Hz function that strings Parts 7-9 together into a steering decision.
+- **Part 11, visualization and `main()`.**
+- **Part 12, the edge-case catalogue, how the node was verified, and tuning notes.**
 
 ---
 
-## Part 1 — Module header, constants and helper functions
+## Part 1: Module header, constants and helper functions
 
 ### The module docstring
 
-The file opens with a long docstring that is an honest summary of everything below: the three jobs (open space detection, wall hugging, vector-odom homing), the state machine, and a bullet list of every edge case handled. When the code and this document disagree with the docstring, trust the code — but they were written together, so they shouldn't.
+The file opens with a long docstring that is an honest summary of everything below: the three jobs (open space detection, wall hugging, vector-odom homing), the state machine, and a bullet list of every edge case handled. When the code and this document disagree with the docstring, trust the code. They were written together, though, so they shouldn't.
 
 ### The imports
 
@@ -111,7 +119,7 @@ STATE_HOMING = 'HOMING'      # laps done, driving back to the start point
 STATE_FINISHED = 'FINISHED'  # parked inside home_radius_m (or gave up), holding zero
 ```
 
-Plain strings, not an enum, to match the style of `disparity_extender.py` — they appear in log lines and on `/open_round/state` exactly as written, which makes debugging with `ros2 topic echo` trivially readable.
+Plain strings, not an enum, to match the style of `disparity_extender.py`. They appear in log lines and on `/open_round/state` exactly as written, which makes debugging with `ros2 topic echo` trivially readable.
 
 ### The stop-republish interval
 
@@ -119,7 +127,7 @@ Plain strings, not an enum, to match the style of `disparity_extender.py` — th
 STOP_REPUBLISH_INTERVAL_S = 0.5
 ```
 
-While the car is parked (STANDBY, ARMING, FINISHED) the node still publishes zero commands — if it went silent, the MCU could sit on whatever the *last* command was. But there is nothing to steer while parked, so republishing at the full 40 Hz would be noise. Every half second is enough to keep the command fresh.
+While the car is parked (STANDBY, ARMING, FINISHED) the node still publishes zero commands: if it went silent, the MCU could sit on whatever the *last* command was. But there is nothing to steer while parked, so republishing at the full 40 Hz would be noise. Every half second is enough to keep the command fresh.
 
 ### The unit table
 
@@ -127,7 +135,7 @@ While the car is parked (STANDBY, ARMING, FINISHED) the node still publishes zer
 ODOM_UNIT_TO_M = {'m': 1.0, 'cm': 0.01, 'mm': 0.001}
 ```
 
-`vector_odom` publishes `/odom_vector` in whatever its `output_units` parameter says — **centimetres by default**. This node does all of its own math in metres (like the rest of ROS, per REP-103), so every incoming coordinate is multiplied by this factor once, at the door, and never thought about again. Getting this wrong is the classic 100× bug — which is why the `odom_units` parameter is validated against this table at startup and the node refuses to start on a typo.
+`vector_odom` publishes `/odom_vector` in whatever its `output_units` parameter says (**centimetres by default**). This node does all of its own math in metres (like the rest of ROS, per REP-103), so every incoming coordinate is multiplied by this factor once, at the door, and never thought about again. Getting this wrong is the classic 100x bug, which is why the `odom_units` parameter is validated against this table at startup and the node refuses to start on a typo.
 
 ### The math helpers
 
@@ -138,7 +146,7 @@ def clamp(val, mini, maxi):
     return max(lo, min(hi, val))
 ```
 
-Pin a value inside a range. The swapped-bounds handling means `clamp(x, 5, -5)` still works — useful because callers sometimes construct the bounds with a sign that can flip.
+Pin a value inside a range. The swapped-bounds handling means `clamp(x, 5, -5)` still works, which is useful because callers sometimes construct the bounds with a sign that can flip.
 
 ```python
 def remap(old_val, old_min, old_max, new_min, new_max):
@@ -172,7 +180,7 @@ Angles wrap around, and naive subtraction across the wrap gives nonsense: 179° 
 
 ---
 
-## Part 2 — `__init__`: every knob explained
+## Part 2: `__init__`, every knob explained
 
 The constructor does five things in order: declare all parameters, load them into plain attributes, validate the dangerous ones, initialize every piece of mutable state, and wire up ROS (subscriptions, publishers, timers). Nothing else happens until the timers start firing.
 
@@ -199,7 +207,7 @@ The single most important line for safety. The control loop re-reads this parame
         self.declare_parameter('cast_skip_fine', 1)
 ```
 
-These configure the ray-marching core (Part 7). `cast_range_min/max` is the radius of the virtual circle swept along candidate rays — effectively the robot's half-width plus margin, growing with speed (a faster car needs more clearance). `cast_precision` is how many neighbouring rays each candidate is checked against; `cast_skip` is the stride when sweeping candidates (every 4th ray — checking all of them costs 4× the CPU for almost no gain); `cast_skip_fine` is the stride *inside* one candidate's neighbourhood check.
+These configure the ray-marching core (Part 7). `cast_range_min/max` is the radius of the virtual circle swept along candidate rays, effectively the robot's half-width plus margin, growing with speed (a faster car needs more clearance). `cast_precision` is how many neighbouring rays each candidate is checked against; `cast_skip` is the stride when sweeping candidates (every 4th ray, since checking all of them costs 4x the CPU for almost no gain); `cast_skip_fine` is the stride *inside* one candidate's neighbourhood check.
 
 ### Group: field of view
 
@@ -220,7 +228,7 @@ The steering search only considers rays within ±80° of straight ahead. The car
         self.declare_parameter('boost_dist_thresh', 1.10)
 ```
 
-`max_speed` is the theoretical ceiling the distance-based speed law scales from. The two `speed_cap_*` values are the *actual* command ceilings — lower in corners. The `boost_*` trio implements "floor it on a clear straight": if the target is nearly dead ahead (`< 7.5°`) **and** the path is long (`> 1.10 m`), multiply speed by up to 1.35×.
+`max_speed` is the theoretical ceiling the distance-based speed law scales from. The two `speed_cap_*` values are the *actual* command ceilings, lower in corners. The `boost_*` trio implements "floor it on a clear straight": if the target is nearly dead ahead (`< 7.5°`) **and** the path is long (`> 1.10 m`), multiply speed by up to 1.35x.
 
 ### Group: safety
 
@@ -233,7 +241,7 @@ The steering search only considers rays within ±80° of straight ahead. The car
         self.declare_parameter('min_clear_dist_m', 0.15)
 ```
 
-`danger_*` configures the sideways emergency steer (Part 9): anything closer than 22 cm in the 25°–90° side zones can override the heading. `min_clear_dist_m` is the "everything is blocked" floor — if even the *best* direction is shorter than 15 cm, driving anywhere is a crash, so the car holds still for that scan.
+`danger_*` configures the sideways emergency steer (Part 9): anything closer than 22 cm in the 25 to 90 degree side zones can override the heading. `min_clear_dist_m` is the "everything is blocked" floor: if even the *best* direction is shorter than 15 cm, driving anywhere is a crash, so the car holds still for that scan.
 
 ### Group: steering
 
@@ -241,7 +249,7 @@ The steering search only considers rays within ±80° of straight ahead. The car
         self.declare_parameter('str_ang_thresh', 60.0)
 ```
 
-The angle that maps to full steering lock. A 60° target becomes `angular.z = 1.0`; a 30° target becomes `0.5`. It matches `bot.max_steer_deg` in the config — the servo's physical limit.
+The angle that maps to full steering lock. A 60° target becomes `angular.z = 1.0`; a 30° target becomes `0.5`. It matches `bot.max_steer_deg` in the config, the servo's physical limit.
 
 ### Group: wall hugging
 
@@ -266,11 +274,11 @@ The full story is in Part 8; the short version of each knob:
 | `wall_side` | `auto` = figure out the outer wall from the lap direction; `left`/`right` = force it |
 | `wall_side_latch_deg` | how much accumulated turning proves the lap direction (45°, i.e. half a corner) |
 | `wall_window_deg` | the width of the scan window around ±90° the wall is measured in |
-| `wall_valid_max_dist_m` | side readings farther than this are an *opening*, not the wall — no correction |
+| `wall_valid_max_dist_m` | side readings farther than this are an *opening*, not the wall: no correction applied |
 | `wall_kp_deg_per_m` | proportional gain: degrees of heading trim per metre of distance error |
 | `wall_kd_deg_s_per_m` | optional damping term (off by default) |
-| `wall_max_correction_deg` | hard ceiling on the trim (±12°) — hugging may *trim*, never *steer* |
-| `wall_hug_gate_deg` | the trim only applies while the open-space target is within ±25° of straight — corners belong to the disparity logic alone |
+| `wall_max_correction_deg` | hard ceiling on the trim (±12°): hugging may *trim*, never *steer* |
+| `wall_hug_gate_deg` | the trim only applies while the open-space target is within ±25° of straight; corners belong to the disparity logic alone |
 
 ### Group: laps
 
@@ -281,7 +289,7 @@ The full story is in Part 8; the short version of each knob:
         self.declare_parameter('min_run_time_sec', 5.0)
 ```
 
-`target_laps` is 3 per the round rules. `min_run_time_sec` closes a subtle race: `lap_counter` publishes `/lap_count` on a *latched* topic (late subscribers get the last value), so a leftover "3" from a previous run could arrive and instantly "finish" a run that never started. The startup reset (Part 5) prevents most of this, but the time guard makes it airtight — a real lap physically cannot happen 5 s after GO.
+`target_laps` is 3 per the round rules. `min_run_time_sec` closes a subtle race: `lap_counter` publishes `/lap_count` on a *latched* topic (late subscribers get the last value), so a leftover "3" from a previous run could arrive and instantly "finish" a run that never started. The startup reset (Part 5) prevents most of this, but the time guard makes it airtight: a real lap physically cannot happen 5 s after GO.
 
 ### Group: vector odom / homing
 
@@ -313,7 +321,7 @@ All of these belong to Part 6, where each is explained where it bites. The two m
         self.declare_parameter('heading_offset_deg', 0.0)
 ```
 
-The BNO055 compass reports a heading that grows **clockwise** (like a real compass); ROS yaw grows **counter-clockwise** (REP-103). `heading_clockwise: true` says "negate on arrival". `heading_offset_deg` exists for the day `/heading` becomes a true absolute bearing — today it is 0, and the long comment in `vector_odom.py` explains why the backward-mounted IMU does *not* make it 180. **These two must match `vector_odom`'s values**, because homing steers the *pose that vector_odom integrated* using the *yaw this node computes* — they have to live in the same frame.
+The BNO055 compass reports a heading that grows **clockwise** (like a real compass); ROS yaw grows **counter-clockwise** (REP-103). `heading_clockwise: true` says "negate on arrival". `heading_offset_deg` exists for the day `/heading` becomes a true absolute bearing: today it is 0, and the long comment in `vector_odom.py` explains why the backward-mounted IMU does *not* make it 180. **These two must match `vector_odom`'s values**, because homing steers the *pose that vector_odom integrated* using the *yaw this node computes*, and they have to live in the same frame.
 
 ### Group: start gate and topics
 
@@ -332,7 +340,7 @@ Same gate as `disparity_extender`: the node comes up parked, the physical button
 
 ### Loading and fail-fast validation
 
-After declaring, every parameter is read once into a plain attribute (`self.max_speed = float(...)` and so on — attribute access is much cheaper than a parameter lookup in a 40 Hz loop; only the master switch is re-read live). Then the block that refuses to start on broken config:
+After declaring, every parameter is read once into a plain attribute (`self.max_speed = float(...)` and so on, since attribute access is much cheaper than a parameter lookup in a 40 Hz loop; only the master switch is re-read live). Then the block that refuses to start on broken config:
 
 ```python
         if odom_units not in ODOM_UNIT_TO_M:
@@ -362,7 +370,7 @@ The constructor then initializes every mutable variable the node will ever touch
         self.yaw_deg = None             # ROS convention (CCW+), None until /heading
 ```
 
-`None` — not `0.0` — because "no data yet" and "at the origin, facing forward" are *very* different situations, and homing must be able to tell them apart (Part 6 refuses to drive on `None`).
+`None`, not `0.0`, because "no data yet" and "at the origin, facing forward" are *very* different situations, and homing must be able to tell them apart (Part 6 refuses to drive on `None`).
 
 ```python
         if self.wall_side_param == 'left':
@@ -382,7 +390,7 @@ The constructor then initializes every mutable variable the node will ever touch
             self.run_start_time = time.time()
 ```
 
-With the gate disabled the node behaves like the old nodes did — driving as soon as data arrives — and the run timer starts immediately so the `min_run_time_sec` lap guard still works.
+With the gate disabled the node behaves like the old nodes did (driving as soon as data arrives), and the run timer starts immediately so the `min_run_time_sec` lap guard still works.
 
 Other notables: `self.home_captured = False` (the start pose is latched on the first driving tick, Part 4), `self.forward_clearance_m = float('inf')` (no scan yet = assume clear; the watchdog covers the truly-no-scan case), and the whole homing block (`homing_min_dist`, `driving_reverse`, `gear_flips`, `homing_blocked_since`) which Part 6 walks through.
 
@@ -405,7 +413,7 @@ Other notables: `self.home_captured = False` (the start pose is latched on the f
         self.state_pub = self.create_publisher(String, '/open_round/state', 10)
 ```
 
-The scan subscription uses queue depth **1**: if processing falls behind, old scans are useless — always work on the newest. The debug topics live under an `/open_round/` prefix so they can never collide with the disparity extender's debug topics if both nodes happen to exist on the graph.
+The scan subscription uses queue depth **1**: if processing falls behind, old scans are useless, so it always works on the newest. The debug topics live under an `/open_round/` prefix so they can never collide with the disparity extender's debug topics if both nodes happen to exist on the graph.
 
 ```python
         # ── Control Loop Timer (40 Hz) ───────────────────────────────
@@ -418,17 +426,17 @@ The scan subscription uses queue depth **1**: if processing falls behind, old sc
         self.create_timer(1.0, self.publish_state)
 ```
 
-Two-rate design, inherited from `disparity_extender`: the *thinking* (LiDAR pipeline, 20 Hz — the LiDAR itself only produces ~10 scans/s, so faster would be wasted) is decoupled from the *acting* (command publishing, 40 Hz — the MCU likes a steady, fast command stream). The pipeline writes its conclusions into `self.speed` / `self.str_angle`; the control loop reads them. The 1 Hz heartbeat is purely for debugging — `ros2 topic echo /open_round/state` tells you instantly which phase the node is in.
+Two-rate design, inherited from `disparity_extender`: the *thinking* (LiDAR pipeline, 20 Hz; the LiDAR itself only produces ~10 scans/s, so faster would be wasted) is decoupled from the *acting* (command publishing, 40 Hz, since the MCU likes a steady, fast command stream). The pipeline writes its conclusions into `self.speed` / `self.str_angle`; the control loop reads them. The 1 Hz heartbeat is purely for debugging: `ros2 topic echo /open_round/state` tells you instantly which phase the node is in.
 
-Finally the startup log summarizes the config in force (laps, wall-hug mode, home radius, odom units) — read it after every launch; a wrong `odom_units` shows up right there.
+Finally the startup log summarizes the config in force (laps, wall-hug mode, home radius, odom units). Read it after every launch; a wrong `odom_units` shows up right there.
 
 ---
 
-## Part 3 — The input callbacks
+## Part 3: The input callbacks
 
-Five callbacks turn raw messages into clean internal state. None of them makes decisions — they only *record*; the timers decide.
+Five callbacks turn raw messages into clean internal state. None of them makes decisions; they only *record*. The timers decide.
 
-### `odom_vector_callback` — position in, metres out
+### `odom_vector_callback`: position in, metres out
 
 ```python
     def odom_vector_callback(self, msg: Vector3):
@@ -439,7 +447,7 @@ Five callbacks turn raw messages into clean internal state. None of them makes d
         total_m = msg.z * self.odom_to_m
 ```
 
-`vector_odom` packs three things into a `Vector3`: `x`, `y` (position) and `z` (**total distance travelled** — not height!). All three arrive in centimetres and are converted at the door.
+`vector_odom` packs three things into a `Vector3`: `x`, `y` (position) and `z` (**total distance travelled**, not height!). All three arrive in centimetres and are converted at the door.
 
 ```python
         # Speed from the travelled-distance delta; EMA smoothed because the
@@ -460,7 +468,7 @@ The obstacle-round node got its speed from `/odom` (a full `Odometry` message wi
 
 `last_odom_time` doubles as the staleness clock for the homing guard (Part 6): if it stops advancing, the encoder stream died.
 
-### `heading_callback` — compass in, yaw + lap direction out
+### `heading_callback`: compass in, yaw and lap direction out
 
 This callback does three jobs, so we take it in three bites.
 
@@ -472,7 +480,7 @@ This callback does three jobs, so we take it in three bites.
         yaw = normalize_angle_deg(yaw)
 ```
 
-The MCU's compass grows clockwise; ROS yaw grows counter-clockwise. Add the (currently zero) mounting offset, flip the sign, wrap to [−180, 180). This is *character-for-character* the same conversion `goto_controller` does and the same convention `vector_odom` integrates positions with — all three nodes agree on one yaw, which is the entire reason homing can steer the odometry's pose using this callback's angle.
+The MCU's compass grows clockwise; ROS yaw grows counter-clockwise. Add the (currently zero) mounting offset, flip the sign, wrap to [−180, 180). This is *character-for-character* the same conversion `goto_controller` does and the same convention `vector_odom` integrates positions with. All three nodes agree on one yaw, which is the entire reason homing can steer the odometry's pose using this callback's angle.
 
 **Bite 2: the unwrapped turn total, with a glitch guard.**
 
@@ -503,11 +511,20 @@ The MCU's compass grows clockwise; ROS yaw grows counter-clockwise. Add the (cur
             self.get_logger().info(...)
 ```
 
-In WRO the driving direction is decided by the randomized track, so the node cannot know in advance which wall is the outer one. But it *can* deduce it: if the car has accumulated +45° of turning (half of the first corner), the laps are counter-clockwise — the car keeps turning left — which means the outer boundary wall is continuously on its **right**. So `hug_side = -1` (right). Clockwise laps latch the left wall. Once latched, it stays latched for the whole run (`hug_side is None` is part of the condition) — the lap direction cannot change mid-run, and a latch-flip mid-lap would swerve the car.
+In WRO the driving direction is decided by the randomized track, so the node cannot know in advance which wall is the outer one. But it *can* deduce it: if the car has accumulated +45° of turning (half of the first corner), the laps are counter-clockwise (the car keeps turning left), which means the outer boundary wall is continuously on its **right**. So `hug_side = -1` (right). Clockwise laps latch the left wall. Once latched, it stays latched for the whole run (`hug_side is None` is part of the condition): the lap direction cannot change mid-run, and a latch-flip mid-lap would swerve the car.
 
-Until the first corner the side is unknown and wall hugging simply stays off (Part 8 returns a zero correction) — the open-space steering alone handles the first straight fine.
+```mermaid
+flowchart TD
+    A["First 45 deg of cumulative turning"] --> B{Turning direction?}
+    B -->|Positive, CCW, left turns| C["hug_side = -1 (hug the right wall)"]
+    B -->|Negative, CW, right turns| D["hug_side = 1 (hug the left wall)"]
+    C --> E[Latched for the rest of the run]
+    D --> E
+```
 
-### `lap_callback` — one line
+Until the first corner the side is unknown and wall hugging simply stays off (Part 8 returns a zero correction). The open-space steering alone handles the first straight fine.
+
+### `lap_callback`: one line
 
 ```python
     def lap_callback(self, msg: Int32):
@@ -515,9 +532,9 @@ Until the first corner the side is unknown and wall hugging simply stays off (Pa
         self.lap_count = msg.data
 ```
 
-Counting laps is `lap_counter`'s job (it counts compass corners — see its own docstring). This node just remembers the latest number; the control loop compares it to `target_laps`.
+Counting laps is `lap_counter`'s job (it counts compass corners; see its own docstring). This node just remembers the latest number; the control loop compares it to `target_laps`.
 
-### `button_callback` — edge detection
+### `button_callback`: edge detection
 
 ```python
         pressed = bool(msg.data)
@@ -535,9 +552,9 @@ Counting laps is `lap_counter`'s job (it counts compass corners — see its own 
             self.get_logger().info(... 'already ..., ignoring.')
 ```
 
-`/button_status` is `true` for *as long as the button is held*, streamed continuously. Acting on the raw value would re-arm on every message while your finger is down. The classic fix is **rising-edge detection**: remember the previous value, and only act on the `false → true` transition — the moment of the press. A press in any state other than STANDBY is logged and ignored, so mashing the button mid-run can't do anything.
+`/button_status` is `true` for *as long as the button is held*, streamed continuously. Acting on the raw value would re-arm on every message while your finger is down. The classic fix is **rising-edge detection**: remember the previous value, and only act on the `false → true` transition, the moment of the press. A press in any state other than STANDBY is logged and ignored, so mashing the button mid-run can't do anything.
 
-### `lidar_callback` — buffer and get out
+### `lidar_callback`: buffer and get out
 
 ```python
     def lidar_callback(self, msg: LaserScan):
@@ -556,17 +573,17 @@ Counting laps is `lap_counter`'s job (it counts compass corners — see its own 
             self.last_scan_time = time.time()
 ```
 
-The callback does **no processing** — it copies the scan into instance variables under the lock and leaves. Heavy work in a subscription callback would delay every other callback in the node. Three flags matter:
+The callback does **no processing**: it copies the scan into instance variables under the lock and leaves. Heavy work in a subscription callback would delay every other callback in the node. Three flags matter:
 
-- `new_lidar_val = True` tells `calc_lidar_step` there is fresh data (the timer runs at 20 Hz but the LiDAR only delivers ~10 scans/s — without the flag, half the pipeline runs would waste CPU re-processing the same scan).
+- `new_lidar_val = True` tells `calc_lidar_step` there is fresh data (the timer runs at 20 Hz but the LiDAR only delivers ~10 scans/s, so without the flag, half the pipeline runs would waste CPU re-processing the same scan).
 - `last_scan_time` feeds the watchdog: if this timestamp stops advancing, the LiDAR died and the car must stop.
-- The intensities fallback (`[1.0] * len(...)`) handles LiDAR drivers that don't fill the intensity array — everything downstream treats intensity ≤ 0.05 as "invalid ray", so an absent array must read as "all valid", not "all invalid".
+- The intensities fallback (`[1.0] * len(...)`) handles LiDAR drivers that don't fill the intensity array. Everything downstream treats intensity ≤ 0.05 as "invalid ray", so an absent array must read as "all valid", not "all invalid".
 
 ---
 
-## Part 4 — The start gate and state plumbing
+## Part 4: The start gate and state plumbing
 
-### `update_run_state` — the countdown
+### `update_run_state`: the countdown
 
 ```python
     def update_run_state(self):
@@ -585,9 +602,9 @@ The callback does **no processing** — it copies the scan into instance variabl
             self.get_logger().info(f'Starting in {secs_left}...')
 ```
 
-Called at the top of every control tick. In ARMING it prints "Starting in 3… 2… 1…" — exactly one line per second (the `last_countdown_logged` bookkeeping deduplicates the 40 calls/s), mirroring the LED blinks the MCU does over the same window — and then fires `begin_running()`.
+Called at the top of every control tick. In ARMING it prints "Starting in 3... 2... 1...", exactly one line per second (the `last_countdown_logged` bookkeeping deduplicates the 40 calls/s), mirroring the LED blinks the MCU does over the same window, and then fires `begin_running()`.
 
-### `begin_running` and `capture_home` — GO, and remembering where "home" is
+### `begin_running` and `capture_home`: GO, and remembering where "home" is
 
 ```python
     def begin_running(self):
@@ -619,14 +636,14 @@ Note what it does **not** do: it does not capture the home pose. That happens in
             f'Home captured at ({self.home_x_m:.2f}, {self.home_y_m:.2f}) m.')
 ```
 
-Why capture instead of hard-coding (0, 0)? Because "the start is (0,0)" is only true if `vector_odom` started integrating *at this spot*. Normally it did — the whole stack launches together, and the odometry zeroes where the car sits — so the captured home **is** (0,0). But two real-world situations break the assumption:
+Why capture instead of hard-coding (0, 0)? Because "the start is (0,0)" is only true if `vector_odom` started integrating *at this spot*. Normally it did (the whole stack launches together, and the odometry zeroes where the car sits), so the captured home **is** (0,0). But two real-world situations break the assumption:
 
 1. **This node restarted mid-session** while `vector_odom` kept running: the odometry is no longer near zero. Homing to raw (0,0) would drive the car to wherever the *odometry* was born, not where *this run* started. The capture makes homing follow the run, and the `> 0.10 m` warning tells you it happened.
-2. **No odometry yet at GO** (encoder stream late): fall back to (0,0), which is correct because `vector_odom` will zero right here on its first tick — the car hasn't moved.
+2. **No odometry yet at GO** (encoder stream late): fall back to (0,0), which is correct because `vector_odom` will zero right here on its first tick; the car hasn't moved.
 
-And why is the capture in the control loop rather than in `begin_running`? Because when `require_button_start` is `false`, `begin_running` is never called — the node *starts* in RUNNING. The control-loop hook (`if RUNNING and not home_captured: capture_home()`) covers both entry paths with one line.
+And why is the capture in the control loop rather than in `begin_running`? Because when `require_button_start` is `false`, `begin_running` is never called; the node *starts* in RUNNING. The control-loop hook (`if RUNNING and not home_captured: capture_home()`) covers both entry paths with one line.
 
-### `publish_stop` and `publish_zero_now` — two flavours of "stop"
+### `publish_stop` and `publish_zero_now`: two flavours of "stop"
 
 ```python
     def publish_stop(self):
@@ -652,7 +669,7 @@ And why is the capture in the control loop rather than in `begin_running`? Becau
 
 Same message, different urgency. `publish_stop` is for *parked* states (STANDBY, FINISHED): a gentle 2 Hz refresh. `publish_zero_now` is for *emergencies* (watchdog fired, obstacle in the homing path): when the car is moving and must stop, you do not rate-limit the stop command.
 
-### `publish_state` — the heartbeat
+### `publish_state`: the heartbeat
 
 ```python
     def publish_state(self):
@@ -663,9 +680,31 @@ One string, once a second. Trivial, and worth its weight in gold when something 
 
 ---
 
-## Part 5 — The control loop
+## Part 5: The control loop
 
-`control_loop` runs 40 times a second and is the **only** place driving commands are published from. It is structured as a ladder of gates — each `return` is a reason the car may not (or need not) drive normally — followed by a dispatch to the current phase. Order matters enormously here, so we walk it top to bottom.
+`control_loop` runs 40 times a second and is the **only** place driving commands are published from. It is structured as a ladder of gates, where each `return` is a reason the car may not (or need not) drive normally, followed by a dispatch to the current phase. Order matters enormously here, so we walk it top to bottom.
+
+```mermaid
+flowchart TD
+    Start(["control_loop tick, 40 Hz"]) --> G0[update_run_state]
+    G0 --> G1{enable_auto_steering?}
+    G1 -->|false| Stop1([return, no output])
+    G1 -->|true| G2{Lap-count reset sent yet?}
+    G2 -->|no| Stop2([return, waiting for reset])
+    G2 -->|yes| G3{"run_state is\nSTANDBY or ARMING?"}
+    G3 -->|yes| Park1[publish_stop] --> Stop3([return])
+    G3 -->|no| G4{run_state is FINISHED?}
+    G4 -->|yes| Park2["publish_stop,\nlog reason once"] --> Stop4([return])
+    G4 -->|no| G5{"Fresh scan within\nthe last 200 ms?"}
+    G5 -->|no| E1["publish_zero_now\nemergency stop"] --> Stop5([return])
+    G5 -->|yes| Cap["capture_home\n(first RUNNING tick only)"]
+    Cap --> LapCheck{"RUNNING and\nlap_count >= target_laps?"}
+    LapCheck -->|yes| Enter[enter_homing]
+    LapCheck -->|no| Dispatch{Current state}
+    Enter --> Dispatch
+    Dispatch -->|RUNNING| DriveRunning[drive_running]
+    Dispatch -->|HOMING| DriveHoming[drive_homing]
+```
 
 ```python
     def control_loop(self):
@@ -677,7 +716,7 @@ One string, once a second. Trivial, and worth its weight in gold when something 
             return
 ```
 
-**Gate 1 — the master switch.** Re-read live (not from the cached attribute) so flipping the parameter at runtime works. Note the countdown is ticked *before* the check: with steering disabled you can still watch the whole arming sequence behave — useful on the bench.
+**Gate 1, the master switch.** Re-read live (not from the cached attribute) so flipping the parameter at runtime works. Note the countdown is ticked *before* the check: with steering disabled you can still watch the whole arming sequence behave, which is useful on the bench.
 
 ```python
         # ── LAP RESET LOGIC ──
@@ -692,7 +731,7 @@ One string, once a second. Trivial, and worth its weight in gold when something 
                 return  # Don't drive while waiting for reset
 ```
 
-**Gate 2 — the lap reset.** `lap_counter`'s topics are latched, so at startup this node may immediately receive the lap count from a *previous* run. The cure is to publish `/reset_lap_count` once — but not instantly: ROS 2 publishers take a moment (discovery) to connect to subscribers, and a message published in the constructor would vanish into the void. So the loop counts 20 ticks (0.5 s), then publishes the reset *and* forces the local count to zero (covering the window until `lap_counter` echoes back its own zero). Until the reset is out, the car does not drive — driving with a possibly-stale lap count could end the run instantly.
+**Gate 2, the lap reset.** `lap_counter`'s topics are latched, so at startup this node may immediately receive the lap count from a *previous* run. The cure is to publish `/reset_lap_count` once, but not instantly: ROS 2 publishers take a moment (discovery) to connect to subscribers, and a message published in the constructor would vanish into the void. So the loop counts 20 ticks (0.5 s), then publishes the reset *and* forces the local count to zero (covering the window until `lap_counter` echoes back its own zero). Until the reset is out, the car does not drive: driving with a possibly-stale lap count could end the run instantly.
 
 ```python
         # ── START GATE: STANDBY / ARMING park the car ──
@@ -712,7 +751,7 @@ One string, once a second. Trivial, and worth its weight in gold when something 
             return
 ```
 
-**Gates 3 and 4 — the parked states.** Both hold zeros. FINISHED also prints its reason exactly once — `finish_reason` was written by whoever ended the run (success, timeout, hunting cap…), and the `finish_logged` flag stops it repeating 40 times a second.
+**Gates 3 and 4, the parked states.** Both hold zeros. FINISHED also prints its reason exactly once: `finish_reason` was written by whoever ended the run (success, timeout, hunting cap, ...), and the `finish_logged` flag stops it repeating 40 times a second.
 
 ```python
         # ── LIDAR WATCHDOG (both driving states) ──
@@ -724,7 +763,7 @@ One string, once a second. Trivial, and worth its weight in gold when something 
             return
 ```
 
-**Gate 5 — the watchdog.** Past this point the car may actually be moving, so a dead LiDAR is an emergency: no fresh scan for 200 ms (the sensor delivers one every ~100 ms, so 200 ms means two misses) → immediate, un-throttled zero. The `> 0.0` precondition means the watchdog only arms after the *first* scan — before that, "no scan yet" is startup, not failure, and the car isn't moving anyway (with no scan the pipeline never set a speed). The watchdog deliberately covers **HOMING too**: homing uses the scan for its clearance guard, and driving with a blind guard is not acceptable.
+**Gate 5, the watchdog.** Past this point the car may actually be moving, so a dead LiDAR is an emergency: no fresh scan for 200 ms (the sensor delivers one every ~100 ms, so 200 ms means two misses) triggers an immediate, un-throttled zero. The `> 0.0` precondition means the watchdog only arms after the *first* scan; before that, "no scan yet" is startup, not failure, and the car isn't moving anyway (with no scan the pipeline never set a speed). The watchdog deliberately covers **HOMING too**: homing uses the scan for its clearance guard, and driving with a blind guard is not acceptable.
 
 ```python
         # ── HOME CAPTURE: first driving tick, whichever way RUNNING was entered ──
@@ -745,7 +784,7 @@ One string, once a second. Trivial, and worth its weight in gold when something 
 
 **The transitions and the dispatch.** Home capture first (Part 4). Then the lap check: `>=` rather than `==` because a lap count could conceivably jump from 2 to 4 between ticks (latched republish, or a double corner registering late) and the run must still end. The `min_run_time_sec` term is the stale-count insurance explained in Part 2. Finally, exactly one of the two drive functions runs.
 
-### `drive_running` — publishing the pipeline's decision
+### `drive_running`: publishing the pipeline's decision
 
 ```python
     def drive_running(self):
@@ -759,15 +798,15 @@ One string, once a second. Trivial, and worth its weight in gold when something 
         self.cmd_pub.publish(cmd)
 ```
 
-The lap-phase command is just "publish what the pipeline (Part 10) last decided": `self.speed` and `self.str_angle` are its outputs. The clamp applies the dynamic speed cap (lower in corners); the boost multiplies both the value and the cap, so a boosted straight genuinely goes faster than the cap instead of being flattened by it. Publishing at 40 Hz from 20 Hz decisions is fine — between pipeline runs the car simply keeps doing the latest sensible thing.
+The lap-phase command is just "publish what the pipeline (Part 10) last decided": `self.speed` and `self.str_angle` are its outputs. The clamp applies the dynamic speed cap (lower in corners); the boost multiplies both the value and the cap, so a boosted straight genuinely goes faster than the cap instead of being flattened by it. Publishing at 40 Hz from 20 Hz decisions is fine; between pipeline runs the car simply keeps doing the latest sensible thing.
 
 ---
 
-## Part 6 — Homing: driving back to the start
+## Part 6: Homing, driving back to the start
 
-This is the part the node exists for. The problem: the car has just finished lap 3 somewhere near the start line, pointing in some direction, and must come to rest with its reference point within **5 cm** of where the run began — using nothing but the dead-reckoned position vector and the compass. The car is an Ackermann vehicle (it steers like a car, not a tank), so it cannot rotate in place; if home is behind it, it must *reverse*.
+This is the part the node exists for. The problem: the car has just finished lap 3 somewhere near the start line, pointing in some direction, and must come to rest with its reference point within **5 cm** of where the run began, using nothing but the dead-reckoned position vector and the compass. The car is an Ackermann vehicle (it steers like a car, not a tank), so it cannot rotate in place; if home is behind it, it must *reverse*.
 
-### `enter_homing` — the handover
+### `enter_homing`: the handover
 
 ```python
     def enter_homing(self):
@@ -784,7 +823,7 @@ This is the part the node exists for. The problem: the car has just finished lap
             + (f', {dist * 100.0:.0f} cm away.' if dist is not None else '.'))
 ```
 
-Every piece of homing bookkeeping is reset here, so the phase always starts from a clean slate: no inherited gear state, no inherited closest-approach, a fresh timeout clock. The log line tells you how far away home is at the handover — typically a metre or two, since `lap_counter` fires "lap 3" at the twelfth corner, shortly before the start line.
+Every piece of homing bookkeeping is reset here, so the phase always starts from a clean slate: no inherited gear state, no inherited closest-approach, a fresh timeout clock. The log line tells you how far away home is at the handover, typically a metre or two, since `lap_counter` fires "lap 3" at the twelfth corner, shortly before the start line.
 
 ### Two tiny helpers
 
@@ -795,7 +834,7 @@ Every piece of homing bookkeeping is reset here, so the phase always starts from
         return math.hypot(self.home_x_m - self.pos_x_m, self.home_y_m - self.pos_y_m)
 ```
 
-Straight-line distance to home (`math.hypot(dx, dy)` = √(dx² + dy²)), or `None` when there is no position — callers must handle that honestly.
+Straight-line distance to home (`math.hypot(dx, dy)` = √(dx² + dy²)), or `None` when there is no position; callers must handle that honestly.
 
 ```python
     def finish(self, reason):
@@ -805,13 +844,32 @@ Straight-line distance to home (`math.hypot(dx, dy)` = √(dx² + dy²)), or `No
         self.publish_zero_now()
 ```
 
-Every way the run can end funnels through here: state to FINISHED, remember *why* (the control loop will log it once), and stop **immediately** — not on the next throttled interval.
+Every way the run can end funnels through here: state to FINISHED, remember *why* (the control loop will log it once), and stop **immediately**, not on the next throttled interval.
 
-### `drive_homing` — the full walkthrough
+### `drive_homing`: the full walkthrough
 
 Called at 40 Hz while HOMING. Like the control loop it is a ladder: guards first, success check, then the actual driving math.
 
-**Guard A — no pose at all.**
+```mermaid
+flowchart TD
+    A[["drive_homing tick, 40 Hz"]] --> B{Pose available?\nGuard A}
+    B -->|no| B1["publish_stop\n(finish on timeout)"]
+    B -->|yes| C{Pose fresh?\nGuard B}
+    C -->|stale| C1["publish_zero_now\n(finish on timeout)"]
+    C -->|fresh| D{"Inside home_radius_m?"}
+    D -->|yes| D1["finish: success"]
+    D -->|no| E{Timed out?}
+    E -->|yes| E1["finish: timeout"]
+    E -->|no| F["Compute bearing, error,\nupdate forward/reverse gear"]
+    F --> G{"gear_flips >= max?"}
+    G -->|yes| G1["finish: gave up hunting"]
+    G -->|no| H{"Path clear ahead/behind?"}
+    H -->|blocked >= give-up time| H1["finish: blocked"]
+    H -->|blocked, still waiting| H2["publish_zero_now, hold"]
+    H -->|clear| I["Compute steering + speed,\npublish drive command"]
+```
+
+**Guard A, no pose at all.**
 
 ```python
         if self.pos_x_m is None or self.yaw_deg is None:
@@ -825,9 +883,9 @@ Called at 40 Hz while HOMING. Like the control loop it is a ladder: guards first
             return
 ```
 
-Homing without a position or a heading is driving blindfolded; the node refuses. In practice this can only happen if `vector_odom` or the MCU bridge died mid-run. Crucially the guard *still enforces the timeout* — otherwise a dead odometry source would leave the node holding in HOMING forever, and "forever" is not an acceptable state for a robot to be in.
+Homing without a position or a heading is driving blindfolded; the node refuses. In practice this can only happen if `vector_odom` or the MCU bridge died mid-run. Crucially the guard *still enforces the timeout*: otherwise a dead odometry source would leave the node holding in HOMING forever, and "forever" is not an acceptable state for a robot to be in.
 
-**Guard B — the pose froze.**
+**Guard B, the pose froze.**
 
 ```python
         if now - self.last_odom_time > self.odom_stale_sec:
@@ -840,7 +898,7 @@ Homing without a position or a heading is driving blindfolded; the node refuses.
             return
 ```
 
-Subtler than Guard A: the position *exists* but has stopped updating (encoder stream died). The danger is a feedback loop that never sees its own effect — the node would command "drive forward", the position wouldn't change, so it would keep commanding forward, into the wall, forever. One second of silence (the encoder normally ticks many times a second) → stop.
+Subtler than Guard A: the position *exists* but has stopped updating (encoder stream died). The danger is a feedback loop that never sees its own effect: the node would command "drive forward", the position wouldn't change, so it would keep commanding forward, into the wall, forever. One second of silence (the encoder normally ticks many times a second) triggers a stop.
 
 **The success check.**
 
@@ -858,7 +916,7 @@ Subtler than Guard A: the position *exists* but has stopped updating (encoder st
             self.homing_min_dist = dist
 ```
 
-Checked *before* any driving so the very first HOMING tick can already succeed (the car often crosses the start area right after lap 3 — if it is already inside 5 cm, stop *now*, don't drive a lap of honour). Below it, `homing_min_dist` records the closest the car has ever been — pure bookkeeping, used by the give-up messages so the log always tells you how close it got.
+Checked *before* any driving so the very first HOMING tick can already succeed (the car often crosses the start area right after lap 3; if it is already inside 5 cm, stop *now*, don't drive a lap of honour). Below it, `homing_min_dist` records the closest the car has ever been, pure bookkeeping, used by the give-up messages so the log always tells you how close it got.
 
 **The timeout.**
 
@@ -871,7 +929,7 @@ Checked *before* any driving so the very first HOMING tick can already succeed (
             return
 ```
 
-The unconditional backstop: whatever else goes wrong — odometry drift walking the target away, a wall exactly on the goal, gains fighting each other — the phase ends within 45 s, stopped, with an honest log line.
+The unconditional backstop: whatever else goes wrong (odometry drift walking the target away, a wall exactly on the goal, gains fighting each other), the phase ends within 45 s, stopped, with an honest log line.
 
 **Bearing, heading error, and the gear decision.**
 
@@ -881,7 +939,7 @@ The unconditional backstop: whatever else goes wrong — odometry drift walking 
         error_fwd = normalize_angle_deg(bearing_deg - self.yaw_deg)
 ```
 
-The **bearing** is the direction from the car to home in the odometry frame — `atan2(Δy, Δx)`, the vector the user's requirement speaks of. The **error** is how far the car's nose points away from that vector, wrapped to [−180, 180): 0° = home dead ahead, ±180° = home dead behind. Both are recomputed from the *latest* position every tick, so the steering keeps correcting as the car moves — nothing is precomputed and replayed.
+The **bearing** is the direction from the car to home in the odometry frame: `atan2(Δy, Δx)`, the vector the user's requirement speaks of. The **error** is how far the car's nose points away from that vector, wrapped to [−180, 180): 0° = home dead ahead, ±180° = home dead behind. Both are recomputed from the *latest* position every tick, so the steering keeps correcting as the car moves; nothing is precomputed and replayed.
 
 ```python
         # Hysteresis so the gear cannot chatter when home sits beside the car.
@@ -893,7 +951,15 @@ The **bearing** is the direction from the car to home in the odometry frame — 
             self.gear_flips += 1
 ```
 
-If home is more than 100° off the nose, driving forward means a huge arc — backing up is better. But a single threshold at, say, 90° would **chatter**: with home at exactly 90.1° the error flickers across the line every tick and the gearbox slams forward/reverse/forward. The fix is *hysteresis* — two thresholds with a gap: switch to reverse only past 100°, switch back to forward only under 80°. Inside the 80–100° band the current gear sticks, whatever it is. Every genuine switch is counted in `gear_flips`.
+If home is more than 100° off the nose, driving forward means a huge arc, so backing up is better. But a single threshold at, say, 90° would **chatter**: with home at exactly 90.1° the error flickers across the line every tick and the gearbox slams forward/reverse/forward. The fix is *hysteresis*, two thresholds with a gap: switch to reverse only past 100°, switch back to forward only under 80°. Inside the 80-100° band the current gear sticks, whatever it is. Every genuine switch is counted in `gear_flips`.
+
+```mermaid
+stateDiagram-v2
+    Forward --> Reverse: |error_fwd| > 100 deg
+    Reverse --> Forward: |error_fwd| < 80 deg
+    Forward --> Forward: 80-100 deg band, gear sticks
+    Reverse --> Reverse: 80-100 deg band, gear sticks
+```
 
 **The anti-hunting cap.**
 
@@ -927,9 +993,9 @@ A car has a minimum turning radius and a minimum creep speed; some approach geom
         self.homing_blocked_since = None
 ```
 
-Homing has no disparity extender watching for obstacles — it steers by odometry. So it borrows the LiDAR through two numbers `update_clearances` (Part 9) refreshes every scan: the nearest obstacle in a narrow cone ahead, and one behind. If the cone *in the direction the car is about to move* shows something closer than 12 cm, the car pauses (un-throttled zero). Pausing is not a solution though — if the block persists 3 s (a wall, not a passing shadow), give up cleanly. The last line resets the block timer the moment the path clears, so brief occlusions don't accumulate toward the give-up.
+Homing has no disparity extender watching for obstacles; it steers by odometry. So it borrows the LiDAR through two numbers `update_clearances` (Part 9) refreshes every scan: the nearest obstacle in a narrow cone ahead, and one behind. If the cone *in the direction the car is about to move* shows something closer than 12 cm, the car pauses (un-throttled zero). Pausing is not a solution though: if the block persists 3 s (a wall, not a passing shadow), give up cleanly. The last line resets the block timer the moment the path clears, so brief occlusions don't accumulate toward the give-up.
 
-**Steering — including the reverse sign flip.**
+**Steering, including the reverse sign flip.**
 
 ```python
         # Backing up: point the TAIL at home, so the error is measured
@@ -944,14 +1010,14 @@ Homing has no disparity extender watching for obstacles — it steers by odometr
             steer = -steer
 ```
 
-Two separate reverse corrections, and both are needed — this is the most error-prone math in the file, so here it is slowly:
+Two separate reverse corrections, and both are needed. This is the most error-prone math in the file, so here it is slowly:
 
-1. **Which end aims at home?** Driving forward, you want the *nose* on the bearing, so the error is `bearing − yaw`. Backing up, you want the **tail** on the bearing — the tail points at `yaw + 180°` — so subtract 180 from the error. After this line, `error = 0` means "the end of the car that is leading points exactly at home", in either gear.
+1. **Which end aims at home?** Driving forward, you want the *nose* on the bearing, so the error is `bearing − yaw`. Backing up, you want the **tail** on the bearing. The tail points at `yaw + 180°`, so subtract 180 from the error. After this line, `error = 0` means "the end of the car that is leading points exactly at home", in either gear.
 2. **Which way to turn the wheels?** Steering geometry (the *bicycle model*: yaw rate = v/L·tan(steering angle)) says the car's rotation direction depends on the **sign of v**. Front wheels left while rolling forward: the car turns left. Same wheels, rolling *backward*: the car turns *right*. So in reverse the command must be negated for the correction loop to converge instead of diverging.
 
-A worked example, verified in the test harness: car at (1.0, −0.2) m facing +x, home at (0,0). The bearing is ≈ 169° — home is behind and slightly to the left. `error_fwd` ≈ 169° > 100° → reverse gear. Tail-relative error: 169 − 180 = −11° → raw steer = −0.19 (slightly right). Negated for reverse: **+0.19, wheels left** — and indeed, backing up with wheels left swings the tail leftward toward home. Both flips together produce the correct physical motion; either one alone produces a car that spirals away from its goal.
+A worked example, verified in the test harness: car at (1.0, −0.2) m facing +x, home at (0,0). The bearing is ≈ 169°, so home is behind and slightly to the left. `error_fwd` ≈ 169° > 100°, so reverse gear. Tail-relative error: 169 − 180 = −11°, so raw steer = −0.19 (slightly right). Negated for reverse: **+0.19, wheels left**, and indeed, backing up with wheels left swings the tail leftward toward home. Both flips together produce the correct physical motion; either one alone produces a car that spirals away from its goal.
 
-The `remap` maps ±60° of error onto the full ±1 steering range — beyond 60° the command saturates at full lock, which is all the hardware has to give anyway.
+The `remap` maps ±60° of error onto the full ±1 steering range; beyond 60° the command saturates at full lock, which is all the hardware has to give anyway.
 
 **Speed, and the command.**
 
@@ -967,15 +1033,15 @@ The `remap` maps ±60° of error onto the full ±1 steering range — beyond 60�
         self.cmd_pub.publish(cmd)
 ```
 
-Farther than 60 cm from home: full homing speed (0.30 m/s — deliberately gentler than lap speed; precision beats pace here). Inside 60 cm the speed ramps linearly down, reaching the creep floor (0.25 m/s, the slowest the drivetrain reliably moves) at the edge of the target circle. Reverse is just negative `linear.x` — `mcu_bridge` maps that to reverse throttle. The last line of the function logs a compact status line twice a second: distance, bearing, yaw, error, gear, command.
+Farther than 60 cm from home: full homing speed (0.30 m/s, deliberately gentler than lap speed since precision beats pace here). Inside 60 cm the speed ramps linearly down, reaching the creep floor (0.25 m/s, the slowest the drivetrain reliably moves) at the edge of the target circle. Reverse is just negative `linear.x`; `mcu_bridge` maps that to reverse throttle. The last line of the function logs a compact status line twice a second: distance, bearing, yaw, error, gear, command.
 
 ---
 
-## Part 7 — The LiDAR toolbox
+## Part 7: The LiDAR toolbox
 
-Everything in this part operates on the arrays the scan callback buffered: `self.ranges` (distances, metres) and `self.intensities` (signal strength per ray). These functions are ported from `disparity_extender.py` — deliberately kept behaviour-identical, because they are proven on the car — with one upgrade noted below.
+Everything in this part operates on the arrays the scan callback buffered: `self.ranges` (distances, metres) and `self.intensities` (signal strength per ray). These functions are ported from `disparity_extender.py`, deliberately kept behaviour-identical because they are proven on the car, with one upgrade noted below.
 
-### Index ↔ angle helpers
+### Index-to-angle helpers
 
 ```python
     def a2i(self, ang_rad):
@@ -993,7 +1059,7 @@ Everything in this part operates on the arrays the scan callback buffered: `self
 
 A scan is an array where slot *i* holds the distance at angle `angle_min + i·angle_increment`. These three one-liners convert between "the ray at −30°" and "index 300" so the rest of the code can think in angles. All the geometry parameters come from the scan message itself, so the code adapts automatically to any LiDAR resolution.
 
-### `ray_valid` — one definition of "trustworthy"
+### `ray_valid`: one definition of "trustworthy"
 
 ```python
     def ray_valid(self, i):
@@ -1007,11 +1073,11 @@ A scan is an array where slot *i* holds the distance at angle `angle_min + i·an
                 and math.isfinite(r) and 0.05 < r <= 4.0)
 ```
 
-This is the upgrade over the original node, which scattered slightly-different validity checks around. One ray is trustworthy if: the index is in bounds, the intensity says a real return came back (≤ 0.05 = the laser saw nothing), the value is finite (not `inf`/`NaN`), and it lies in (0.05 m, 4 m]. The lower bound does double duty: some drivers encode "no return" as `0.0` (which the old checks would have accepted as "obstacle at zero distance"!), and reflections off the car's own chassis read a few centimetres. Either, if believed, would permanently convince the homing clearance guard that the car is blocked — the comment in the code records exactly that failure mode.
+This is the upgrade over the original node, which scattered slightly-different validity checks around. One ray is trustworthy if: the index is in bounds, the intensity says a real return came back (≤ 0.05 = the laser saw nothing), the value is finite (not `inf`/`NaN`), and it lies in (0.05 m, 4 m]. The lower bound does double duty: some drivers encode "no return" as `0.0` (which the old checks would have accepted as "obstacle at zero distance"!), and reflections off the car's own chassis read a few centimetres. Either, if believed, would permanently convince the homing clearance guard that the car is blocked, which is exactly the failure mode the comment in the code records.
 
-### `fix_missing` — repairing one dropout
+### `fix_missing`: repairing one dropout
 
-Real scans have holes: black surfaces absorb the laser, shallow angles scatter it. A hole is not "no obstacle" — treating it as infinite distance would make the car *steer into the data gap*. The repair is interpolation from the neighbours:
+Real scans have holes: black surfaces absorb the laser, shallow angles scatter it. A hole is not "no obstacle": treating it as infinite distance would make the car *steer into the data gap*. The repair is interpolation from the neighbours:
 
 ```python
         if self.ray_valid(i):
@@ -1034,7 +1100,7 @@ Real scans have holes: black surfaces absorb the laser, shallow angles scatter i
             last = n - 1
 ```
 
-Walk left and right from the hole until a valid ray is found on each side. (The `while/else` construct: the `else` runs only if the loop finished without `break` — i.e. the walk hit the array edge without finding anything valid.)
+Walk left and right from the hole until a valid ray is found on each side. (The `while/else` construct: the `else` runs only if the loop finished without `break`, meaning the walk hit the array edge without finding anything valid.)
 
 ```python
         if not (self.ray_valid(first) and self.ray_valid(last)):
@@ -1051,9 +1117,9 @@ Walk left and right from the hole until a valid ray is found on each side. (The 
         return lerp(self.ranges[first], self.ranges[last], lerp_factor)
 ```
 
-If no valid neighbours exist, return 0.0 — downstream code skips zero-distance rays, so an unrepairable hole is simply not a candidate direction (fail safe, not fail optimistic). If both neighbours exist and are *similar* (same surface), blend proportionally. If they differ by more than 10 cm, the hole straddles an **edge** — say, a wall end against the far wall — and blending would invent a phantom obstacle at some average distance that exists nowhere in reality. Snapping to the nearer neighbour keeps the edge sharp, and sharp edges are exactly what a gap-finding algorithm lives on.
+If no valid neighbours exist, return 0.0. Downstream code skips zero-distance rays, so an unrepairable hole is simply not a candidate direction (fail safe, not fail optimistic). If both neighbours exist and are *similar* (same surface), blend proportionally. If they differ by more than 10 cm, the hole straddles an **edge** (say, a wall end against the far wall), and blending would invent a phantom obstacle at some average distance that exists nowhere in reality. Snapping to the nearer neighbour keeps the edge sharp, and sharp edges are exactly what a gap-finding algorithm lives on.
 
-### `fix_all_missing` — repairing the working region
+### `fix_all_missing`: repairing the working region
 
 ```python
     def fix_all_missing(self):
@@ -1070,9 +1136,9 @@ If no valid neighbours exist, return 0.0 — downstream code skips zero-distance
             self.ranges[i] = self.fix_missing(i)
 ```
 
-Repairing all ~700 rays of a full revolution every scan would be wasted work — the steering only looks at ±80°. But this node has one extra customer the original didn't: the **wall windows at ±90°** (Part 8). So the repaired region is the steering FOV *plus* a margin computed to reach past ±(90° + half the wall window), with 5° of slack. The `max(50, …)` keeps at least the original's fixed 50-ray margin as a floor.
+Repairing all ~700 rays of a full revolution every scan would be wasted work, since the steering only looks at ±80°. But this node has one extra customer the original didn't: the **wall windows at ±90°** (Part 8). So the repaired region is the steering FOV *plus* a margin computed to reach past ±(90° + half the wall window), with 5° of slack. The `max(50, …)` keeps at least the original's fixed 50-ray margin as a floor.
 
-### `hit_circle` — the geometric primitive
+### `hit_circle`: the geometric primitive
 
 ```python
     def hit_circle(self, ray_ang, check_dst, check_ang, radius):
@@ -1085,9 +1151,9 @@ Repairing all ~700 rays of a full revolution every scan would be wasted work —
         return False
 ```
 
-The question: "if the robot (approximated as a circle of `radius`) travels along the direction `ray_ang`, does the obstacle point seen at (`check_dst`, `check_ang`) get in the way?" The trick is small-angle geometry: a circle of radius r at distance d subtends an angle of about r/d radians. So the obstacle threatens the path if its angular offset from the travel ray is smaller than `radius / check_dst`. Near obstacles subtend big angles (a close point blocks a wide swath of directions); far obstacles subtend small ones. One division, one comparison — this runs tens of thousands of times per second, so cheap matters.
+The question: "if the robot (approximated as a circle of `radius`) travels along the direction `ray_ang`, does the obstacle point seen at (`check_dst`, `check_ang`) get in the way?" The trick is small-angle geometry: a circle of radius r at distance d subtends an angle of about r/d radians. So the obstacle threatens the path if its angular offset from the travel ray is smaller than `radius / check_dst`. Near obstacles subtend big angles (a close point blocks a wide swath of directions); far obstacles subtend small ones. One division, one comparison: this runs tens of thousands of times per second, so cheap matters.
 
-### `marching` — the safe distance of one candidate direction
+### `marching`: the safe distance of one candidate direction
 
 ```python
     def marching(self, indx, radius=None):
@@ -1116,9 +1182,9 @@ The question: "if the robot (approximated as a circle of `radius`) travels along
         return {"dst": min_hit["dst"], "ang": min_hit["ang"]}
 ```
 
-For one candidate direction, check the ±81 neighbouring rays: does any of their obstacle points collide with the robot-circle sweeping along the candidate? The *nearest* colliding point caps the candidate's **safe distance** — "you can go this far in that direction before your body clips something". No collision at all → the ray's own measured distance is the safe distance. This is what makes the algorithm width-aware: a gap narrower than the robot scores a short safe distance even if the ray through its middle measures 3 m, because the gap's edges collide with the swept circle almost immediately.
+For one candidate direction, check the ±81 neighbouring rays: does any of their obstacle points collide with the robot-circle sweeping along the candidate? The *nearest* colliding point caps the candidate's **safe distance**: "you can go this far in that direction before your body clips something". No collision at all → the ray's own measured distance is the safe distance. This is what makes the algorithm width-aware: a gap narrower than the robot scores a short safe distance even if the ray through its middle measures 3 m, because the gap's edges collide with the swept circle almost immediately.
 
-### `get_max_d` — pick the winner
+### `get_max_d`: pick the winner
 
 ```python
     def get_max_d(self):
@@ -1141,15 +1207,15 @@ For one candidate direction, check the ±81 neighbouring rays: does any of their
         return best["dst"], best["ang"]
 ```
 
-Sweep every 4th ray in the ±80° window, march each one, keep the direction with the longest safe distance. That maximum-safe-distance direction *is* the "most open space" — the whole point of open space detection. The in-loop repair is belt-and-braces (the arrays were already fixed), and rays that remain ≤ 0 or > 3 m after repair are skipped as unusable. This is the same function as the obstacle-round node minus its tower/colour override — the open round has no pillars, so that machinery was removed rather than carried dead.
+Sweep every 4th ray in the ±80° window, march each one, keep the direction with the longest safe distance. That maximum-safe-distance direction *is* the "most open space", the whole point of open space detection. The in-loop repair is belt-and-braces (the arrays were already fixed), and rays that remain ≤ 0 or > 3 m after repair are skipped as unusable. This is the same function as the obstacle-round node minus its tower/colour override: the open round has no pillars, so that machinery was removed rather than carried dead.
 
 ---
 
-## Part 8 — Wall hugging
+## Part 8: Wall hugging
 
 Pure open-space steering has a personality quirk on straights: the "most open" direction between two walls wobbles as the scan noise shifts, so the car weaves gently. Wall hugging fixes the weave by adding one small, disciplined nudge: *hold a constant distance from the outer wall*. Two functions implement it.
 
-### `measure_wall_dist` — a robust side distance
+### `measure_wall_dist`: a robust side distance
 
 ```python
     def measure_wall_dist(self, side):
@@ -1166,15 +1232,15 @@ Pure open-space steering has a personality quirk on straights: the "most open" d
         return vals[len(vals) // 4]
 ```
 
-`side` is the ±1 convention from Part 2, so `center` lands on +90° (left) or −90° (right). All valid rays in a 20° window around it are collected, sorted, and the value one quarter of the way up — the **25th percentile** — is returned. Why not simpler choices?
+`side` is the ±1 convention from Part 2, so `center` lands on +90° (left) or −90° (right). All valid rays in a 20° window around it are collected, sorted, and the value one quarter of the way up (the **25th percentile**) is returned. Why not simpler choices?
 
 - The **minimum** would let a single low outlier (a dust mote, a glitch ray that survived validity) yank the reading toward the car and cause a phantom "too close!" swerve.
-- The **average** would let a few *long* rays — the window catching a gap between wall sections, or looking past a corner — drag the reading outward.
+- The **average** would let a few *long* rays (the window catching a gap between wall sections, or looking past a corner) drag the reading outward.
 - The 25th percentile ignores the bottom quarter (outliers low) while still representing the near side of the cluster (the wall, not the opening behind it). The test harness verifies exactly this: a spike at 2 cm in an otherwise 0.5 m window still reads 0.5 m.
 
-Fewer than 3 valid rays → `None`, "no measurement", and the caller applies no correction — never correct on garbage.
+Fewer than 3 valid rays → `None`, "no measurement", and the caller applies no correction. Never correct on garbage.
 
-### `wall_hug_correction` — the nudge
+### `wall_hug_correction`: the nudge
 
 ```python
     def wall_hug_correction(self, target_deg, now):
@@ -1190,7 +1256,20 @@ Fewer than 3 valid rays → `None`, "no measurement", and the caller applies no 
             return 0.0
 ```
 
-Three ways to bow out, all returning "no correction": hugging disabled or side not latched yet (first straight of the run); the open-space target is already steering more than 25° (a corner — the *last* thing a corner needs is a side-distance controller fighting the racing line); the side reading is missing or beyond 1.2 m (that is not the wall beside us, it is an opening — "correcting" toward it would steer the car *into* the gap). Note the D-term memory is deliberately dropped at every bail-out: a derivative computed across a gap in time (the far side of a corner) would be a meaningless spike.
+Three ways to bow out, all returning "no correction":
+
+```mermaid
+flowchart TD
+    A[wall_hug_correction] --> B{Hugging enabled\nand side latched?}
+    B -->|no| Z0["return 0.0"]
+    B -->|yes| C{"Open-space target\nwithin 25 deg of straight?"}
+    C -->|no, a corner| Z1["return 0.0\n(disparity logic owns corners)"]
+    C -->|yes| D{"Side reading valid\nand within 1.2 m?"}
+    D -->|no, an opening| Z2["return 0.0\n(don't steer into the gap)"]
+    D -->|yes| E["compute PD correction"]
+```
+
+The first case is the first straight of the run, before the side is latched. The second is a corner, where the *last* thing it needs is a side-distance controller fighting the racing line. The third is a side reading that is missing or beyond 1.2 m, meaning that is not the wall beside us, it is an opening, and "correcting" toward it would steer the car *into* the gap. Note the D-term memory is deliberately dropped at every bail-out: a derivative computed across a gap in time (the far side of a corner) would be a meaningless spike.
 
 ```python
         # error > 0: too far from the wall -> steer toward it.
@@ -1214,17 +1293,17 @@ Three ways to bow out, all returning "no correction": hugging disabled or side n
 A textbook PD controller, sized to be a trim and nothing more:
 
 - **P-term:** 40°/m of gain means being 15 cm too far from the wall asks for a 6° nudge toward it. Small, steady, exactly what levels a weave.
-- **D-term:** rate-of-change damping, off by default (`wall_kd = 0`) — the P-term plus the clamp has been stable, and an unneeded D-term amplifies sensor noise.
+- **D-term:** rate-of-change damping, off by default (`wall_kd = 0`). The P-term plus the clamp has been stable, and an unneeded D-term amplifies sensor noise.
 - **The clamp** at ±12° is the safety property: wall hugging may *trim* the heading, but the open-space direction always dominates. Even a wildly wrong wall reading cannot command more than 12°.
-- **The sign line** is where the ±1 side convention pays off. Work it through for the right wall (`hug_side = −1`): too far → `error > 0` → `correction > 0` → returned value **negative** → steer right (negative angles), toward the wall. Too close → error negative → returned value positive → steer left, away. Swap to the left wall and both cases mirror correctly. One multiplication instead of four if-branches — and all four cases are pinned by the test harness.
+- **The sign line** is where the ±1 side convention pays off. Work it through for the right wall (`hug_side = −1`): too far → `error > 0` → `correction > 0` → returned value **negative** → steer right (negative angles), toward the wall. Too close → error negative → returned value positive → steer left, away. Swap to the left wall and both cases mirror correctly. One multiplication instead of four if-branches, and all four cases are pinned by the test harness.
 
-The correction is *added to the open-space target angle* in the pipeline (Part 10), upstream of `danger_sense` — so the emergency layer sees, and can veto, the trimmed heading rather than being bypassed by it.
+The correction is *added to the open-space target angle* in the pipeline (Part 10), upstream of `danger_sense`, so the emergency layer sees, and can veto, the trimmed heading rather than being bypassed by it.
 
 ---
 
-## Part 9 — The safety senses
+## Part 9: The safety senses
 
-### `danger_sense` — don't steer into what's beside you
+### `danger_sense`: don't steer into what's beside you
 
 The gap-finder looks *forward*; a wall grazing the car's flank at 45° can be invisible to it. `danger_sense` watches the two side zones and vetoes headings that would turn into a close obstacle:
 
@@ -1247,7 +1326,7 @@ The gap-finder looks *forward*; a wall grazing the car's flank at 45° can be in
                     closest_right_dist = self.ranges[i]
 ```
 
-Scan only the 25°–90° bands on each side (not the whole array — the forward cone is the gap-finder's job, and dead-side rays can't be driven into anyway), remembering the closest obstacle per side within the 22 cm danger radius.
+Scan only the 25 to 90 degree bands on each side (not the whole array, since the forward cone is the gap-finder's job, and dead-side rays can't be driven into anyway), remembering the closest obstacle per side within the 22 cm danger radius.
 
 ```python
         escape_angle = self.str_ang_thresh * 0.5
@@ -1268,7 +1347,7 @@ Two design choices worth noticing:
 - **It only intervenes if the heading points *toward* the danger** (`target_ang_deg > 0` = steering left, danger on the left). Driving parallel past a close wall is normal racing; the override triggers only on the combination *close + turning into it*.
 - **The response is proportional, not a switch.** `severity` runs 0 at the danger boundary to 1 at contact, and the output *blends* between the wanted heading and a fixed 30° escape turn away. A hard if/else at a threshold would slam the steering at full amplitude every time the distance crossed 22 cm; the blend gives a gentle push that grows as the situation worsens.
 
-### `update_clearances` — the homing guard's eyes
+### `update_clearances`: the homing guard's eyes
 
 ```python
     def update_clearances(self):
@@ -1287,15 +1366,35 @@ Two design choices worth noticing:
         self.rear_clearance_m = rear
 ```
 
-One pass over the whole scan, keeping the nearest valid obstacle in a ±20° cone straight ahead and one straight behind. The rear cone is the reason this function iterates rays rather than slicing index ranges: "behind" is ±180°, which is where the scan array *wraps* — the rear cone's rays live at both the very start and the very end of the array. Slicing would need two ranges and edge bookkeeping; instead, each ray's angle is normalized and tested by its *angular distance from the cone centre* (`ang − π`, re-normalized — so a ray at −178° is 2° from the centre and counts). The wrap case is pinned by a dedicated harness check.
+One pass over the whole scan, keeping the nearest valid obstacle in a ±20° cone straight ahead and one straight behind. The rear cone is the reason this function iterates rays rather than slicing index ranges: "behind" is ±180°, which is where the scan array *wraps*, so the rear cone's rays live at both the very start and the very end of the array. Slicing would need two ranges and edge bookkeeping; instead, each ray's angle is normalized and tested by its *angular distance from the cone centre* (`ang − π`, re-normalized, so a ray at −178° is 2° from the centre and counts). The wrap case is pinned by a dedicated harness check.
 
 The `ray_valid` filter is load-bearing here (see Part 7): a `0.0`-encoded no-return or a chassis reflection inside the cone, if believed, would read as "obstacle at 0 m" and freeze homing forever.
 
 ---
 
-## Part 10 — The LiDAR pipeline: `calc_lidar_step`
+## Part 10: The LiDAR pipeline, `calc_lidar_step`
 
 This is the 20 Hz function that strings the toolbox into a decision. Top to bottom:
+
+```mermaid
+flowchart TD
+    A[New scan ready?] -->|no| Z1[return]
+    A -->|yes| B["Copy scan under lock,\nrelease lock"]
+    B --> C["update_clearances\n(always, for HOMING)"]
+    C --> D{run_state == RUNNING?}
+    D -->|no| Z2[return]
+    D -->|yes| E["1: dynamic cast radius\nfrom current speed"]
+    E --> F["2-3: fix_all_missing,\nget_max_d finds the open direction"]
+    F --> G{"Best direction\n< min_clear_dist_m?"}
+    G -->|yes| H["Zero speed + steer,\nwarn 'all blocked', publish debug"]
+    G -->|no| I["4: smooth target angle\n(dual lerp)"]
+    I --> J["5: wall_hug_correction trim"]
+    J --> K["6: danger_sense veto"]
+    K --> L["7: speed boost check\non a slimmer re-march"]
+    L --> M["8-9: map angle to steering,\nspeed from open distance"]
+    M --> N["10: dynamic speed cap\n(instant drop, smooth rise)"]
+    N --> O["Store self.speed / self.str_angle\nfor drive_running to publish"]
+```
 
 ```python
         if not self.new_lidar_val:
@@ -1311,7 +1410,7 @@ This is the 20 Hz function that strings the toolbox into a decision. Top to bott
         self.intensities = intensities_copy
 ```
 
-Skip if no new scan (Part 3's flag). Then the lock dance: copy the arrays *under* the lock (so the callback can't swap them mid-copy), then rebind `self.ranges` to the copy and process lock-free. If a fresh scan lands mid-pipeline, the callback overwrites the shared reference while this function keeps its private copy — no torn data, no long lock hold.
+Skip if no new scan (Part 3's flag). Then the lock dance: copy the arrays *under* the lock (so the callback can't swap them mid-copy), then rebind `self.ranges` to the copy and process lock-free. If a fresh scan lands mid-pipeline, the callback overwrites the shared reference while this function keeps its private copy: no torn data, no long lock hold.
 
 ```python
         n = len(self.ranges)
@@ -1326,7 +1425,7 @@ Skip if no new scan (Part 3's flag). Then the lock dance: copy the arrays *under
             return
 ```
 
-Guard against empty/degenerate scans (the `ang_inc` check protects every division downstream). Then the split: **clearances are computed in every state** — homing depends on them — but the expensive steering pipeline below only runs while lapping. In HOMING, steering comes from odometry, not from this function.
+Guard against empty/degenerate scans (the `ang_inc` check protects every division downstream). Then the split: **clearances are computed in every state**, since homing depends on them, but the expensive steering pipeline below only runs while lapping. In HOMING, steering comes from odometry, not from this function.
 
 ```python
         now = time.time()
@@ -1344,7 +1443,7 @@ Guard against empty/degenerate scans (the `ang_inc` check protects every divisio
         max_d, t_ang = self.get_max_d()
 ```
 
-Step 1 makes the virtual robot fatter at speed: below 45% of max speed the cast radius is the minimum (13 cm); at full speed it is 16 cm. A fast car needs wider margins because it covers more ground between decisions. Steps 2–3 are Parts 7's repair and sweep. (`current_speed` is the EMA estimate from Part 3.)
+Step 1 makes the virtual robot fatter at speed: below 45% of max speed the cast radius is the minimum (13 cm); at full speed it is 16 cm. A fast car needs wider margins because it covers more ground between decisions. Steps 2 and 3 are Part 7's repair and sweep. (`current_speed` is the EMA estimate from Part 3.)
 
 ```python
         # --- Minimum Safe Distance Floor ---
@@ -1362,7 +1461,7 @@ Step 1 makes the virtual robot fatter at speed: below 45% of max speed the cast 
             return
 ```
 
-If even the *best* direction is under 15 cm, every direction is a crash. Zero everything (the control loop will publish the zeros) and say so. Debug topics still publish, so RViz shows you *what the node saw* while it holds — exactly when you need that most.
+If even the *best* direction is under 15 cm, every direction is a crash. Zero everything (the control loop will publish the zeros) and say so. Debug topics still publish, so RViz shows you *what the node saw* while it holds, exactly when you need that most.
 
 ```python
         # 4. Smooth target angle (LazyGo's dual lerp)
@@ -1375,7 +1474,7 @@ If even the *best* direction is under 15 cm, every direction is a crash. Zero ev
         self.target_dist = max_d
 ```
 
-Raw winner directions jitter ray-to-ray between scans; steering that raw signal shakes the servo. The smoothing has two personalities: a *big* jump (> 0.5 rad ≈ 29° — a genuinely different gap opened) is taken **instantly**, because hesitating at a real change means missing a corner; a *small* change is eased in over a few ticks. The second lerp adds one more 10% blend so even the "instant" path isn't perfectly square.
+Raw winner directions jitter ray-to-ray between scans; steering that raw signal shakes the servo. The smoothing has two personalities: a *big* jump (> 0.5 rad ≈ 29°, a genuinely different gap opened) is taken **instantly**, because hesitating at a real change means missing a corner; a *small* change is eased in over a few ticks. The second lerp adds one more 10% blend so even the "instant" path isn't perfectly square.
 
 ```python
         target_deg = math.degrees(self.target_ang)
@@ -1388,7 +1487,7 @@ Raw winner directions jitter ray-to-ray between scans; steering that raw signal 
         target_deg = self.danger_sense(target_deg)
 ```
 
-The ordering encodes the authority hierarchy: **open space proposes, wall hugging trims, danger sense disposes.** Because the trim is applied *before* `danger_sense`, a wall-hug nudge that would turn into a close obstacle gets caught and overridden like any other bad heading — the safety layer cannot be bypassed by the comfort layer.
+The ordering encodes the authority hierarchy: **open space proposes, wall hugging trims, danger sense disposes.** Because the trim is applied *before* `danger_sense`, a wall-hug nudge that would turn into a close obstacle gets caught and overridden like any other bad heading. The safety layer cannot be bypassed by the comfort layer.
 
 ```python
         # 7. Speed boosting on clear straights
@@ -1401,7 +1500,7 @@ The ordering encodes the authority hierarchy: **open space proposes, wall huggin
                 self.speed_boost = self.boost_max
 ```
 
-The boost re-marches the *final* heading (after all trims) with a **half-size** circle — a deliberately optimistic check. If the target is nearly dead ahead and even the slim-body check sees more than 1.1 m, this is a straight: multiply speed by 1.35.
+The boost re-marches the *final* heading (after all trims) with a **half-size** circle, a deliberately optimistic check. If the target is nearly dead ahead and even the slim-body check sees more than 1.1 m, this is a straight: multiply speed by 1.35.
 
 ```python
         # 8. Map target angle to steering range [-1, 1]
@@ -1413,7 +1512,7 @@ The boost re-marches the *final* heading (after all trims) with a **half-size** 
         self.speed = self.max_speed * mult * self.speed_boost
 ```
 
-Steering: ±60° maps to ±1, saturating beyond. Speed: scale `max_speed` by how much room there is — 65% when only a metre is open, 100% at two metres or more.
+Steering: ±60° maps to ±1, saturating beyond. Speed: scale `max_speed` by how much room there is, 65% when only a metre is open, 100% at two metres or more.
 
 ```python
         # 10. Dynamic speed cap (instant decel, smooth accel)
@@ -1427,13 +1526,13 @@ Steering: ±60° maps to ±1, saturating beyond. Speed: scale `max_speed` by how
             self.speed_cap = lerp(self.speed_cap, self.target_cap, min(dt * 5, 1.0))
 ```
 
-Steering harder than 40° means a corner, and corners get the lower cap (0.30 vs 0.45). The asymmetry is the safety insight: when the cap needs to *drop* (corner ahead), it drops **instantly** — braking late is a crash; when it may *rise* (corner exited), it eases up smoothly — jumping back to full speed at the apex unsettles the car.
+Steering harder than 40° means a corner, and corners get the lower cap (0.30 vs 0.45). The asymmetry is the safety insight: when the cap needs to *drop* (corner ahead), it drops **instantly**, since braking late is a crash; when it may *rise* (corner exited), it eases up smoothly, since jumping back to full speed at the apex unsettles the car.
 
-Steps 11–12 are the throttled `[NAV]` status line (target, distance, wall trim, boost, lap progress — one line per half second) and the two debug publishers of Part 11. Note the pipeline itself never publishes `/cmd_vel`; it only leaves `self.speed` / `self.str_angle` behind for `drive_running` to publish. One writer to the wheel, always.
+Steps 11 and 12 are the throttled `[NAV]` status line (target, distance, wall trim, boost, lap progress, one line per half second) and the two debug publishers of Part 11. Note the pipeline itself never publishes `/cmd_vel`; it only leaves `self.speed` / `self.str_angle` behind for `drive_running` to publish. One writer to the wheel, always.
 
 ---
 
-## Part 11 — Visualization and `main()`
+## Part 11: Visualization and `main()`
 
 ### `publish_debug_scan`
 
@@ -1449,11 +1548,11 @@ Steps 11–12 are the throttled `[NAV]` status line (target, distance, wall trim
         self.debug_scan_pub.publish(debug)
 ```
 
-Republishes the scan *after* dropout repair on `/open_round/scan_processed`. Overlay it with the raw `/scan` in RViz and the difference is exactly what `fix_missing` did — the fastest way to debug interpolation. The `hasattr` guard covers the tiny startup window before the first scan (the header attribute doesn't exist yet).
+Republishes the scan *after* dropout repair on `/open_round/scan_processed`. Overlay it with the raw `/scan` in RViz and the difference is exactly what `fix_missing` did, the fastest way to debug interpolation. The `hasattr` guard covers the tiny startup window before the first scan (the header attribute doesn't exist yet).
 
 ### `publish_target_marker`
 
-Builds an ARROW marker at the LiDAR origin, rotated to `target_ang` (the quaternion one-liner `z = sin(θ/2), w = cos(θ/2)` is the standard yaw-only rotation), with length equal to the target distance — so in RViz you see, on the live scan, the exact direction and reach the node has chosen. Blue, versus the disparity extender's green, so you can never mistake whose arrow you are looking at.
+Builds an ARROW marker at the LiDAR origin, rotated to `target_ang` (the quaternion one-liner `z = sin(θ/2), w = cos(θ/2)` is the standard yaw-only rotation), with length equal to the target distance, so in RViz you see, on the live scan, the exact direction and reach the node has chosen. Blue, versus the disparity extender's green, so you can never mistake whose arrow you are looking at.
 
 ### `main`
 
@@ -1471,15 +1570,15 @@ def main(args=None):
             rclpy.shutdown()
 ```
 
-Standard rclpy lifecycle: init, construct (everything in Part 2 happens here), spin forever (the spin *is* the program — it dispatches every callback and timer), and clean shutdown on Ctrl-C without a stack trace. The `rclpy.ok()` check avoids a double-shutdown error when the context is already torn down.
+Standard rclpy lifecycle: init, construct (everything in Part 2 happens here), spin forever (the spin *is* the program: it dispatches every callback and timer), and clean shutdown on Ctrl-C without a stack trace. The `rclpy.ok()` check avoids a double-shutdown error when the context is already torn down.
 
 ---
 
-## Part 12 — Edge cases, verification, and tuning
+## Part 12: Edge cases, verification, and tuning
 
 ### The edge-case catalogue
 
-Every guard in the node, in one table — with where to find it:
+Every guard in the node, in one table, with where to find it:
 
 | Situation | Response | Where |
 |---|---|---|
@@ -1505,17 +1604,17 @@ Every guard in the node, in one table — with where to find it:
 
 Three layers, all runnable without the car:
 
-1. **Offline logic harness** — a script that imports the *real* module, builds the node object without ROS running (via `__new__`, with stub publishers/loggers), and asserts 46 checks over synthetic scans and poses: every steering sign in forward and reverse, both wall-hug sides and every bail-out gate, the direction auto-latch (CCW→right, CW→left, glitch→no latch), the rear-cone wrap at ±180°, the 5 cm success boundary from both sides, and each homing guard (stale odom, no odom, blocked, timeout, hunting cap). The reverse-steering worked example in Part 6 is one of these checks.
-2. **Real instantiation** — constructing the node under `rclpy` with the actual `bot_config.yaml`, proving every parameter declaration and YAML type agrees.
-3. **Static checks** — `flake8` clean, `colcon build` clean, executable registered.
+1. **Offline logic harness**: a script that imports the *real* module, builds the node object without ROS running (via `__new__`, with stub publishers/loggers), and asserts 46 checks over synthetic scans and poses: every steering sign in forward and reverse, both wall-hug sides and every bail-out gate, the direction auto-latch (CCW→right, CW→left, glitch→no latch), the rear-cone wrap at ±180°, the 5 cm success boundary from both sides, and each homing guard (stale odom, no odom, blocked, timeout, hunting cap). The reverse-steering worked example in Part 6 is one of these checks.
+2. **Real instantiation**: constructing the node under `rclpy` with the actual `bot_config.yaml`, proving every parameter declaration and YAML type agrees.
+3. **Static checks**: `flake8` clean, `colcon build` clean, executable registered.
 
-What is *not* covered: real-track behaviour. The wall-hug gains, homing speeds, and the guard cone are physics-facing numbers — bench-verified logic, track-verified values. Expect one tuning session.
+What is *not* covered: real-track behaviour. The wall-hug gains, homing speeds, and the guard cone are physics-facing numbers: bench-verified logic, track-verified values. Expect one tuning session.
 
 ### Tuning notes
 
 - **The car weaves on straights** → raise `wall_kp_deg_per_m` a little (40 → 55), or set a small `wall_kd_deg_s_per_m` (~5) for damping. If it *oscillates against the wall*, lower the gain instead.
 - **The car hugs too close/far** → `wall_target_dist_m`. Keep it comfortably above `danger_dist` (0.22) or the two controllers meet.
 - **Wrong wall chosen** → the direction latch fired on a pre-run wiggle. Check the "Lap direction latched" log line; force `wall_side: left/right` for a known track.
-- **Homing hunts around the circle** → the 5 cm target is tight for the drivetrain's 0.25 m/s creep floor. Either raise `home_radius_m` a touch, or lower `homing_min_speed` if the car can physically creep slower. Watch the gear-flip give-up message — it tells you the closest approach it managed.
-- **Homing stops short claiming "blocked"** → the guard cone caught the start-area wall. Narrow `homing_guard_half_deg` or shorten `homing_guard_dist_m` — but never below ~8 cm; that is the last line of defence.
+- **Homing hunts around the circle** → the 5 cm target is tight for the drivetrain's 0.25 m/s creep floor. Either raise `home_radius_m` a touch, or lower `homing_min_speed` if the car can physically creep slower. Watch the gear-flip give-up message; it tells you the closest approach it managed.
+- **Homing stops short claiming "blocked"** → the guard cone caught the start-area wall. Narrow `homing_guard_half_deg` or shorten `homing_guard_dist_m`, but never below ~8 cm; that is the last line of defence.
 - **Everything feels sluggish** → the lap phase deliberately reuses the disparity extender's speed discipline. Raise `speed_cap_straight` before touching `max_speed`.

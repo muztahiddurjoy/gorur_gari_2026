@@ -1,4 +1,4 @@
-  # Current Approach vs Angular Matching — Detailed Comparison
+# Current Approach vs Angular Matching: Detailed Comparison
 
 ## The Core Difference in One Sentence
 
@@ -11,6 +11,26 @@ Everything else flows from this single difference.
 ---
 
 ## 1. Data Flow Comparison
+
+The two approaches differ in one structural way: whether the camera tells the disparity extender *where* the pillar is, or just *what color* it is.
+
+```mermaid
+flowchart TD
+    subgraph Current["Current: assumption-based"]
+        A1["Camera picks the largest-area pillar"] --> A2["LiDAR towers sorted by distance"]
+        A2 --> A3["Assume towers[0] is the camera's pillar"]
+        A3 --> A4["Apply the color rule to towers[0]"]
+    end
+
+    subgraph Angular["Angular matching"]
+        B1["Camera picks the largest-area pillar, plus its angle"] --> B2["LiDAR towers, each with its own angle"]
+        B2 --> B3{"Any tower within 15° of the camera angle?"}
+        B3 -->|Yes| B4["Apply the color rule to that tower"]
+        B3 -->|No| B5["Skip the override, fall back to LiDAR-only"]
+    end
+```
+
+The current approach guesses. Angular matching checks.
 
 ### Current: Loose Color Broadcast
 
@@ -28,7 +48,7 @@ sequenceDiagram
     DE->>DE: Restrict FOV: only search rays RIGHT of index 412
 ```
 
-**The assumption**: Camera's "closest" (largest bbox) = LiDAR's "closest" (shortest range). This is the source of the mismatch bug.
+**The assumption:** the camera's "closest" (largest bbox) is the same object as the LiDAR's "closest" (shortest range). This is the source of the mismatch bug.
 
 ### Angular Matching
 
@@ -41,64 +61,64 @@ sequenceDiagram
     CAM->>DE: "/closest_obj" = [1.0, -23.0] (Red at -23°)
     Note over DE: I know there's a Red pillar<br/>at approximately -23°
     DE->>LIDAR: Which tower is closest to -23°?
-    LIDAR-->>DE: towers[1] at index 378, angle -22°, dist 1.1m ✓<br/>towers[0] at index 412, angle +35°, dist 0.7m ✗
+    LIDAR-->>DE: towers[1] at index 378, angle -22°, dist 1.1m (match)<br/>towers[0] at index 412, angle +35°, dist 0.7m (no match)
     Note over DE: Tower at -22° matches!<br/>(Δ = 1° < 15° tolerance)
     DE->>DE: Restrict FOV: only search rays RIGHT of index 378
 ```
 
-**No assumption needed** — the camera explicitly tells the brain where the pillar is, and the brain matches it to the correct LiDAR signature.
+**No assumption needed.** The camera explicitly tells the brain where the pillar is, and the brain matches it to the correct LiDAR signature.
 
 ---
 
 ## 2. The Exact Failure Scenario
 
-Consider this WRO track situation — the bot approaches a section with two pillars visible simultaneously:
+Consider this WRO track situation: the bot approaches a section with two pillars visible at once.
 
 ```
             ┌─────────────────────────────────┐
             │             TRACK               │
             │                                 │
-            │      🟢 Green pillar            │
+            │      Green pillar               │
             │      dist: 1.5m                 │
             │      angle: +25° (left)         │
-            │      bbox area: 4800 px²        │ ← Camera says: THIS is closest (bigger)
+            │      bbox area: 4800 px²        │ <- Camera says: THIS is closest (bigger)
             │                                 │
-            │              🤖 Bot             │
+            │              Bot                │
             │                                 │
-            │      🔴 Red pillar              │
-            │      dist: 0.8m                 │ ← LiDAR says: THIS is closest (nearer)
+            │      Red pillar                 │
+            │      dist: 0.8m                 │ <- LiDAR says: THIS is closest (nearer)
             │      angle: -15° (right)        │
             │      bbox area: 2400 px²        │
             │                                 │
             └─────────────────────────────────┘
 ```
 
-### What happens with the CURRENT approach:
+### What happens with the current approach
 
 | Step | Camera | LiDAR | Disparity Extender |
 |------|--------|-------|--------------------|
-| 1 | Detects both pillars | Detects both as towers | — |
-| 2 | Picks Green (area 4800 > 2400) | Sorts by distance: Red (0.8m) first | — |
-| 3 | Publishes `"G"` | `towers[0]` = Red pillar at -15° | — |
-| 4 | — | — | Color = "G", so restrict to LEFT of `towers[0]` |
-| 5 | — | — | `chk[0] = towers[0]["index"]` (the Red pillar's index) |
-| 6 | — | — | **Bot passes the RED pillar on the LEFT** ❌ |
+| 1 | Detects both pillars | Detects both as towers | - |
+| 2 | Picks Green (area 4800 > 2400) | Sorts by distance: Red (0.8m) first | - |
+| 3 | Publishes `"G"` | `towers[0]` = Red pillar at -15° | - |
+| 4 | - | - | Color = "G", so restrict to LEFT of `towers[0]` |
+| 5 | - | - | `chk[0] = towers[0]["index"]` (the Red pillar's index) |
+| 6 | - | - | **Bot passes the Red pillar on the left (rule violation)** |
 
-**Result**: Rule violation. The bot should pass the Red pillar on the RIGHT, but it was told "Green" (from the far pillar) and applied that rule to the Red pillar (the close one). The wrong color was applied to the wrong tower.
+**Result:** rule violation. The bot should pass the Red pillar on the right, but it was told "Green" (from the far pillar) and applied that rule to the Red pillar (the close one). The wrong color was applied to the wrong tower.
 
-### What happens with ANGULAR MATCHING:
+### What happens with angular matching
 
 | Step | Camera | LiDAR | Disparity Extender |
 |------|--------|-------|--------------------|
-| 1 | Detects both pillars | Detects both as towers | — |
-| 2 | Picks Green (area 4800 > 2400) | Sorts by distance: Red (0.8m) first | — |
-| 3 | Publishes `[2.0, +25.0]` (Green at +25°) | `towers[0]` = Red at -15°, `towers[1]` = Green at +25° | — |
-| 4 | — | — | Color = Green, camera says +25° |
-| 5 | — | — | Find tower closest to +25°: `towers[1]` at +25° (Δ = 0°) ✅ |
-| 6 | — | — | Restrict to LEFT of `towers[1]` (the actual Green pillar) |
-| 7 | — | — | **Bot passes the Green pillar on the LEFT** ✅ |
+| 1 | Detects both pillars | Detects both as towers | - |
+| 2 | Picks Green (area 4800 > 2400) | Sorts by distance: Red (0.8m) first | - |
+| 3 | Publishes `[2.0, +25.0]` (Green at +25°) | `towers[0]` = Red at -15°, `towers[1]` = Green at +25° | - |
+| 4 | - | - | Color = Green, camera says +25° |
+| 5 | - | - | Find tower closest to +25°: `towers[1]` at +25° (Δ = 0°, exact match) |
+| 6 | - | - | Restrict to LEFT of `towers[1]` (the actual Green pillar) |
+| 7 | - | - | **Bot passes the Green pillar on the left (correct)** |
 
-**Result**: Correct behavior. The angular match ensures the color override targets the correct physical object.
+**Result:** correct behavior. The angular match ensures the color override targets the correct physical object.
 
 ---
 
@@ -108,7 +128,7 @@ Consider this WRO track situation — the bot approaches a section with two pill
 
 | Aspect | Current | Angular Matching |
 |--------|---------|-----------------|
-| **Camera "closest" metric** | Largest bounding box area (px²) | Same — largest area |
+| **Camera "closest" metric** | Largest bounding box area (px²) | Same, largest area |
 | **LiDAR "closest" metric** | Shortest range (meters) | **Angle proximity** to camera detection |
 | **Match quality** | Implicit assumption they agree | Explicit geometric matching |
 | **Failure mode** | Silent wrong-side pass | Graceful fallback to LiDAR-only if no angular match within tolerance |
@@ -127,14 +147,14 @@ Consider this WRO track situation — the bot approaches a section with two pill
 
 | Scenario | Current | Angular Matching |
 |----------|---------|-----------------|
-| Single pillar, straight ahead | ✅ Works | ✅ Works |
-| Single pillar, off to the side | ✅ Works (only 1 tower to match) | ✅ Works |
-| Two pillars, same side | ⚠️ Risk of mismatch | ✅ Matches by angle |
-| Two pillars, opposite sides | ❌ **Mismatch likely** (see scenario above) | ✅ Matches by angle |
-| Pillar behind a wall (LiDAR occluded) | ⚠️ Camera sees it, LiDAR doesn't → color override with no tower = no-op | ⚠️ Same — but explicitly detected as "no angular match" |
-| Camera false positive (colored wall) | ❌ Applies override to wrong tower | ⚠️ Better — likely no LiDAR tower within 15° of the wall, so override is skipped |
-| Camera completely fails | ✅ Falls back to "N" (LiDAR-only) | ✅ Same |
-| LiDAR detects non-pillar tower (e.g., corner post) | ⚠️ May apply color to it | ✅ Only applies if camera angle matches within 15° |
+| Single pillar, straight ahead | Works | Works |
+| Single pillar, off to the side | Works (only 1 tower to match) | Works |
+| Two pillars, same side | Risk of mismatch | Matches by angle |
+| Two pillars, opposite sides | **Mismatch likely** (see scenario above) | Matches by angle |
+| Pillar behind a wall (LiDAR occluded) | Camera sees it, LiDAR doesn't: color override with no tower is a no-op | Same, but explicitly detected as "no angular match" |
+| Camera false positive (colored wall) | Applies override to wrong tower | Better: likely no LiDAR tower within 15° of the wall, so the override is skipped |
+| Camera completely fails | Falls back to "N" (LiDAR-only) | Same |
+| LiDAR detects non-pillar tower (e.g., corner post) | May apply color to it | Only applies if camera angle matches within 15° |
 
 ### 3.4 Latency
 
@@ -143,7 +163,7 @@ Consider this WRO track situation — the bot approaches a section with two pill
 | Camera processing time | ~8ms (320×240, HSV + contours) | ~8ms (same pipeline + 1 division for angle) |
 | Message publish latency | <1ms | <1ms |
 | Disparity extender overhead | 0 (just reads a string) | ~0.05ms (iterate towers[], compute angle deltas) |
-| **Total added latency** | — | **< 0.1ms** |
+| **Total added latency** | n/a | **< 0.1ms** |
 
 ### 3.5 Calibration Requirements
 
@@ -161,7 +181,7 @@ Consider this WRO track situation — the bot approaches a section with two pill
 
 ## 4. What the Code Diff Would Look Like
 
-### vision_node.py — Publishing angle alongside color
+### vision_node.py: publishing angle alongside color
 
 ```diff
 - from std_msgs.msg import String
@@ -174,7 +194,7 @@ Consider this WRO track situation — the bot approaches a section with two pill
       obstacles_topic,
       qos_profile=10
   )
-+ self.camera_hfov_deg = 60.0  # Horizontal FOV — measure once for your camera
++ self.camera_hfov_deg = 60.0  # Horizontal FOV, measure once for your camera
 
   # In _image_callback, after finding closest_color:
 + closest_angle = 0.0
@@ -198,7 +218,7 @@ Consider this WRO track situation — the bot approaches a section with two pill
   self.obstacle_pub.publish(msg_out)
 ```
 
-### disparity_extender.py — Matching by angle
+### disparity_extender.py: matching by angle
 
 ```diff
   # In color_callback:
@@ -230,12 +250,12 @@ Consider this WRO track situation — the bot approaches a section with two pill
 
 | Criteria | Weight | Current | Angular Matching |
 |----------|--------|---------|-----------------|
-| Correctness (multi-pillar) | ★★★★★ | 3/10 | 9/10 |
-| Simplicity | ★★★★ | 10/10 | 8/10 |
-| Latency overhead | ★★★ | 10/10 | 10/10 |
-| Calibration effort | ★★ | 10/10 | 8/10 |
-| Failure-mode safety | ★★★★ | 5/10 | 9/10 |
+| Correctness (multi-pillar) | 5/5 | 3/10 | 9/10 |
+| Simplicity | 4/5 | 10/10 | 8/10 |
+| Latency overhead | 3/5 | 10/10 | 10/10 |
+| Calibration effort | 2/5 | 10/10 | 8/10 |
+| Failure-mode safety | 4/5 | 5/10 | 9/10 |
 | **Weighted Score** | | **6.5** | **9.0** |
 
 > [!IMPORTANT]
-> The current approach scores low on correctness and failure-mode safety because a wrong-side pass is a **silent failure** — there's no log, no warning, no fallback. The bot confidently drives past the wrong side. Angular matching adds a 15° tolerance check that explicitly catches mismatches and falls back to LiDAR-only navigation instead.
+> The current approach scores low on correctness and failure-mode safety because a wrong-side pass is a **silent failure**: there's no log, no warning, no fallback. The bot confidently drives past the wrong side. Angular matching adds a 15° tolerance check that explicitly catches mismatches and falls back to LiDAR-only navigation instead.
