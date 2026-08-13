@@ -250,11 +250,9 @@ flowchart LR
 
 ### Two brains, one car
 
-The Raspberry Pi and the ESP32-S3 talk over a serial link using the **MAVLink 2** protocol, with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked fine until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
+The Raspberry Pi and the ESP32-S3 talk over a native USB serial link using the **MAVLink 2** protocol, with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked fine until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
 
-The link runs on a **USB-to-TTL adapter into the MCU's UART1** (adapter TX → GPIO 18, adapter RX → GPIO 17, grounds tied). It used to be the devkit's native USB CDC port, which cost nothing in wiring but tied the link to the same socket used for flashing, and meant a write with no host reading could park the control loop for the CDC timeout. A real UART also keeps the ROM bootloader banner off the link, since that comes out on UART0. The wiring and the pins it takes from the sonar block are in [`firmware/pin-map.md`](./firmware/pin-map.md); the Pi finds the adapter through a udev alias, see [`firmware/tools/99-esp32-uart.rules.example`](./firmware/tools/99-esp32-uart.rules.example).
-
-One hard-earned lesson lives in [`platformio.ini`](./firmware/platformio.ini): the Arduino core on the ESP32 logs I2C errors to `Serial`, which for a long time was the same port the MAVLink frames went out on. A single stray log line in the middle of a packet was enough to desync the parser on the Pi side, so the competition build silences the core logs entirely and sends our own debug output to a separate UART. Moving the link off `Serial` means a stray line can no longer land in a packet, but the logs stay split anyway — it is the arrangement that stopped the bug, and a HAL printing on repeat from inside the I2C task is its own problem.
+One hard-earned lesson lives in [`platformio.ini`](./firmware/platformio.ini): the Arduino core on the ESP32 logs I2C errors to the same serial port the MAVLink frames go out on. A single stray log line in the middle of a packet was enough to desync the parser on the Pi side, so the competition build silences the core logs entirely and sends our own debug output to a separate UART.
 
 ### Odometry and returning home
 

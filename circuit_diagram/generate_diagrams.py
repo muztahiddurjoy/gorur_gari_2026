@@ -112,10 +112,10 @@ def main_diagram():
     wire(ax, [(130, 92), (108, 92)], W_USB, arrow="<>")
     wlabel(ax, 119, 94.2, "USB", W_USB)
 
-    # Pi <-> ESP32 (USB-to-TTL adapter into UART1, MAVLink)
+    # Pi <-> ESP32 (native USB CDC, MAVLink)
     wire(ax, [(85, 84), (85, 73)], W_USB, lw=2.4, arrow="<>")
     wlabel(ax, 86, 78.5,
-           "USB-to-TTL → UART1 (RX 18 / TX 17)  ·  MAVLink 2 @ 115200\n"
+           "USB CDC (native)  ·  MAVLink 2 @ 115200\n"
            "/dev/esp32_s3  ·  mcu_bridge.py  ·  telemetry every 50 ms",
            W_USB, fs=7, ha="left")
 
@@ -250,10 +250,8 @@ def pin_table():
     # the flag lives on the row so inserting one cannot shift a hand written
     # index onto the wrong line
     rows = [
-        ("Raspberry Pi 4B ↔ ESP32-S3", "UART1 via USB-to-TTL", "18 / 17",
-         "RX / TX · MAVLink 2 @ 115200, /dev/esp32_s3 (mcu_bridge.py)", False),
-        ("Debug logs", "UART0 → onboard CH343", "44 / 43",
-         "RX / TX · DEBUG_SERIAL, human readable only", False),
+        ("Raspberry Pi 4B ↔ ESP32-S3", "USB CDC (native)", "—",
+         "MAVLink 2 @ 115200, /dev/esp32_s3 (mcu_bridge.py)", False),
         ("BNO055 IMU", "SDA / SCL", "8 / 9", "I²C 0x29 · yaw sampled every 10 ms", False),
         ("OLED SSD1306", "SDA / SCL", "8 / 9 (shared)", "I²C 0x3C · 50 ms refresh", False),
         ("TB6612FNG", "PWMA", "4", "20 kHz, 8-bit duty", False),
@@ -262,10 +260,8 @@ def pin_table():
         ("MG996R servo", "PWM", "10", "50 Hz · center 90° · ±35°", False),
         ("JGA370 encoder", "A / B", "2 / 1",
          "quadrature, 1320 counts/rev · swapped on purpose (pins.h)", False),
-        ("Sonar FRONT", "TRIG / ECHO", "16 / 17",
-         "HC-SR04 · disabled · ECHO clashes with UART1 TX — unplug it", True),
-        ("Sonar LEFT", "TRIG / ECHO", "18 / 21",
-         "HC-SR04 · disabled · TRIG clashes with UART1 RX — unplug it", True),
+        ("Sonar FRONT", "TRIG / ECHO", "16 / 17", "HC-SR04 · disabled in config.h", False),
+        ("Sonar LEFT", "TRIG / ECHO", "18 / 21", "HC-SR04 · disabled in config.h", False),
         ("Sonar RIGHT", "TRIG / ECHO", "38 / 39", "HC-SR04 · disabled in config.h", False),
         ("Sonar REAR (slot)", "TRIG / ECHO", "40 / 41", "reserved — no sensor fitted", True),
         ("START button", "input", "42", "arms the run · 3 × 1 s LED countdown", False),
@@ -289,10 +285,7 @@ def pin_table():
             ha="center", fontsize=8, color="#6b7280")
 
     cols = [(4, "Device"), (40, "Signal"), (62, "GPIO"), (78, "Notes")]
-    # rh is what fits len(rows) between `top` and the bottom of the axes: the
-    # last row sits at top - rh * len(rows), so adding a row without shrinking
-    # this walks it off the figure. 4.7 leaves a little slack at 18 rows.
-    top, rh = 88, 4.7
+    top, rh = 88, 5.0
     ax.add_patch(FancyBboxPatch((2, top - 1.6), 126, 4.6,
                                 boxstyle="round,pad=0.2",
                                 fc="#1f2937", ec="none", zorder=2))

@@ -43,7 +43,7 @@ The devkit's **onboard WS2812** (GPIO 48) carries the whole picture:
 
 | Colour | Meaning | If that is not what you expect |
 | --- | --- | --- |
-| Red | No ROS 2 bridge has announced itself since the ESP32 booted | `mcu_bridge` is not running, or it never got the port — check `/dev/esp32_s3` points at the USB-to-TTL adapter, and that its TX/RX are crossed onto GPIO 18/17 with the grounds tied |
+| Red | No ROS 2 bridge has announced itself since the ESP32 booted | `mcu_bridge` is not running, or it never got the port — check `/dev/esp32_s3` |
 | Green | Bridge connected, drivetrain idle | — |
 | Flashing blue | Motor driving, steering near centre | If the car is meant to be stopped, something is still publishing `/cmd_vel` |
 | Flashing purple | Motor driving with the wheels turned | Same, plus the steering is off centre |

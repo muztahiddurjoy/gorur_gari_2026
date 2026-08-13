@@ -40,11 +40,8 @@ STEERING_GAIN_DEG = 60.0  # wire angle = center + angular.z * this
 STEERING_MIN_DEG = 0      # servo clamp, full left
 STEERING_MAX_DEG = 180    # servo clamp, full right
 
-# udev alias for the USB-to-TTL adapter wired to the ESP32-S3's UART1 (GPIO 18
-# RX / GPIO 17 TX, see firmware/pin-map.md). The real tuning is the mcu_bridge
-# section of ros2_ws/config/bot_config.yaml; these are the fallbacks.
-MCU_PORT = '/dev/esp32_s3'
-MCU_BAUDRATE = 115200  # must match MAVLINK_SERIAL_BAUD in firmware/include/mav_serial.h
+MCU_PORT = '/dev/esp32_s3'  # udev alias for the ESP32-S3 native USB CDC port
+MCU_BAUDRATE = 115200
 
 # the drivetrain does not make enough torque at cruise throttle to break static
 # friction, so the command that starts a move from a standstill gets scaled up
@@ -55,11 +52,7 @@ LAUNCH_BOOST_DURATION_S = 1.0  # 0.0 -> boost only the single command that start
 LAUNCH_IDLE_TIMEOUT_S = 0.5  # no cmd_vel for this long counts as stopped, so the boost re-arms
 
 # how long to wait after opening the port before announcing ourselves to the MCU.
-# opening a plain USB-to-TTL adapter does not reset the esp32 the way the native
-# USB port could, so this is no longer a bootloader wait - it is settling time
-# for the adapter's driver and for whatever half frame was in flight. Keep it:
-# the connect notice is sent once and never repeated, so losing it costs both
-# status lights for the whole session.
+# long enough for the esp32 to clear its bootloader if opening the port reset it.
 MCU_CONNECT_NOTICE_DELAY_S = 1.0
 
 # run stopwatch -> OLED. the autonomy/run_timer node publishes /run_time and
@@ -161,11 +154,8 @@ class MCUBridgeNode(Node):
             self.mav_rx = mcu_to_ros2.MAVLink(self.master, srcSystem=2, srcComponent=1)
             # mavutil sets this on the parser it builds itself, but we replace that
             # parser with the mcu_to_ros2 dialect and the default is False. Without
-            # it any non-MAVLink byte raises instead of resyncing, killing the whole
-            # read loop. The esp32 boot banner no longer lands here now that the link
-            # is UART1 and the banner goes out on UART0, but opening the port
-            # mid-frame still hands us a partial packet, and a UART picks up noise
-            # the CDC link never could.
+            # it any non-MAVLink byte (the esp32 boot banner it prints when we open
+            # the port) raises instead of resyncing, killing the whole read loop.
             self.mav_rx.robust_parsing = True
             self.master.mav = self.mav_rx
             # pymavlink defaults this connection to wire protocol 1.0, so the first
