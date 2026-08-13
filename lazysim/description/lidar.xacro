@@ -12,7 +12,15 @@
   Datasheet / driver settings this mirrors:
     launch arg serial_baudrate  460800
     launch arg angle_compensate true   -> fixed 720-ray grid
-    launch arg inverted         false  -> standard REP-103 CCW ordering
+    launch arg lidar_inverted   true   -> standard REP-103 CCW ordering
+
+  Note the sim models the corrected scan, not the physical mount. The
+  real C1 is bolted on UPSIDE DOWN, so it sweeps the opposite way as
+  seen from above and the driver's `inverted` flag reverses ranges[] to
+  put +angle back on the robot's left. This sensor is simply modelled
+  right way up, which yields the same CCW ordering the real driver
+  publishes once inverted is set — so the two stay interchangeable and
+  nothing here needs to change.
     scan rate                   10 Hz
     range                       0.05 m .. 12 m
     accuracy                    ~±30 mm  -> gaussian stddev 0.01 m

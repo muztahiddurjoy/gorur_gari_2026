@@ -12,8 +12,8 @@ disparity_extender_node:
     vision_angle_tolerance_deg: 15.0 # Max angular diff to match camera to LiDAR
 
     # ── Speed ──────────────────────────────────────────────────────
-    max_speed: 1.3            # Maximum linear velocity (m/s)
-    speed_cap_corner: 0.8      # Speed cap when cornering (m/s)
+    max_speed: 1.0            # Maximum linear velocity (m/s)
+    speed_cap_corner: 0.4      # Speed cap when cornering (m/s)
     speed_cap_straight: 1.2    # Speed cap on straights (m/s)
     boost_max: 1.155             # Speed boost multiplier on clear straights
     boost_angle_thresh: 10.0     # Max steering angle to allow boost (degrees)
@@ -38,7 +38,7 @@ disparity_extender_node:
     button_topic: "/button_status"
 
     # ── Steering ───────────────────────────────────────────────────
-    str_ang_thresh: 60.0        # Max physical steering angle (degrees)
+    str_ang_thresh: 180.0        # Max physical steering angle (degrees)
 
     # ── Game Modes ─────────────────────────────────────────────────
     chase_tower_mode: false     # If true, the bot steers TOWARDS detected towers instead of avoiding them

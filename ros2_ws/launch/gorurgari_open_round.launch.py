@@ -71,7 +71,7 @@ def generate_launch_description():
             'output_units', default_value='cm',
             description='Units of /odom_vector, cm or m. The TF is always metres.'),
         DeclareLaunchArgument(
-            'heading_clockwise', default_value='true',
+            'heading_clockwise', default_value='false',
             description='BNO055 yaw grows clockwise, ROS grows counter clockwise. '
                         'Every /heading consumer here is given the same value.'),
 
@@ -105,6 +105,17 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'lidar_frame_id', default_value='laser',
             description='Frame ID for the LiDAR scans.'),
+        DeclareLaunchArgument(
+            'lidar_inverted', default_value='true',
+            description='True when the C1 is bolted on upside down, which is how it '
+                        'is mounted on this car. Flipped over it sweeps the opposite '
+                        'way as seen from above, so the driver has to reverse ranges[] '
+                        'to put +angle back on the robot LEFT (REP-103). Without it '
+                        'every left/right decision downstream — steering target, '
+                        'danger cone, wall side — is mirrored, because open_round_run '
+                        'indexes ranges[] straight off angle_min/angle_increment. '
+                        'Check with: box 1 m to the LEFT must read at a POSITIVE '
+                        'angle in `ros2 topic echo /scan`.'),
     ]
 
     # one launch argument per sonar, mirroring the firmware SONAR_*_ENABLED flags
@@ -167,6 +178,7 @@ def generate_launch_description():
         }],
     )
 
+<<<<<<< HEAD
     # # RPLidar C1 Node using rplidar_ros
     # rplidar_c1 = Node(
     #     package='rplidar_ros',
@@ -183,6 +195,24 @@ def generate_launch_description():
     #         'angle_compensate': True,
     #     }],
     # )
+=======
+    # RPLidar C1 Node using rplidar_ros
+    rplidar_c1 = Node(
+        package='rplidar_ros',
+        executable='rplidar_node',
+        name='rplidar_node',
+        output='screen',
+        emulate_tty=True,
+        parameters=[{
+            'channel_type': 'serial',
+            'serial_port': LaunchConfiguration('lidar_serial_port'),
+            'serial_baudrate': 460800,  # Specific baudrate required for RPLidar C1
+            'frame_id': LaunchConfiguration('lidar_frame_id'),
+            'inverted': typed('lidar_inverted', bool),
+            'angle_compensate': True,
+        }],
+    )
+>>>>>>> 5e203c7 (Update LiDAR parameters and configurations for improved sensor handling and performance)
 
     open_round_run = Node(
         package='autonomy',
