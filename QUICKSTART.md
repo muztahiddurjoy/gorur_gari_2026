@@ -59,13 +59,6 @@ Two things worth knowing before you debug the wrong end:
 
 ## 1. Core autonomous driving and LiDAR
 
-### Run the disparity extender navigation node
-
-```bash
-cd ~/Documents/GitHub/gorur_gari_2026/ros2_ws
-source install/setup.bash
-ros2 run sensors_processing disparity_extender --ros-args --params-file config/disparity_extender_params.yaml
-```
 
 ### Visualize in RViz2
 

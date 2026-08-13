@@ -44,22 +44,22 @@ For anyone scoring this repository against the WRO Future Engineers rubric — f
 <table>
   <tr>
     <td width="33%" align="center">
-      <img src="./assets/member1.png" width="180" height="180"/><br>
+      <img src="./assets/images/dipanjan-dipro.png" width="180" height="180"/><br>
       <strong>Dipanjan Roy Dipro</strong><br>
       Mechanical and CAD Design<br>
-      <a href="mailto:member1@example.com">[email address]</a>
+      <a href="">[email address]</a>
     </td>
     <td width="33%" align="center">
-      <img src="./assets/member2.png" width="180" height="180"/><br>
+      <img src="./assets/images/muztahid-rahman.jpeg" width="180" height="180"/><br>
       <strong>Muztahid Rahman</strong><br>
       ROS2, ESP32 Firmware and Electronics<br>
-      <a href="mailto:member2@example.com">[email address]</a>
+      <a href="mailto:muztahid.rahman@bracu.ac.bd">muztahid.rahman@bracu.ac.bd</a>
     </td>
     <td width="33%" align="center">
-      <img src="./assets/member3.png" width="180" height="180"/><br>
+      <img src="./assets/images/shayer-sowmik.jpeg" width="180" height="180"/><br>
       <strong>Shayer Mahmud Sowmik</strong><br>
       Vision and Navigation Algorithm<br>
-      <a href="mailto:member3@example.com">[email address]</a>
+      <a href="mailto:sowmik1337@gmail.com">sowmik1337@gmail.com</a>
     </td>
   </tr>
 </table>
@@ -79,14 +79,14 @@ For anyone scoring this repository against the WRO Future Engineers rubric — f
 
 Both rounds start the same way: the judge says go, we press the start button on the car, and from that moment on nobody touches it.
 
-## Performance Videos
-
+<!-- ## Performance Videos -->
+<!-- 
 One public (or link-accessible) YouTube video per challenge is required, each showing at least 30 seconds of actual autonomous driving.
 
 | Round | Link |
 | :-- | :-- |
 | Open Challenge | `[NEEDS DATA — add YouTube link, ≥30s autonomous driving]` |
-| Obstacle Challenge | `[NEEDS DATA — add YouTube link, ≥30s autonomous driving]` |
+| Obstacle Challenge | `[NEEDS DATA — add YouTube link, ≥30s autonomous driving]` | -->
 
 ## Repository
 
@@ -129,57 +129,62 @@ Here's a breakdown of the project folders:
   </thead>
   <tbody>
     <tr>
-      <td><div align="center"><img src="./assets/pi4b.jpg" width="160" alt="Raspberry Pi 4B"></div></td>
+      <td><div align="center"><img src="https://cdn.roboticsbd.com/2672-large_default/raspberry-pi-4-robotics-bangladesh.jpg" width="160" alt="Raspberry Pi 4B"></div></td>
       <td>Raspberry Pi 4B</td>
       <td>High-level processing: ROS 2 Humble, LiDAR processing, vision, and path planning.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/esp32s3.jpg" width="160" alt="ESP32-S3 DevKitC-1"></div></td>
+      <td><div align="center"><img src="https://admin.techshopbd.com/uploads/product/ESP32-S3-DevKitC1-N16R8-Development-Board-Dual-USB-Type-C-best-price-in-bangladesh_2026_vAyrOmt.webp" width="160" alt="ESP32-S3 DevKitC-1"></div></td>
       <td>ESP32-S3 DevKitC-1</td>
       <td>Real-time control: motor PWM, steering servo, encoder counting, IMU reading, start button, status LEDs, and OLED display.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/rplidar_c1.jpg" width="160" alt="RPLIDAR C1"></div></td>
+      <td><div align="center"><img src="https://cdn.roboticsbd.com/902-large_default/cp2102-usb-to-ttl-serial-converter-module-robotics-bangladesh.jpg" width="160" alt="CP2102 USB to TTL Serial Converter"></div></td>
+      <td>CP2102 USB to TTL serial converter</td>
+      <td>Dedicated hardware serial link between the Raspberry Pi and the ESP32-S3 MCU (UART1), running MAVLink 2 to isolate motor noise and prevent CDC timeouts.</td>
+    </tr>
+    <tr>
+      <td><div align="center"><img src="https://cdn.roboticsbd.com/9301-home_default/rplidar-c1-dtof-lidar-360-laser-range-scanner-12m-ip54-robotics-bangladesh.jpg" width="160" alt="RPLIDAR C1"></div></td>
       <td>RPLIDAR C1</td>
       <td>360-degree laser scanner. Our primary sensor for walls, gaps, and pillar detection.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/bno055.jpg" width="160" alt="BNO055 IMU"></div></td>
+      <td><div align="center"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRl8hqc3RqORGKjigtVTR-pmd_1zzCjm3nEzHuCgwY5yg2In2UvuRsKesiG&s=10" width="160" alt="BNO055 IMU"></div></td>
       <td>Bosch BNO055 IMU</td>
       <td>Absolute heading. Its onboard sensor fusion gives us a stable yaw angle without us having to filter raw gyro data ourselves.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/camera.jpg" width="160" alt="USB camera"></div></td>
+      <td><div align="center"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmuGcaIVi2VkMJbXZVxs6wxJe4zAWwdhm19O5gZPLafzyGYNJKei_bqgc&s=10" width="160" alt="USB camera"></div></td>
       <td>USB HD Camera</td>
       <td>Tells red pillars from green ones. Auto-focus is disabled in software so the image stays sharp while the car moves.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/motor.jpg" width="160" alt="Drive motor"></div></td>
-      <td>DC gear motor with quadrature encoder</td>
+      <td><div align="center"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5If1w16phsLCjwf8gMtUQ7i_W0QQq_XoWzexRtDeatJgXwr8zg8Qx-Xd_&s=10" width="160" alt="Drive motor"></div></td>
+      <td>JGA 370 DC gear motor with quadrature encoder</td>
       <td>Drives the rear axle. The encoder on the motor shaft is what makes our odometry possible.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/tb6612.jpg" width="160" alt="TB6612FNG driver"></div></td>
+      <td><div align="center"><img src="https://www.sparkfun.com/media/catalog/product/cache/f3020b7489dcfc4d1d147cf4dad07b7f/1/4/14450a-01.jpg" width="160" alt="TB6612FNG driver"></div></td>
       <td>TB6612FNG motor driver</td>
       <td>H-bridge between the microcontroller and the drive motor.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/servo.jpg" width="160" alt="Steering servo"></div></td>
+      <td><div align="center"><img src="https://img.drz.lazcdn.com/static/bd/p/c6512076f3e40e5f02698ffe47993e2f.jpg_720x720q80.jpg" width="160" alt="Steering servo"></div></td>
       <td>Metal-gear micro servo</td>
       <td>Turns the front wheels through the Ackermann steering linkage.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/oled.jpg" width="160" alt="SSD1306 OLED"></div></td>
+      <td><div align="center"><img src="https://cdn.roboticsbd.com/3123-large_default/096-inch-i2c-oled-display-white-robotics-bangladesh.jpg" width="160" alt="SSD1306 OLED"></div></td>
       <td>SSD1306 0.96" OLED display</td>
       <td>Shows live status on the car itself, invaluable when there is no laptop connected: throttle, encoder count, steering angle, heading, and the run stopwatch.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/battery.jpg" width="160" alt="LiPo battery"></div></td>
+      <td><div align="center"><img src="https://apn089-robodoc-prod.sgp1.cdn.digitaloceanspaces.com/dc82d632c9fcecb0778afbc7924494a6/201d2784d290a8d3bdf05a51b7db1f1d.jpg" width="160" alt="LiPo battery"></div></td>
       <td>LiPo battery</td>
       <td>Main power source. [Placeholder: cell count and capacity]</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="./assets/ubec.jpg" width="160" alt="Buck converter"></div></td>
+      <td><div align="center"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTBaKyyo7qxCgqYZb8L4GB8O0iRYY16kkGi-jqPfMZVn9VRPsD2P9xYU0k&s=10" width="160" alt="Buck converter"></div></td>
       <td>5V step-down converter (UBEC)</td>
       <td>Regulates battery voltage down to a clean 5V rail for the Pi and the electronics.</td>
     </tr>

@@ -197,7 +197,7 @@ class CustomDisparityExtender(Node):
         self.cmd_pub = self.create_publisher(Twist, cmd_topic, 10)
         self.vision_sub = self.create_subscription(
             Float32MultiArray, '/closest_obj', self.vision_callback, qos_profile_sensor_data)
-        self.vision_colors = []
+        self.vision_detections = []
 
         # A silent /scan must never leave the MCU on a stale throttle.
         self.create_timer(0.1, self.watchdog)
@@ -214,8 +214,16 @@ class CustomDisparityExtender(Node):
         return self.get_parameter(name).value
 
     def vision_callback(self, msg: Float32MultiArray):
-        """Update the list of detected pillar colors from the vision node."""
-        self.vision_colors = list(msg.data)
+        """Update the list of detected pillar colors and angles from the vision node."""
+        data = list(msg.data)
+        new_detections = []
+        # Parse [color, angle] pairs
+        for i in range(0, len(data) - 1, 2):
+            new_detections.append({
+                "color": data[i],
+                "angle": data[i+1]
+            })
+        self.vision_detections = new_detections
 
     # ──────────────────────────────────────────────────────────────
     # Index <-> angle helpers
@@ -290,11 +298,25 @@ class CustomDisparityExtender(Node):
         objects.sort(key=lambda o: o["dist"])
         towers = self.deduplicate(objects)
         
-        for i, t in enumerate(towers):
-            if i < len(self.vision_colors):
-                t["color"] = self.vision_colors[i]
-            else:
-                t["color"] = 0.0
+        for t in towers:
+            # Default to yellow/unknown
+            t["color"] = 0.0
+            
+            # Find closest vision detection by angle
+            best_match = None
+            min_angle_diff = 15.0 # Max allowed difference in degrees
+            
+            # vision_detections are sorted by size (largest/closest first).
+            # Iterating them means we favor matching larger blobs if 
+            # multiple are near the same angle.
+            for det in self.vision_detections:
+                diff = abs(t["angle_deg"] - det["angle"])
+                if diff < min_angle_diff:
+                    min_angle_diff = diff
+                    best_match = det
+            
+            if best_match:
+                t["color"] = best_match["color"]
 
         marker_array = MarkerArray()
         for i, o in enumerate(towers):

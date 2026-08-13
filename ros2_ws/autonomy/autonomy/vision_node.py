@@ -178,14 +178,26 @@ class VisionNode(Node):
         # Run the standalone OpenCV detection pipeline
         detections = self.detector.detect(cv_image)
 
-        # Send only the color codes of detected towers, sorted by closest (largest area) to furthest
+        # Send color codes and their angles for angular matching fusion
+        # Output format: [color1, angle1_deg, color2, angle2_deg, ...]
         sorted_dets = sorted(detections, key=lambda d: d['bbox'][2] * d['bbox'][3], reverse=True)
         
         msg_out = Float32MultiArray()
-        msg_out.data = [float(1.0 if det['color'] == 'red' else 2.0) for det in sorted_dets]
+        msg_out.data = []
+        
+        img_w = cv_image.shape[1]
+        
+        for det in sorted_dets:
+            color_code = float(1.0 if det['color'] == 'red' else 2.0)
+            cx = det['centroid_x']
+            # Angle: 0 is center. Left of center (cx < img_w/2) is positive angle in ROS.
+            # Right of center (cx > img_w/2) is negative angle.
+            angle_deg = ((img_w / 2.0) - cx) / (img_w / 2.0) * (self.camera_hfov_deg / 2.0)
+            
+            msg_out.data.extend([color_code, float(angle_deg)])
 
         self.obstacle_pub.publish(msg_out)
-        self.get_logger().debug(f'Published tower colors: {msg_out.data}')
+        self.get_logger().info(f'Published tower colors & angles: {msg_out.data}')
 
         # Publish visual debug frame if enabled
         if self.publish_debug and self.bridge:

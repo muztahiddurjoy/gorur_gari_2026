@@ -167,22 +167,22 @@ def generate_launch_description():
         }],
     )
 
-    # RPLidar C1 Node using rplidar_ros
-    rplidar_c1 = Node(
-        package='rplidar_ros',
-        executable='rplidar_node',
-        name='rplidar_node',
-        output='screen',
-        emulate_tty=True,
-        parameters=[{
-            'channel_type': 'serial',
-            'serial_port': LaunchConfiguration('lidar_serial_port'),
-            'serial_baudrate': 460800,  # Specific baudrate required for RPLidar C1
-            'frame_id': LaunchConfiguration('lidar_frame_id'),
-            'inverted': False,
-            'angle_compensate': True,
-        }],
-    )
+    # # RPLidar C1 Node using rplidar_ros
+    # rplidar_c1 = Node(
+    #     package='rplidar_ros',
+    #     executable='rplidar_node',
+    #     name='rplidar_node',
+    #     output='screen',
+    #     emulate_tty=True,
+    #     parameters=[{
+    #         'channel_type': 'serial',
+    #         'serial_port': LaunchConfiguration('lidar_serial_port'),
+    #         'serial_baudrate': 460800,  # Specific baudrate required for RPLidar C1
+    #         'frame_id': LaunchConfiguration('lidar_frame_id'),
+    #         'inverted': False,
+    #         'angle_compensate': True,
+    #     }],
+    # )
 
     open_round_run = Node(
         package='autonomy',
@@ -216,7 +216,7 @@ def generate_launch_description():
         mcu_bridge,
         vector_odom,
         lap_counter,
-        rplidar_c1,
+        # rplidar_c1,
         open_round_run,
         run_timer,
     ])
