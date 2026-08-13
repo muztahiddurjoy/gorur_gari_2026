@@ -29,6 +29,7 @@ setup(
             'open_round_run = autonomy.open_round_run:main',
             'vision_node = autonomy.vision_node:main',
             'lap_counter = autonomy.lap_counter:main',
+            'run_timer = autonomy.run_timer:main',
             'tune_hsv = autonomy.tune_hsv:main',
             'testing = autonomy.custom_disparity_extender:main',
             'custom_disparity_extender = autonomy.custom_disparity_extender:main',

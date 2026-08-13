@@ -5,6 +5,7 @@ Wiring is taken from the firmware sources — keep in sync with:
   firmware/include/pins.h      (GPIO assignments)
   firmware/include/config.h    (frequencies, I2C addresses, enables)
   firmware/pin-map.md          (full pin table incl. reserved slots)
+  firmware/lib/rgb_status_led/ (what each WS2812 colour means)
   ros2_ws/controls/controls/mcu_bridge.py  (/dev/esp32_s3 MAVLink link)
 
 Usage:  python3 generate_diagrams.py   (needs matplotlib)
@@ -32,6 +33,14 @@ W_PWM   = "#ea580c"
 W_GPIO  = "#15803d"
 W_ENC   = "#0d9488"
 W_PHASE = "#991b1b"
+
+# what the onboard WS2812 shows, see firmware/lib/rgb_status_led
+PIXEL_STATES = [
+    ("#dc2626", "red",     "no ROS 2 bridge since boot"),
+    ("#16a34a", "green",   "bridge connected, car idle"),
+    ("#2563eb", "blue",    "driving, steering centred (flashing)"),
+    ("#a21caf", "purple",  "driving, wheels turned (flashing)"),
+]
 
 FIG_BG = "white"
 
@@ -116,7 +125,7 @@ def main_diagram():
             fontweight="bold", color="#111827", zorder=4)
     ax.text(85, 65,
             "firmware/ — PlatformIO · Arduino · FreeRTOS\n"
-            "core 1: loop() — motor, servo, sonar, encoder, MAVLink\n"
+            "core 1: loop() — motor, servo, sonar, encoder, status lights, MAVLink\n"
             "core 0: i2cTask — BNO055 @ 10 ms, OLED @ 50 ms",
             ha="center", va="top", fontsize=7.5, color="#374151", zorder=4)
 
@@ -162,9 +171,11 @@ def main_diagram():
     # ---------------- servo ----------------------------------------------
     block(ax, 128, 8, 34, 12, "MG996R servo",
           "steering · 50 Hz PWM\ncenter 90° · ±35°", C_ACT)
-    wire(ax, [(110, 42), (110, 25), (155, 25), (155, 20.5)], W_PWM,
+    # threaded between the button/LED column (up to y = 26.4 with its padding)
+    # and the motor block above it (down to y = 30.6)
+    wire(ax, [(110, 42), (110, 27.6), (155, 27.6), (155, 20.5)], W_PWM,
          lw=2.2, arrow=">")
-    wlabel(ax, 131, 27.2, "GPIO10 · PWM 50 Hz", W_PWM, fs=6.8)
+    wlabel(ax, 131, 29.1, "GPIO10 · PWM 50 Hz", W_PWM, fs=6.8)
 
     # ---------------- sonars (bottom) -------------------------------------
     sonars = [
@@ -180,13 +191,28 @@ def main_diagram():
     wlabel(ax, 46, 27.8, "TRIG out / ECHO in — one sonar polled per loop()",
            W_GPIO, fs=6.6)
 
-    # ---------------- button + status led ---------------------------------
-    block(ax, 100, 15.5, 22, 7, "START button", "GPIO42 — arms run",
+    # ---------------- button + status lights -------------------------------
+    block(ax, 100, 19.5, 22, 6.5, "START button", "GPIO42 — arms run",
           C_HMI, tfs=8, sfs=6.5)
-    block(ax, 100, 6, 22, 7, "Status LED", "GPIO36 + 220–470 Ω",
+    block(ax, 100, 11.5, 22, 6.5, "Status LED", "GPIO36 + 220–470 Ω",
           C_HMI, tfs=8, sfs=6.5)
-    wire(ax, [(94, 42), (94, 19), (100, 19)], W_GPIO, arrow="<")
-    wire(ax, [(97, 42), (97, 9.5), (100, 9.5)], W_GPIO, arrow=">")
+    block(ax, 100, 3.5, 22, 6.5, "Onboard WS2812", "GPIO48 — on the devkit",
+          C_HMI, tfs=8, sfs=6.5)
+    wire(ax, [(93, 42), (93, 22.7), (100, 22.7)], W_GPIO, arrow="<")
+    wire(ax, [(96, 42), (96, 14.7), (100, 14.7)], W_GPIO, arrow=">")
+    wire(ax, [(99, 42), (99, 6.7), (100, 6.7)], W_GPIO, arrow=">")
+
+    # ---------------- what the pixel means ---------------------------------
+    kx, ky = 8, 37.5
+    ax.text(kx, ky + 2.4, "ONBOARD WS2812 (GPIO48)", fontsize=7.5,
+            fontweight="bold", color="#374151")
+    for i, (col, name, meaning) in enumerate(PIXEL_STATES):
+        yy = ky - i * 2.6
+        ax.plot([kx + 0.8], [yy], marker="o", ms=6, color=col, zorder=5)
+        ax.text(kx + 2.6, yy, name, fontsize=6.8, fontweight="bold",
+                color=col, va="center")
+        ax.text(kx + 10, yy, meaning, fontsize=6.6, color="#4b5563",
+                va="center")
 
     # ---------------- legend + power note ---------------------------------
     lx, ly = 8, 79.5
@@ -205,7 +231,7 @@ def main_diagram():
             fontsize=6.8, color="#b91c1c", ha="left", va="center")
 
     # ---------------- footnotes -------------------------------------------
-    ax.text(8, 3.2,
+    ax.text(8, 1.4,
             "*  encoder A/B intentionally swapped vs silkscreen so forward = positive count (pins.h)      "
             "†  HC-SR04 ECHO is 5 V — divide/level-shift to the 3.3 V GPIO      "
             "4th sonar slot reserved: REAR TRIG=GPIO40 / ECHO=GPIO41  ·  all sonars currently disabled in config.h",
@@ -220,27 +246,32 @@ def main_diagram():
 
 # ================================================================ figure 2
 def pin_table():
+    # (device, signal, gpio, note, is_reserved) - reserved rows render grey.
+    # the flag lives on the row so inserting one cannot shift a hand written
+    # index onto the wrong line
     rows = [
         ("Raspberry Pi 4B ↔ ESP32-S3", "USB CDC (native)", "—",
-         "MAVLink 2 @ 115200, /dev/esp32_s3 (mcu_bridge.py)"),
-        ("BNO055 IMU", "SDA / SCL", "8 / 9", "I²C 0x29 · yaw sampled every 10 ms"),
-        ("OLED SSD1306", "SDA / SCL", "8 / 9 (shared)", "I²C 0x3C · 50 ms refresh"),
-        ("TB6612FNG", "PWMA", "4", "20 kHz, 8-bit duty"),
-        ("", "AIN1 / AIN2", "5 / 6", "direction; both HIGH = brake"),
-        ("", "STBY", "7", "HIGH = driver awake"),
-        ("MG996R servo", "PWM", "10", "50 Hz · center 90° · ±35°"),
+         "MAVLink 2 @ 115200, /dev/esp32_s3 (mcu_bridge.py)", False),
+        ("BNO055 IMU", "SDA / SCL", "8 / 9", "I²C 0x29 · yaw sampled every 10 ms", False),
+        ("OLED SSD1306", "SDA / SCL", "8 / 9 (shared)", "I²C 0x3C · 50 ms refresh", False),
+        ("TB6612FNG", "PWMA", "4", "20 kHz, 8-bit duty", False),
+        ("", "AIN1 / AIN2", "5 / 6", "direction; both HIGH = brake", False),
+        ("", "STBY", "7", "HIGH = driver awake", False),
+        ("MG996R servo", "PWM", "10", "50 Hz · center 90° · ±35°", False),
         ("JGA370 encoder", "A / B", "2 / 1",
-         "quadrature, 1320 counts/rev · swapped on purpose (pins.h)"),
-        ("Sonar FRONT", "TRIG / ECHO", "16 / 17", "HC-SR04 · disabled in config.h"),
-        ("Sonar LEFT", "TRIG / ECHO", "18 / 21", "HC-SR04 · disabled in config.h"),
-        ("Sonar RIGHT", "TRIG / ECHO", "38 / 39", "HC-SR04 · disabled in config.h"),
-        ("Sonar REAR (slot)", "TRIG / ECHO", "40 / 41", "reserved — no sensor fitted"),
-        ("START button", "input", "42", "arms the run · 3 × 1 s LED countdown"),
-        ("Status LED", "output", "36", "lit = ROS 2 bridge connected · plain LED, not WS2812"),
-        ("TCS3200 (reserved)", "S0–S3 / OUT", "11–14 / 15", "in pin-map.md, not in firmware"),
-        ("Button 2 / LED 2 (reserved)", "in / out", "47 / 35", "in pin-map.md, not in firmware"),
+         "quadrature, 1320 counts/rev · swapped on purpose (pins.h)", False),
+        ("Sonar FRONT", "TRIG / ECHO", "16 / 17", "HC-SR04 · disabled in config.h", False),
+        ("Sonar LEFT", "TRIG / ECHO", "18 / 21", "HC-SR04 · disabled in config.h", False),
+        ("Sonar RIGHT", "TRIG / ECHO", "38 / 39", "HC-SR04 · disabled in config.h", False),
+        ("Sonar REAR (slot)", "TRIG / ECHO", "40 / 41", "reserved — no sensor fitted", True),
+        ("START button", "input", "42", "arms the run · 3 × 1 s LED countdown", False),
+        ("Status LED", "output", "36",
+         "lit = ROS 2 bridge connected · plain LED + resistor, not the WS2812", False),
+        ("Onboard WS2812", "data", "48",
+         "red idle / green linked / flashing blue driving / purple turning", False),
+        ("TCS3200 (reserved)", "S0–S3 / OUT", "11–14 / 15", "in pin-map.md, not in firmware", True),
+        ("Button 2 / LED 2 (reserved)", "in / out", "47 / 35", "in pin-map.md, not in firmware", True),
     ]
-    reserved = {11, 14, 15}  # row indices rendered grey (0-based, incl. rear slot)
 
     fig, ax = plt.subplots(figsize=(13, 9), dpi=200)
     fig.patch.set_facecolor(FIG_BG)
@@ -263,18 +294,18 @@ def pin_table():
                 color="white", zorder=3)
 
     y = top - rh
-    for i, (dev, sig, gpio, note) in enumerate(rows):
+    for i, (dev, sig, gpio, note, is_reserved) in enumerate(rows):
         if i % 2 == 0:
             ax.add_patch(FancyBboxPatch((2, y - 1.4), 126, rh - 0.6,
                                         boxstyle="round,pad=0.1",
                                         fc="#f3f4f6", ec="none", zorder=1))
-        col = "#9ca3af" if i in reserved else "#111827"
-        ncol = "#9ca3af" if i in reserved else "#4b5563"
+        col = "#9ca3af" if is_reserved else "#111827"
+        ncol = "#9ca3af" if is_reserved else "#4b5563"
         ax.text(cols[0][0], y + 0.6, dev, fontsize=8, fontweight="bold",
                 color=col, zorder=3)
         ax.text(cols[1][0], y + 0.6, sig, fontsize=8, color=col, zorder=3)
         ax.text(cols[2][0], y + 0.6, gpio, fontsize=8, fontweight="bold",
-                color="#b45309" if i not in reserved else "#9ca3af", zorder=3)
+                color="#9ca3af" if is_reserved else "#b45309", zorder=3)
         ax.text(cols[3][0], y + 0.6, note, fontsize=7.3, color=ncol, zorder=3)
         y -= rh
 

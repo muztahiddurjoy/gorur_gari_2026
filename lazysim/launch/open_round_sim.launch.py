@@ -22,6 +22,10 @@ Rehearse the real start sequence (standby until the button):
 
     ros2 launch lazysim open_round_sim.launch.py require_button_start:=true
     ros2 service call /lazybot/press_start std_srvs/srv/Trigger
+
+Adapted from Team LazyGo's simulator:
+https://github.com/A-N-M-Noor/LazyGo_WRO2025/
+For testing purposes only — none of this runs on the competition car.
 """
 import os
 

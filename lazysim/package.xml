@@ -7,6 +7,11 @@
     Ignition Gazebo Fortress simulation of the Gorur Gari 2026 WRO Future
     Engineers car. Presents the same ROS interface as the real vehicle so
     the controls and autonomy packages run against it unchanged.
+
+    Adapted from Team LazyGo's simulator:
+    https://github.com/A-N-M-Noor/LazyGo_WRO2025/
+    For testing and development purposes only; not part of the competition
+    vehicle or its run.
   </description>
   <maintainer email="muztahid.appbaksho@gmail.com">Team Gorur Gari</maintainer>
   <license>MIT</license>

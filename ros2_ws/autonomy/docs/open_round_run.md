@@ -43,7 +43,7 @@ The node expects the rest of the open-round stack to be up (same nodes as `gorur
 | `/reset_lap_count` | publishes | `std_msgs/Empty` | one shot at startup, zeroes the lap counter |
 | `/open_round/scan_processed` | publishes | `sensor_msgs/LaserScan` | the scan *after* dropout repair, for RViz |
 | `/open_round/target_marker` | publishes | `visualization_msgs/Marker` | blue arrow showing the chosen driving direction |
-| `/open_round/state` | publishes | `std_msgs/String` | 1 Hz heartbeat of the state machine (`STANDBY`, `RUNNING`, …) |
+| `/open_round/state` | publishes | `std_msgs/String` | the state machine (`STANDBY`, `RUNNING`, …): once a second, and again the instant it changes |
 
 ## The state machine
 
@@ -677,6 +677,10 @@ Same message, different urgency. `publish_stop` is for *parked* states (STANDBY,
 ```
 
 One string, once a second. Trivial, and worth its weight in gold when something looks wrong trackside: `ros2 topic echo /open_round/state` immediately tells you whether the node thinks it is RUNNING, HOMING or FINISHED.
+
+It is also called directly from every transition — `button_callback`, `begin_running`, `enter_homing` and `finish` — and that is not decoration. The [`run_timer`](./run_timer.md) node starts its stopwatch on the `RUNNING` that comes out of here and stops it on the `FINISHED`. On the heartbeat alone, the clock would start somewhere in the second *after* GO and stop somewhere in the second *after* the car parks, so every run time would be wrong by up to a second at each end. Publishing on the transition costs one message and makes the run time exact — in a bench test the stopwatch started 0.1 ms after `begin_running` logged GO.
+
+The heartbeat still matters, though: it is what re-arms `run_timer` when this node is restarted between runs (the first `STANDBY` it hears resets the clock), and it is what tells `run_timer` this node is still alive. Silence for more than a few seconds mid-run means the driving node died, and the stopwatch freezes rather than counting up against a ghost.
 
 ---
 

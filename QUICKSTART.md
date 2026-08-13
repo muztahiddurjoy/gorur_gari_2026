@@ -29,7 +29,31 @@ flowchart TD
     Q3 -->|Yes| RV["rviz2 -d config/..."]
     START --> Q4{Just checking which\ncolor the vision node sees?}
     Q4 -->|Yes| ECHO["ros2 topic echo /closest_obj"]
+    START --> Q5{How long did\nthat run take?}
+    Q5 -->|Yes| TIME["Read the OLED, or\nros2 topic echo /run_time_str"]
 ```
+
+---
+
+## 0. Reading the status lights
+
+Before reaching for a laptop, look at the two lights on the ESP32-S3. Between them they answer "is the Pi actually talking to the microcontroller, and is the car about to move".
+
+The devkit's **onboard WS2812** (GPIO 48) carries the whole picture:
+
+| Colour | Meaning | If that is not what you expect |
+| --- | --- | --- |
+| Red | No ROS 2 bridge has announced itself since the ESP32 booted | `mcu_bridge` is not running, or it never got the port — check `/dev/esp32_s3` |
+| Green | Bridge connected, drivetrain idle | — |
+| Flashing blue | Motor driving, steering near centre | If the car is meant to be stopped, something is still publishing `/cmd_vel` |
+| Flashing purple | Motor driving with the wheels turned | Same, plus the steering is off centre |
+
+The **plain LED** (GPIO 36) lights on the same connect message and blinks three times, once a second, after a start button press. Those blinks are the start delay the ROS 2 side holds the car still for, so the car starts moving the moment they stop.
+
+Two things worth knowing before you debug the wrong end:
+
+- The connect notice is sent **once**, about a second after `mcu_bridge` opens the port. If you reset the ESP32 while `mcu_bridge` is already running, both lights stay in the disconnected state until you restart the node.
+- Nothing ever sends a *disconnect* notice, so if `mcu_bridge` dies the pixel stays green. Red means "never connected since boot", not "not connected right now".
 
 ---
 
@@ -156,6 +180,8 @@ ros2 run autonomy open_round_run --ros-args \
   -p enable_auto_steering:=false
 ```
 
+The run stopwatch follows this node's state machine — see [section 7](#7-timing-a-run).
+
 ---
 
 ## 5. Custom disparity extender (obstacle challenge)
@@ -167,3 +193,85 @@ ros2 run autonomy custom_disparity_extender --ros-args \
     --params-file config/bot_config.yaml \
     -p enable_drive:=false
 ```
+
+---
+
+## 6. Running it in simulation (testing only)
+
+`lazysim` runs the whole stack against a simulated car, which is handy when the real one isn't on the bench. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and is **for testing and development purposes only** — it never takes part in a competition run.
+
+```bash
+cd ~/Documents/GitHub/gorur_gari_2026
+colcon build --base-paths lazysim ros2_ws \
+             --build-base ros2_ws/build --install-base ros2_ws/install \
+             --symlink-install
+source ros2_ws/install/setup.bash
+
+ros2 launch lazysim open_round_sim.launch.py        # three laps, then home
+ros2 launch lazysim obstacle_round_sim.launch.py    # with traffic pillars
+ros2 launch lazysim sim.launch.py                   # simulator only, drive it yourself
+```
+
+There is no physical start button in sim, so trigger it over a service call:
+
+```bash
+ros2 service call /lazybot/press_start std_srvs/srv/Trigger
+```
+
+Full details, launch arguments, and the list of what is and isn't modeled are in [`lazysim/README.md`](./lazysim/README.md).
+
+---
+
+## 7. Timing a run
+
+The open round launch file starts `run_timer` for you, and the run time shows up on the car's OLED as the bottom line — nothing to run, nothing to press. This section is for when you want the number somewhere other than the display.
+
+### Watch the clock from a laptop
+
+```bash
+# MM:SS.d, updated ten times a second
+ros2 topic echo /run_time_str
+
+# IDLE before the run, RUNNING during it, STOPPED once the car parks
+ros2 topic echo /run_timer_state
+
+# elapsed seconds, if you want to plot or record it
+ros2 topic echo /run_time
+```
+
+### Run the stopwatch on its own
+
+Useful when you started the driving node by hand instead of through the launch file:
+
+```bash
+cd ~/Documents/GitHub/gorur_gari_2026/ros2_ws
+source install/setup.bash
+ros2 run autonomy run_timer --ros-args --params-file config/bot_config.yaml
+```
+
+It only measures — it publishes no drive command at all — so it is safe to start and stop at any point, including mid-run.
+
+### Reading the OLED line
+
+| Line | What it means |
+| --- | --- |
+| `Time --:--.-` | No run yet, or the timer was re-armed for the next one |
+| `Time 01:23.4` | Running |
+| `Time 01:23.4 ?` | The ROS 2 side stopped sending — the number is the last one received, not the current time |
+| `Time 01:23.4 END` | The run is over; this is the final time |
+
+A `?` means look at the Pi, not the car: either `run_timer` or `mcu_bridge` has stopped. The car itself is unaffected — the clock is display-only and no driving code reads it.
+
+### Timing something other than the open round
+
+`run_timer` follows a state topic, and which states start and stop it are parameters. To point it at a different state machine:
+
+```bash
+ros2 run autonomy run_timer --ros-args \
+  -p state_topic:=/some_other/state \
+  -p start_states:="['RUNNING']" \
+  -p stop_states:="['FINISHED']" \
+  -p reset_states:="['STANDBY']"
+```
+
+Anything not named in one of those three lists leaves the clock alone, which is how `HOMING` keeps counting without being mentioned. Note that `disparity_extender` (obstacle round) does not publish a state topic yet, so the obstacle round is not timed — see [`run_timer.md`](./ros2_ws/autonomy/docs/run_timer.md).

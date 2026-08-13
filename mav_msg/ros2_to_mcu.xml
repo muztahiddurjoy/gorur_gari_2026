@@ -11,5 +11,10 @@
             <description>Sent once by mcu_bridge when it opens the serial link, so the MCU can show on the status LED that ROS2 is talking to it</description>
             <field type="uint8_t" name="connected">1 = link established, 0 = link going down</field>
         </message>
+        <message id="50004" name="gorur_gari_ros2_to_mcu_timer_msg">
+            <description>Run stopwatch from the ROS2 run_timer node, so the OLED can show the run time without a laptop attached. Sent repeatedly while the link is up; elapsed_ms stops advancing once state leaves 1</description>
+            <field type="uint32_t" name="elapsed_ms">milliseconds since the run started</field>
+            <field type="uint8_t" name="state">0 = idle (no run yet), 1 = running, 2 = stopped (final time)</field>
+        </message>
     </messages>
 </mavlink>

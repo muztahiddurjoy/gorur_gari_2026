@@ -19,6 +19,10 @@ Check what the camera actually sees:
 
     ros2 run rqt_image_view rqt_image_view /camera/image_raw
     ros2 topic echo /closest_obj
+
+Adapted from Team LazyGo's simulator:
+https://github.com/A-N-M-Noor/LazyGo_WRO2025/
+For testing purposes only — none of this runs on the competition car.
 """
 import os
 

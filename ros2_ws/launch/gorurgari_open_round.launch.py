@@ -14,6 +14,11 @@ Open round: the full driving stack, no obstacles on the mat.
                                     the start button on the car is pressed
                                     (/button_status), and the MCU blinks its
                                     status LED once a second over that delay
+    run_timer           autonomy    /open_round/state -> /run_time, one
+                                    stopwatch for the whole run. Starts on GO,
+                                    keeps counting through homing, freezes the
+                                    moment the car parks. mcu_bridge forwards
+                                    it to the OLED. Drives nothing
 
 Everything talks on relative topic names in the root namespace, so the nodes
 wire up to each other with no remaps. 
@@ -195,10 +200,23 @@ def generate_launch_description():
         ],
     )
 
+    # Times the run off open_round_run's state, and nothing else. It publishes
+    # no command topic at all, so leaving it out (or having it die mid run)
+    # costs the run time on the OLED and changes nothing about the driving.
+    run_timer = Node(
+        package='autonomy',
+        executable='run_timer',
+        name='run_timer',
+        output='screen',
+        emulate_tty=True,
+        parameters=[DEFAULT_BOT_CONFIG],
+    )
+
     return LaunchDescription(arguments + [
         mcu_bridge,
         vector_odom,
         lap_counter,
         rplidar_c1,
         open_round_run,
+        run_timer,
     ])

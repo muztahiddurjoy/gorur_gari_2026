@@ -1,6 +1,9 @@
 #ifndef PINS_H
 #define PINS_H
 
+// for the pin type and for RGB_BUILTIN, which the board variant defines
+#include <Arduino.h>
+
 //servo pins
 const uint8_t STEERING_SERVO_PIN = 10;
 //motor pins
@@ -30,6 +33,19 @@ const uint8_t BUTTON_PIN = 42;
 // never enables PSRAM, but move the LED to 37 or 45 if you fit such a module
 // and see trouble.
 const uint8_t STATUS_LED_PIN = 36;
+
+// the devkit's own WS2812, the single addressable pixel the
+// ESP32-S3-DevKitC-1 puts on GPIO48. RGB_BUILTIN is what the board variant calls it
+// (a pseudo pin number, SOC_GPIO_PIN_COUNT + 48, which neopixelWrite() maps
+// back to the real gpio); the literal is the fallback for a variant that does
+// not define it. Some boards have too little drive voltage on 48 and expect
+// the pixel to be rewired to a spare 3V3 capable pin - change this if you fit
+// one of those.
+#ifdef RGB_BUILTIN
+const uint8_t RGB_STATUS_LED_PIN = RGB_BUILTIN;
+#else
+const uint8_t RGB_STATUS_LED_PIN = 48;
+#endif
 
 // sonar pins (HC-SR04 style), see firmware/pin-map.md
 const uint8_t SONAR_FRONT_TRIG_PIN = 16;

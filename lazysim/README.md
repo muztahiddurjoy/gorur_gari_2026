@@ -1,5 +1,12 @@
 # lazysim
 
+> **Credit and scope.** `lazysim` is adapted from **Team LazyGo**'s simulator, published at
+> [github.com/A-N-M-Noor/LazyGo_WRO2025](https://github.com/A-N-M-Noor/LazyGo_WRO2025/). We
+> retargeted their Gazebo setup to our chassis, sensors, and ROS interface; the original work is
+> theirs. It is here **for testing and development purposes only** — it is a bench tool for
+> exercising the autonomy stack without the physical car, and is not part of the competition
+> vehicle or its run.
+
 This is the simulation of the Gorur Gari 2026 car, built on Ignition Gazebo Fortress.
 
 The whole point of this package is that nothing downstream of it knows it's a simulation. `lazybridge` presents the exact same ROS interface that `controls/mcu_bridge` does on the real robot, and the simulated `/scan` looks like the RPLIDAR C1's. That means `vector_odom`, `lap_counter`, `open_round_run`, `vision_node`, and `disparity_extender` all run their real, unmodified code, with no sim-specific branches anywhere.

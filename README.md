@@ -7,7 +7,19 @@
 
 Our car runs a full **ROS 2** stack on a Raspberry Pi, talks to an ESP32-S3 over **MAVLink**, and navigates with a 360-degree LiDAR. If you only have a few minutes, the most interesting parts are probably our [Vector Odometry](#odometry-and-returning-home), the [Disparity Extender](#avoidance-using-lidar) we use for obstacle avoidance, and the way we [detect the traffic pillars with LiDAR and confirm their color with a camera](#obstacle-round).
 
-This repository contains all the code, wiring diagrams, documentation, photos, and everything else about our team and the robot.
+This repository contains all the code, wiring diagrams, documentation, photos, and everything else about our team and the robot. The narrative behind the design — what we tried, measured, and changed — lives in the [**Engineering Journal**](./ENGINEERING_JOURNAL.md), organized under the same five headings judges score against.
+
+## Judging Criteria Map
+
+For anyone scoring this repository against the WRO Future Engineers rubric — five criteria, each mapped to exactly where the evidence lives:
+
+| Criterion | README | Engineering Journal |
+| :-- | :-- | :-- |
+| Mobility & Mechanical Design | [§ Mobility and Mechanical Design](#mobility-and-mechanical-design) | [§1](./ENGINEERING_JOURNAL.md#1-mobility-and-mechanical-design) |
+| Power & Sensor Architecture | [§ Power and Sensor Architecture](#power-and-sensor-architecture) | [§2](./ENGINEERING_JOURNAL.md#2-power-and-sensor-architecture) |
+| Software Architecture & Obstacle Strategy | [§ Algorithm and Software](#algorithm-and-software) | [§3](./ENGINEERING_JOURNAL.md#3-software-architecture-and-obstacle-strategy) |
+| Systems Thinking & Engineering Decisions | — | [§4](./ENGINEERING_JOURNAL.md#4-systems-thinking-and-engineering-decisions) |
+| Reproducibility & GitHub Quality | [§ Getting It Running](#getting-it-running) | [§5](./ENGINEERING_JOURNAL.md#5-reproducibility-and-github-quality) |
 
 ## Table of Contents
 
@@ -18,9 +30,12 @@ This repository contains all the code, wiring diagrams, documentation, photos, a
 - [`Key Features`](#key-features)
 - [`Components and Hardware`](#components-and-hardware)
 - [`Algorithm and Software`](#algorithm-and-software)
-- [`Mobility Management`](#mobility-management)
-- [`Power and Sense Management`](#power-and-sense-management)
+- [`Mobility and Mechanical Design`](#mobility-and-mechanical-design)
+- [`Power and Sensor Architecture`](#power-and-sensor-architecture)
 - [`Getting It Running`](#getting-it-running)
+- [`Submission Checklist`](#submission-checklist)
+- [`Acknowledgements`](#acknowledgements)
+- [`Engineering Journal`](./ENGINEERING_JOURNAL.md) *(separate document)*
 
 ## Team Introduction
 
@@ -66,7 +81,12 @@ Both rounds start the same way: the judge says go, we press the start button on 
 
 ## Performance Videos
 
-Coming soon...
+One public (or link-accessible) YouTube video per challenge is required, each showing at least 30 seconds of actual autonomous driving.
+
+| Round | Link |
+| :-- | :-- |
+| Open Challenge | `[NEEDS DATA — add YouTube link, ≥30s autonomous driving]` |
+| Obstacle Challenge | `[NEEDS DATA — add YouTube link, ≥30s autonomous driving]` |
 
 ## Repository
 
@@ -76,12 +96,12 @@ This repository includes all the files, designs, and code for our WRO 2026 robot
 
 Here's a breakdown of the project folders:
 
-- **[`firmware`](./firmware/)**: PlatformIO project for the ESP32-S3. Handles the motor, steering servo, encoder, IMU, OLED display, and the MAVLink serial link: everything that has to happen in real time.
+- **[`firmware`](./firmware/)**: PlatformIO project for the ESP32-S3. Handles the motor, steering servo, encoder, IMU, OLED display, status lights, and the MAVLink serial link: everything that has to happen in real time.
 - **[`ros2_ws`](./ros2_ws/)**: The ROS 2 workspace that runs on the Raspberry Pi. Contains our three packages (`controls`, `autonomy`, and `sensors_processing`) plus launch files and tuning configs.
 - **[`mav_msg`](./mav_msg/)**: The MAVLink message definitions (XML) shared between the Pi and the microcontroller, so both sides always agree on what the bytes mean.
 - **[`circuit_diagram`](./circuit_diagram/)**: Wiring diagrams and the ESP32 pin map, plus the script that generates them.
+- **[`lazysim`](./lazysim/)**: An Ignition Gazebo simulation of the car, used **for testing purposes only** and not part of the competition build. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)); see [Acknowledgements](#acknowledgements).
 - **[`QUICKSTART.md`](./QUICKSTART.md)**: Copy-paste commands for running and debugging each part of the stack.
-- **[`WRO_2026_Rules_Summary.md`](./WRO_2026_Rules_Summary.md)**: Our condensed version of the rulebook.
 
 <!-- Placeholder: add t-photos (team photos) and v-photos (vehicle photos from all six sides) folders before submission -->
 
@@ -92,6 +112,7 @@ Here's a breakdown of the project folders:
 - **`Vector odometry homing`**: The car remembers where it started and drives back to that exact spot after three laps, instead of just reversing for a fixed time and hoping.
 - **`LiDAR-first perception`**: Walls, gaps, and even the traffic pillars are found in the laser scan. The camera only answers one question: is that pillar red or green?
 - **`Self-healing I2C bus`**: If motor noise knocks the IMU or the display off the I2C bus, the firmware quietly re-initializes them without ever stalling the control loop.
+- **`A run clock on the car`**: A dedicated stopwatch node starts the moment the car does, keeps counting through the drive home, and freezes when it parks. The time shows on the car's own OLED, so we can read a run off the robot with no laptop and no stopwatch in anybody's hand.
 - **`Removable RC mode for testing`**: A compile-time flag turns the car into a WiFi RC car with a web joystick, which made chassis testing painless. It is fully compiled out of the competition build, where all wireless stays off.
 
 ## Components and Hardware
@@ -115,7 +136,7 @@ Here's a breakdown of the project folders:
     <tr>
       <td><div align="center"><img src="./assets/esp32s3.jpg" width="160" alt="ESP32-S3 DevKitC-1"></div></td>
       <td>ESP32-S3 DevKitC-1</td>
-      <td>Real-time control: motor PWM, steering servo, encoder counting, IMU reading, start button, status LED, and OLED display.</td>
+      <td>Real-time control: motor PWM, steering servo, encoder counting, IMU reading, start button, status LEDs, and OLED display.</td>
     </tr>
     <tr>
       <td><div align="center"><img src="./assets/rplidar_c1.jpg" width="160" alt="RPLIDAR C1"></div></td>
@@ -150,7 +171,7 @@ Here's a breakdown of the project folders:
     <tr>
       <td><div align="center"><img src="./assets/oled.jpg" width="160" alt="SSD1306 OLED"></div></td>
       <td>SSD1306 0.96" OLED display</td>
-      <td>Shows live status on the car itself, invaluable when there is no laptop connected.</td>
+      <td>Shows live status on the car itself, invaluable when there is no laptop connected: throttle, encoder count, steering angle, heading, and the run stopwatch.</td>
     </tr>
     <tr>
       <td><div align="center"><img src="./assets/battery.jpg" width="160" alt="LiPo battery"></div></td>
@@ -187,6 +208,8 @@ flowchart LR
         VISION["vision_node
         HSV segmentation"]
         LAP[lap_counter]
+        TIMER["run_timer
+        run stopwatch"]
         CMDVEL["/cmd_vel"]
         BRIDGE[mcu_bridge]
     end
@@ -195,6 +218,9 @@ flowchart LR
         MAV[MAVLink parser]
         MOTOR[Motor PWM]
         SERVO[Steering Servo]
+        LEDS["Status lights
+        plain LED + WS2812"]
+        OLED[OLED display]
     end
 
     LIDAR --> SCAN --> NAV
@@ -205,10 +231,16 @@ flowchart LR
     VISION -->|"R / G / N on /closest_obj"| NAV
     ODOM -->|"/odom_vector, /heading"| NAV
     LAP -->|lap complete| NAV
+    NAV -->|run state| TIMER
+    TIMER -->|"/run_time"| BRIDGE
     NAV --> CMDVEL --> BRIDGE
     BRIDGE -->|MAVLink over USB| MAV
     MAV --> MOTOR
     MAV --> SERVO
+    MAV -->|link announced| LEDS
+    MAV -->|run time| OLED
+    MOTOR -->|throttle held| LEDS
+    SERVO -->|angle held| LEDS
 ```
 
 ### Two brains, one car
@@ -243,12 +275,25 @@ stateDiagram-v2
 ```
 
 - **STANDBY**: Everything is initialized and the LiDAR is spinning, but the node publishes zero velocity. A config flag (`enable_auto_steering`) defaults to *off*, so the car physically cannot move from a bare `ros2 run`. This is a safety habit we picked up after one runaway test.
-- **ARMING**: Pressing the start button begins a 3-second countdown while the status LED blinks once per second.
+- **ARMING**: Pressing the start button begins a 3-second countdown while the plain status LED blinks once per second.
 - **RUNNING**: The car drives its laps steering toward open space (see the disparity extender below), with a **wall-hugging correction** layered on top. A proportional controller nudges the heading to hold about 35 cm from the outer wall on straights, limited to a 12-degree trim so it can never fight the main steering.
 - **HOMING**: Lap counting is done by `lap_counter`, which watches the IMU heading and counts 90-degree corners. Once three laps are in, the node computes the vector back to the start point and drives it, slowing down over the last 60 cm.
 - **FINISHED**: The car stops and keeps republishing zero velocity so the microcontroller can never latch onto a stale throttle command.
 
 One small but important trick: when the car starts from standstill, `mcu_bridge` briefly doubles the throttle command for the first second (a "launch boost") to break static friction. Then it hands control back to the normal command. Without it, low-speed starts would sometimes just hum in place.
+
+### Timing the run
+
+The state machine above publishes its state on `/open_round/state`, and a separate node, [`run_timer`](./ros2_ws/autonomy/docs/run_timer.md), does nothing but turn that into a stopwatch: it starts on RUNNING, keeps counting through HOMING (the drive home is part of the run, and the rules time it), and freezes the moment the car reaches FINISHED. The final time appears on the car's OLED as `Time 01:23.4 END`, so after a practice run we read the number off the robot instead of trusting whoever was holding the phone.
+
+Two decisions are worth explaining:
+
+- **It is a separate node, and it commands nothing.** The stopwatch subscribes to one topic and publishes three, none of which is a drive command. Leaving it out of the launch file, or having it crash mid-run, costs a line on the display and changes nothing about how the car drives. Timing is a nice-to-have, and nothing nice-to-have gets to sit near the steering.
+- **The state machine publishes on transitions, not just on its 1 Hz heartbeat.** On the heartbeat alone the clock would start somewhere in the second after GO and stop somewhere in the second after the car parks, making every run time wrong by up to a second at each end. Publishing on the transition costs one extra message; on the bench the clock now starts 0.1 ms after the node logs GO.
+
+There is exactly one clock in the system. The microcontroller never counts anything itself: it cannot see the state machine and has no way of knowing when homing has finished, so it is given a number ten times a second and only formats it. If those frames stop arriving, the display says so with a `?` rather than leaving a frozen number that still looks live.
+
+Minutes are the largest unit (`MM:SS.d`) — a WRO run is a few minutes, so an hours field would be two permanently dead characters on a 21-character display line.
 
 ### Avoidance using LiDAR
 
@@ -273,10 +318,11 @@ A few things that saved us many hours:
 
 - **RViz configs** ([`ros2_ws/config`](./ros2_ws/config/)): visualize the scan, the detected pillars, and the chosen steering direction live.
 - **A debug image topic** from the vision node: showing exactly what the camera thinks is a pillar, bounding boxes and all.
-- **The OLED display** on the car: showing status without a laptop.
+- **The OLED display** on the car: showing status without a laptop, including the run stopwatch, so a practice run is timed and read off the robot itself.
 - **The removable RC mode**: for driving the chassis around by hand during mechanical testing.
+- **[`lazysim`](./lazysim/)**: a Gazebo simulation of the car, so a navigation change can be tried without a mat, a battery, and a car to pick up off the floor. It presents the same ROS interface as the real robot, so the autonomy nodes run against it unmodified. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and exists **purely for testing**: nothing in it ships on the competition car.
 
-## Mobility Management
+## Mobility and Mechanical Design
 
 ### The chassis
 
@@ -305,7 +351,7 @@ A metal-gear micro servo drives the front steering linkage, with a physical lock
 
 The drive wheel diameter is deliberately a launch parameter rather than a constant: we measure the wheels before a run, because a millimeter of error in diameter compounds into centimeters of odometry error over three laps.
 
-## Power and Sense Management
+## Power and Sensor Architecture
 
 ### Power distribution
 
@@ -343,7 +389,7 @@ The important decision here: the drive motor draws directly from the battery thr
 - **USB camera**: front-facing with a slight downward tilt so pillars fill the frame at the distances that matter. Continuous auto-focus is turned off with `v4l2-ctl` before every run, because a lens that hunts for focus mid-corner produces exactly the blurry frame you least want.
 - **Wheel encoder**: on the motor shaft, feeding the ESP32's pulse counter.
 - **Sonar slots**: the firmware and wiring have four reserved HC-SR04 positions (front, rear, left, right). They are currently disabled in config. The LiDAR made them redundant, but the mounting points cost nothing to keep.
-- **Start button and status LED**: the entire competition interface. One button to start, one LED to show what state the car is in.
+- **Start button and status LEDs**: the entire competition interface. One button to start, and two lights to show what state the car is in. The plain LED answers the one question that matters during bring-up, "is the Pi talking to the microcontroller", and blinks out the 3-second start countdown. The devkit's onboard WS2812 pixel repeats that in colour and adds the drivetrain: **red** until the Pi announces itself, **green** once connected and standing still, **flashing blue** while the motor drives straight, **flashing purple** while it drives with the wheels turned. Driving outranks the link colour, so a car that is moving never shows a resting colour — a stale throttle the ROS2 side is no longer refreshing still reads as motion, which is exactly the state you want to catch on a bench. The pixel is already soldered to the devkit, so this second light costs no wiring and no pin: `firmware/lib/rgb_status_led` drives it through the Arduino core's `neopixelWrite()` instead of pulling in a pixel library.
 
 The full wiring is documented in [`circuit_diagram`](./circuit_diagram/) and the exact pin assignments in [`firmware/pin-map.md`](./firmware/pin-map.md):
 
@@ -407,6 +453,30 @@ ros2 launch launch/gorurgari_obstacle_round.launch.py
 ```
 
 After launch the car sits in standby until the start button on the car is pressed. All tuning lives in [`ros2_ws/config/bot_config.yaml`](./ros2_ws/config/bot_config.yaml): one file, commented, no magic numbers buried in code. For bench testing, every driving node has an enable flag that defaults to off, so nothing moves unless you explicitly ask it to. More copy-paste commands for individual nodes and debugging tools are in [`QUICKSTART.md`](./QUICKSTART.md).
+
+**Optional: running it in simulation.** If you don't have the car in front of you, [`lazysim`](./lazysim/) will run the same autonomy nodes against a simulated one. It is a **testing tool only** and takes no part in a competition run. See [`lazysim/README.md`](./lazysim/README.md) for the build and launch commands.
+
+## Submission Checklist
+
+WRO Future Engineers scores this repository (primary source) plus a hardcopy of the [Engineering Journal](./ENGINEERING_JOURNAL.md) brought to the international final as an offline fallback. Required repository contents, and what's outstanding:
+
+| Required | Status |
+| :-- | :-- |
+| README ≥ 5000 characters, in English | Done |
+| All source code, commented, readable as plain text | Done |
+| CAD / STL / laser / CNC files | `cad_files/` exists but is currently **empty** — add exports here |
+| Wiring diagrams | Done — [`circuit_diagram/`](./circuit_diagram/) |
+| Photos: every side, top, bottom, plus a team photo | Placeholders reference `./assets/`, but that folder does **not yet exist** — add it with real photos |
+| YouTube links, one per challenge, ≥30s autonomous driving | Outstanding — see [Performance Videos](#performance-videos) |
+| Discussion of mobility, power and sense, obstacle management | Done — see the [Judging Criteria Map](#judging-criteria-map) |
+| Engineering Journal, structured around the 5 scoring criteria | Done — [`ENGINEERING_JOURNAL.md`](./ENGINEERING_JOURNAL.md) |
+
+Commit and publication deadlines are hard cutoffs, not soft targets — anything pushed after the required "2 weeks before" commit may not count toward the score. The full schedule (commit 1/2/3, repo-link submission, hardcopy, and the 12-month public-repo requirement) is tracked in the [Engineering Journal § Reproducibility and GitHub Quality](./ENGINEERING_JOURNAL.md#5-reproducibility-and-github-quality).
+
+## Acknowledgements
+
+- **[Team LazyGo](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)** — our simulator, [`lazysim`](./lazysim/), is taken from their WRO 2025 repository [`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/) and adapted to our chassis, sensors, and ROS interface. We use it **for testing purposes only**; none of it runs on the competition car. The circle-cast ray marching at the core of our navigation nodes also comes from their work, as noted in the source. Thanks to them for publishing it.
+- **The F1TENTH community** — for the disparity extender idea our obstacle-round navigation is built on.
 
 ---
 

@@ -68,6 +68,22 @@ const unsigned long SONAR_ECHO_TIMEOUT_US = 15000;
 const uint8_t START_BLINK_COUNT = 3;
 const unsigned long START_BLINK_INTERVAL_MS = 1000;
 
+//onboard WS2812 status pixel
+// The second status light, next to the plain LED above: red until the ROS2
+// bridge announces itself, green once it has, flashing blue while the motor
+// drives and flashing purple while it drives with the wheels turned.
+// 64/255 is bright enough to read across the pit table without being the
+// blinding white-ish blob the raw pixel is at close range.
+const uint8_t RGB_STATUS_LED_BRIGHTNESS = 64;
+// one full on+off flash. 300 ms reads clearly as "flashing" without strobing,
+// and is short enough that a two second drive still shows several cycles.
+const unsigned long RGB_STATUS_FLASH_PERIOD_MS = 300;
+// how far off STEERING_CENTER_ANGLE still counts as driving straight. mcu_bridge
+// rounds its steering command to whole degrees, so without a little slack a
+// nearly straight run would flicker between blue and purple. set to 0 to make
+// it literal - anything but dead centre is a turn.
+const uint8_t RGB_STEERING_CENTER_TOLERANCE_DEG = 2;
+
 //ROS2 telemetry
 const unsigned long SENSOR_TX_INTERVAL_MS = 50; // how often the mcu_to_ros2 sensor message is sent
 

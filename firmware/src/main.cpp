@@ -12,6 +12,8 @@
 #include "shared_data.h"
 #include "button_handler.h"
 #include "status_led.h"
+#include "rgb_status_led.h"
+#include "run_timer.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -34,6 +36,7 @@ SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TI
 SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_REAR_ENABLED);
 ButtonHandler button(BUTTON_PIN);
 StatusLed status_led(STATUS_LED_PIN);
+RgbStatusLed rgb_led(RGB_STATUS_LED_PIN);
 // Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
@@ -112,6 +115,9 @@ void i2cTask(void *pvParameters) {
             // Read display strings from shared struct
             String speed, encoder, steering, velData;
             float yaw = 0.0f;
+            uint32_t runTimeMs = 0;
+            uint8_t runTimeState = RUN_TIMER_IDLE;
+            bool runTimeStale = false;
             if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
                 speed = shared.speedText;
                 encoder = shared.encoderText;
@@ -120,6 +126,13 @@ void i2cTask(void *pvParameters) {
                 // taken under the same lock as the strings, so the screen never
                 // shows a half written float
                 yaw = shared.heading;
+                // the run clock is the Pi's, we only draw it. all three fields
+                // come out together so the line can never mix a fresh time with
+                // a stale flag
+                runTimeMs = shared.runTimeMs;
+                runTimeState = shared.runTimeState;
+                runTimeStale = shared.runTimeSeen &&
+                               (millis() - shared.runTimeRxMs > RUN_TIMER_STALE_MS);
                 xSemaphoreGive(sharedMutex);
             }
 
@@ -130,6 +143,7 @@ void i2cTask(void *pvParameters) {
             display.displayText(steering, 0, 20, 1);
             display.displayText("Yaw: " + String(yaw), 0, 30, 1);
             display.displayText(velData, 0, 40, 1);
+            display.displayText(runTimerLine(runTimeMs, runTimeState, runTimeStale), 0, 50, 1);
             display.updateScreen();    // single I2C transfer
         }
 
@@ -149,6 +163,11 @@ void setup(){
     // stays off until the ROS2 bridge announces itself over serial, see the
     // connect message handling in loop()
     status_led.begin();
+    // same link state in colour, plus what the drivetrain is doing. lights red
+    // straight away, so it is obvious the firmware got this far even when
+    // nothing is connected yet.
+    rgb_led.begin(RGB_STATUS_LED_BRIGHTNESS, RGB_STATUS_FLASH_PERIOD_MS,
+                  STEERING_CENTER_ANGLE, RGB_STEERING_CENTER_TOLERANCE_DEG);
     Wire.begin(I2C_SDA, I2C_SCL);
     
     sharedMutex = xSemaphoreCreateMutex();
@@ -206,6 +225,13 @@ void loop(){
     // advances the countdown blinks, no-op the rest of the time
     status_led.update();
 
+    // --- RGB pixel: read the drivetrain back out every pass rather than
+    // latching what the last serial frame asked for, so it shows what the motor
+    // and servo are actually holding. update() only touches the pixel when the
+    // colour changes, so this is free on the quiet frames ---
+    rgb_led.setDrive(motor.speed(), steer.getAngle());
+    rgb_led.update();
+
     // --- Send encoder/steering/heading/sonar/button telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
     unsigned long nowMs = millis();
@@ -261,7 +287,25 @@ void loop(){
             else if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_connect_msg){
                 uint8_t connected = mavlink_msg_gorur_gari_ros2_to_mcu_connect_msg_get_connected(&received_msg);
                 status_led.set(connected != 0);
+                // the pixel latches it too - it cannot read the plain LED back,
+                // since that pin belongs to the countdown while one is running
+                rgb_led.setConnected(connected != 0);
                 DEBUG_SERIAL.println(connected ? "ROS2 bridge connected" : "ROS2 bridge disconnected");
+            }
+            // the run stopwatch, sent ten times a second by mcu_bridge while
+            // autonomy/run_timer is up. it is display only: nothing in here
+            // steers, brakes or counts on it, so frames going missing costs a
+            // line on the screen and nothing else
+            else if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_timer_msg){
+                uint32_t elapsedMs = mavlink_msg_gorur_gari_ros2_to_mcu_timer_msg_get_elapsed_ms(&received_msg);
+                uint8_t timerState = mavlink_msg_gorur_gari_ros2_to_mcu_timer_msg_get_state(&received_msg);
+                if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
+                    shared.runTimeMs = elapsedMs;
+                    shared.runTimeState = timerState;
+                    shared.runTimeSeen = true;
+                    shared.runTimeRxMs = millis();
+                    xSemaphoreGive(sharedMutex);
+                }
             }
         }
     }

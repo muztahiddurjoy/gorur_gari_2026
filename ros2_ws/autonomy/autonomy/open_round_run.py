@@ -496,6 +496,7 @@ class OpenRoundRunNode(Node):
             self.run_state = STATE_ARMING
             self.arm_start_time = time.time()
             self.last_countdown_logged = -1
+            self.publish_state()
             self.get_logger().info(
                 f'Start button pressed — going in {self.start_delay_sec:.0f}s.')
         else:
@@ -540,6 +541,7 @@ class OpenRoundRunNode(Node):
         """GO: start lapping. The home pose is captured on the first driving tick."""
         self.run_state = STATE_RUNNING
         self.run_start_time = time.time()
+        self.publish_state()
         self.get_logger().info(
             f'GO — open round running. {self.target_laps} laps, then return '
             f'to within {self.home_radius_m * 100.0:.0f} cm of the start.')
@@ -583,7 +585,14 @@ class OpenRoundRunNode(Node):
         self.cmd_pub.publish(cmd)
 
     def publish_state(self):
-        """1 Hz heartbeat of the state machine for debugging and dashboards."""
+        """
+        Announce the state machine, for debugging, dashboards and run_timer.
+
+        Sent once a second, and again the moment a transition happens -
+        run_timer starts its stopwatch off the RUNNING that comes out of here
+        and stops it on the FINISHED, so on the heartbeat alone every run time
+        would be up to a second wrong at each end.
+        """
         self.state_pub.publish(String(data=self.run_state))
 
     # ══════════════════════════════════════════════════════════════════
@@ -678,6 +687,7 @@ class OpenRoundRunNode(Node):
         self.driving_reverse = False
         self.gear_flips = 0
         self.homing_blocked_since = None
+        self.publish_state()
         dist = self.distance_home_m()
         self.get_logger().info(
             f'{self.target_laps} laps complete — homing to '
@@ -694,6 +704,7 @@ class OpenRoundRunNode(Node):
         self.finish_reason = reason
         self.finish_logged = False
         self.publish_zero_now()
+        self.publish_state()
 
     def drive_homing(self):
         now = time.time()

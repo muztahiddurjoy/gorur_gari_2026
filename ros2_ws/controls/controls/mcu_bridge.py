@@ -1,3 +1,5 @@
+import math
+
 import geometry_msgs
 import rclpy
 from rclpy.duration import Duration
@@ -7,7 +9,7 @@ from controls import mcu_to_ros2
 from controls import ros2_to_mcu
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Range
-from std_msgs.msg import Bool, Int32, Int8, UInt8, Float32
+from std_msgs.msg import Bool, Int32, Int8, String, UInt8, Float32
 
 # sonar_1..4 on the wire map to these sensors in this order, see firmware/pin-map.md
 SONAR_NAMES = ['front', 'left', 'right', 'rear']
@@ -52,6 +54,34 @@ LAUNCH_IDLE_TIMEOUT_S = 0.5  # no cmd_vel for this long counts as stopped, so th
 # how long to wait after opening the port before announcing ourselves to the MCU.
 # long enough for the esp32 to clear its bootloader if opening the port reset it.
 MCU_CONNECT_NOTICE_DELAY_S = 1.0
+
+# run stopwatch -> OLED. the autonomy/run_timer node publishes /run_time and
+# /run_timer_state, this node is the only thing holding the serial port so it
+# is what puts them on the wire. nothing is sent until run_timer speaks up, so
+# a stack launched without it behaves exactly as it did before.
+RUN_TIMER_TX_INTERVAL_S = 0.1   # 10 Hz, one frame per displayed tenth
+# run_timer publishes at 10 Hz, so this much silence is the node being gone,
+# not a dropped frame. the MCU stops being told anything and marks its own
+# display stale rather than showing a time that stopped being true.
+RUN_TIMER_STALE_S = 1.0
+# wire values of the state field in gorur_gari_ros2_to_mcu_timer_msg, see
+# mav_msg/ros2_to_mcu.xml and firmware/lib/run_timer/run_timer.h
+RUN_TIMER_WIRE_STATE = {'IDLE': 0, 'RUNNING': 1, 'STOPPED': 2}
+RUN_TIMER_ELAPSED_MS_MAX = 0xFFFFFFFF  # uint32 wire field ceiling
+
+
+def run_time_to_wire_ms(seconds):
+    """
+    Convert seconds off /run_time to the uint32 millisecond field on the wire.
+
+    Truncated rather than rounded, so the tenth the firmware prints is the
+    same tenth run_timer's own /run_time_str prints. A run time that reads
+    differently on the screen and in the logs is a run time nobody trusts.
+    """
+    if not math.isfinite(seconds) or seconds < 0.0:
+        seconds = 0.0
+    return min(int(seconds * 1000.0), RUN_TIMER_ELAPSED_MS_MAX)
+
 
 class MCUBridgeNode(Node):
     def __init__(self):
@@ -113,6 +143,12 @@ class MCUBridgeNode(Node):
         self.heading_pub = self.create_publisher(Float32, 'heading', 10)
         self.button_pub = self.create_publisher(Bool, '/button_status', 10)
 
+        # run stopwatch, cached here and shipped to the OLED by the tx timer
+        # below. None until run_timer publishes for the first time.
+        self.run_time_sec = None
+        self.run_time_stamp = None
+        self.run_timer_state = 'IDLE'
+
         try:
             self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
             self.mav_rx = mcu_to_ros2.MAVLink(self.master, srcSystem=2, srcComponent=1)
@@ -139,6 +175,10 @@ class MCUBridgeNode(Node):
             # rclpy.shutdown()
             # return
         self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
+        self.run_time_sub = self.create_subscription(
+            Float32, '/run_time', self.handle_run_time, 10)
+        self.run_timer_state_sub = self.create_subscription(
+            String, '/run_timer_state', self.handle_run_timer_state, 10)
         # tell the MCU we are here, exactly once. it lights its status LED on this
         # and nothing else, so this is the one announcement that matters. fired off
         # a timer rather than inline because opening the port toggles DTR, which can
@@ -147,6 +187,9 @@ class MCUBridgeNode(Node):
             MCU_CONNECT_NOTICE_DELAY_S, self.send_connect_notice)
         # drain incoming sensor telemetry at 50 Hz
         self.mcu_poll_timer = self.create_timer(0.02, self.poll_mcu)
+        # push the run stopwatch out to the OLED at 10 Hz
+        self.run_timer_tx_timer = self.create_timer(
+            RUN_TIMER_TX_INTERVAL_S, self.send_run_time)
         # self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
 
 
@@ -160,6 +203,47 @@ class MCUBridgeNode(Node):
             self.get_logger().info('Announced connection to MCU (status LED on).')
         except Exception as e:
             self.get_logger().error(f'Failed to announce connection to MCU: {e}')
+
+    def handle_run_time(self, msg: Float32):
+        """Cache the run stopwatch. send_run_time is what puts it on the wire."""
+        self.run_time_sec = float(msg.data)
+        self.run_time_stamp = self.get_clock().now()
+
+    def handle_run_timer_state(self, msg: String):
+        """IDLE / RUNNING / STOPPED, from the same run_timer node."""
+        self.run_timer_state = str(msg.data).strip().upper()
+
+    def send_run_time(self):
+        """
+        Push the run stopwatch to the MCU so the OLED can show the run time.
+
+        Silent until run_timer publishes for the first time, so a stack
+        launched without it leaves the wire exactly as it was. Silent again
+        once the stream goes stale: the firmware would rather mark its own
+        clock stale than keep drawing a time nobody is updating any more.
+        """
+        if not self.mcu_connected or self.run_time_sec is None:
+            return
+        if (self.get_clock().now() - self.run_time_stamp
+                > Duration(seconds=RUN_TIMER_STALE_S)):
+            self.get_logger().warn(
+                'No /run_time for over a second - is autonomy/run_timer still up? '
+                'The OLED will mark its clock stale.',
+                throttle_duration_sec=5.0)
+            return
+
+        elapsed_ms = run_time_to_wire_ms(self.run_time_sec)
+        # an unknown state reads as idle, which shows a blank clock rather
+        # than a running one that never moves
+        state = RUN_TIMER_WIRE_STATE.get(self.run_timer_state, 0)
+
+        try:
+            self.mav_tx.gorur_gari_ros2_to_mcu_timer_msg_send(
+                elapsed_ms=elapsed_ms, state=state)
+        except Exception as e:
+            self.get_logger().error(
+                f'Failed to send the run time to the MCU: {e}',
+                throttle_duration_sec=5.0)
 
     def apply_launch_boost(self, linear_x, now):
         """Scale up the throttle that gets the bot moving again from a standstill.

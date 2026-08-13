@@ -11,6 +11,12 @@ Obstacle round (Round 2 MVP): Full driving stack with vision-based Red & Green p
     disparity_extender  autonomy    fuses /scan + /closest_obj -> /cmd_vel
                                     Red pillar -> pass RIGHT | Green pillar -> pass LEFT
 
+Not here yet: run_timer, the run stopwatch the open round launch file starts.
+It follows a run state topic, and disparity_extender does not publish one - it
+has no FINISHED state to stop the clock on, only "3 laps done, hold zero". Give
+it a state topic and adding the node here is a copy of the open round block
+plus a state_topic parameter. See ros2_ws/autonomy/docs/run_timer.md.
+
 Run it from the workspace root:
 
     ros2 launch launch/gorurgari_obstacle_round.launch.py

@@ -91,6 +91,27 @@ open_round_run:
     heading_clockwise: true
     heading_offset_deg: 0.0
 
+run_timer:
+  ros__parameters:
+    # The run stopwatch. It measures and displays, it never drives, so none
+    # of this can affect how the car behaves.
+    #
+    # The state machine to follow. open_round_run publishes this once a
+    # second and again the moment it changes state.
+    state_topic: /open_round/state
+    start_states: ["RUNNING"]    # the clock starts here...
+    stop_states: ["FINISHED"]    # ...and freezes here, after homing has parked
+    reset_states: ["STANDBY"]    # a driving node restarting re-arms it
+    # Anything not listed above (ARMING, HOMING) leaves the clock alone,
+    # which is why homing counts towards the run time.
+
+    publish_rate_hz: 10.0        # one update per displayed tenth of a second
+    log_period_sec: 5.0          # progress lines while running, 0 for none
+    # Silence on state_topic this long with the clock running means the
+    # driving node is gone. Freeze at the last state message rather than
+    # count up forever. 0 disables the check.
+    state_timeout_sec: 5.0
+
 custom_disparity_extender:
   ros__parameters:
     # Master switch: the node never publishes /cmd_vel unless this is

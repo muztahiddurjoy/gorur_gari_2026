@@ -20,6 +20,10 @@ obstacle_round_sim.launch.py instead — both include this file.
                                       │
                                       └──▶ encoder/count, heading,
                                            steering_angle, /joint_states
+
+Adapted from Team LazyGo's simulator:
+https://github.com/A-N-M-Noor/LazyGo_WRO2025/
+For testing purposes only — none of this runs on the competition car.
 """
 import os
 

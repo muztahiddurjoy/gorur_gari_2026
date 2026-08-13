@@ -23,7 +23,9 @@ setup(
     maintainer='Team Gorur Gari',
     maintainer_email='muztahid.appbaksho@gmail.com',
     description='Ignition Gazebo Fortress simulation of the Gorur Gari 2026 '
-                'WRO Future Engineers car.',
+                'WRO Future Engineers car. Adapted from Team LazyGo '
+                '(https://github.com/A-N-M-Noor/LazyGo_WRO2025/); for testing '
+                'purposes only, not part of the competition build.',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

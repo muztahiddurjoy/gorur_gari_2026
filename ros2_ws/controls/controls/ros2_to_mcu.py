@@ -363,6 +363,7 @@ MAVLINK_MSG_ID_BAD_DATA = -1
 MAVLINK_MSG_ID_UNKNOWN = -2
 MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_MSG = 50002
 MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG = 50003
+MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_TIMER_MSG = 50004
 
 
 class MAVLink_gorur_gari_ros2_to_mcu_msg_message(MAVLink_message):
@@ -443,9 +444,51 @@ class MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message(MAVLink_message):
 setattr(MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message, "name", mavlink_msg_deprecated_name_property())
 
 
+class MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message(MAVLink_message):
+    """
+    Run stopwatch from the ROS2 run_timer node, so the OLED can show
+    the run time without a laptop attached. Sent repeatedly while the
+    link is up; elapsed_ms stops advancing once state leaves 1
+    """
+
+    id = MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_TIMER_MSG
+    msgname = "GORUR_GARI_ROS2_TO_MCU_TIMER_MSG"
+    fieldnames = ["elapsed_ms", "state"]
+    ordered_fieldnames = ["elapsed_ms", "state"]
+    fieldtypes = ["uint32_t", "uint8_t"]
+    fielddisplays_by_name: Dict[str, str] = {}
+    fieldenums_by_name: Dict[str, str] = {}
+    fieldunits_by_name: Dict[str, str] = {}
+    native_format = bytearray(b"<IB")
+    orders = [0, 1]
+    lengths = [1, 1]
+    array_lengths = [0, 0]
+    crc_extra = 158
+    unpacker = struct.Struct("<IB")
+    instance_field = None
+    instance_offset = -1
+
+    def __init__(self, elapsed_ms: int, state: int):
+        MAVLink_message.__init__(self, MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message.id, MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message.msgname)
+        self._fieldnames = MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message.fieldnames
+        self._instance_field = MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message.instance_field
+        self._instance_offset = MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message.instance_offset
+        self.elapsed_ms = elapsed_ms
+        self.state = state
+
+    def pack(self, mav: "MAVLink", force_mavlink1: bool = False) -> bytes:
+        return self._pack(mav, self.crc_extra, self.unpacker.pack(self.elapsed_ms, self.state), force_mavlink1=force_mavlink1)
+
+
+# Define name on the class for backwards compatibility (it is now msgname).
+# Done with setattr to hide the class variable from mypy.
+setattr(MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message, "name", mavlink_msg_deprecated_name_property())
+
+
 mavlink_map: Dict[int, Type[MAVLink_message]] = {
     MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_MSG: MAVLink_gorur_gari_ros2_to_mcu_msg_message,
     MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG: MAVLink_gorur_gari_ros2_to_mcu_connect_msg_message,
+    MAVLINK_MSG_ID_GORUR_GARI_ROS2_TO_MCU_TIMER_MSG: MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message,
 }
 
 
@@ -883,3 +926,27 @@ class MAVLink(object):
 
         """
         self.send(self.gorur_gari_ros2_to_mcu_connect_msg_encode(connected), force_mavlink1=force_mavlink1)
+
+    def gorur_gari_ros2_to_mcu_timer_msg_encode(self, elapsed_ms: int, state: int) -> MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message:
+        """
+        Run stopwatch from the ROS2 run_timer node, so the OLED can show the
+        run time without a laptop attached. Sent repeatedly while the
+        link is up; elapsed_ms stops advancing once state leaves 1
+
+        elapsed_ms                : milliseconds since the run started (type:uint32_t)
+        state                     : 0 = idle (no run yet), 1 = running, 2 = stopped (final time) (type:uint8_t)
+
+        """
+        return MAVLink_gorur_gari_ros2_to_mcu_timer_msg_message(elapsed_ms, state)
+
+    def gorur_gari_ros2_to_mcu_timer_msg_send(self, elapsed_ms: int, state: int, force_mavlink1: bool = False) -> None:
+        """
+        Run stopwatch from the ROS2 run_timer node, so the OLED can show the
+        run time without a laptop attached. Sent repeatedly while the
+        link is up; elapsed_ms stops advancing once state leaves 1
+
+        elapsed_ms                : milliseconds since the run started (type:uint32_t)
+        state                     : 0 = idle (no run yet), 1 = running, 2 = stopped (final time) (type:uint8_t)
+
+        """
+        self.send(self.gorur_gari_ros2_to_mcu_timer_msg_encode(elapsed_ms, state), force_mavlink1=force_mavlink1)
