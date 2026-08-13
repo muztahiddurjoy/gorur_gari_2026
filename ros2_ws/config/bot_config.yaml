@@ -19,11 +19,11 @@
       width_m: 0.12              # chassis width including wheels
       length_m: 0.21             # bumper to bumper
       wheel_diameter_m: 0.050    # drive wheel diameter
-      encoder_counts_per_rev: 363
-      max_steer_deg: 60.0        # physical steering lock (one side)
+      encoder_counts_per_rev: 200
+      max_steer_deg: 180.0        # physical steering lock (one side)
       safety_margin_m: 0.01      # clearance kept on EACH side of the bot
-      max_speed_mps: 0.6         # cruise ceiling on open track
-      min_speed_mps: 0.25        # creep floor while threading gaps
+      max_speed_mps: 0.8         # cruise ceiling on open track
+      min_speed_mps: 0.5        # creep floor while threading gaps
       lidar:
         frame_id: laser          # must match the C1 driver's frame_id
         forward_offset_m: 0.0    # lidar origin ahead(+)/behind(-) of bot centre
@@ -36,12 +36,8 @@
 mcu_bridge:
   ros__parameters:
     # ── Serial link to the ESP32-S3 ───────────────────────────────
-    # udev alias for the USB-to-TTL adapter on the MCU's UART1 (GPIO 18/17,
-    # see firmware/pin-map.md). The alias used to point at the devkit's native
-    # USB CDC port — re-point it with firmware/tools/99-esp32-uart.rules.example
-    # rather than naming /dev/ttyUSB0 here, which the RPLIDAR also competes for.
-    port: /dev/esp32_s3
-    baudrate: 115200             # must match MAVLINK_SERIAL_BAUD in firmware/include/mav_serial.h
+    port: /dev/esp32_s3          # udev alias for the native USB CDC port
+    baudrate: 115200
 
     # ── /cmd_vel -> wire command scaling ──────────────────────────
     # The firmware applies whatever throttle/steering arrives on the
@@ -73,6 +69,27 @@ open_round_run:
     # counts from a previous run and are ignored.
     min_run_time_sec: 5.0
 
+    # ── Speed ─────────────────────────────────────────────────────
+    # Hard ceiling on /cmd_vel linear.x for this round: 0.45 m/s, the
+    # bot.max_speed_mps cruise ceiling at the top of this file.
+    #
+    # The commanded speed is max_speed scaled by how open the chosen
+    # path is (0.65x when the way ahead is under 1 m, 1.0x past 2 m),
+    # then held under whichever cap applies — the corner cap once the
+    # target heading passes 40 deg off the nose, the straight cap
+    # otherwise. max_speed sits ABOVE both caps on purpose, so the caps
+    # are what actually decide the speed and 0.45 is genuinely the peak:
+    # even down at the 0.65x tight-corner floor, 0.69 * 0.65 = 0.45 is
+    # still above the corner cap.
+    max_speed: 0.69
+    speed_cap_straight: 0.45     # THE ceiling — nothing publishes above this
+    speed_cap_corner: 0.42       # ~94% of straight, keeping turns quick
+    # Must stay 1.0. The boost scales the CAP as well as the speed (see
+    # drive_running in open_round_run.py), so anything above 1.0 lifts
+    # the real ceiling with it — at the in-code default of 1.35 the true
+    # peak would be 0.45 * 1.35 = 0.61, not 0.45.
+    boost_max: 1.0
+
     # ── Wall hugging ──────────────────────────────────────────────
     wall_hug_enable: true
     wall_target_dist_m: 0.35     # held off the outer wall on straights
@@ -92,7 +109,7 @@ open_round_run:
     max_gear_flips: 6            # anti-hunting: settle after this many reversals
 
     # ── Heading convention (must match vector_odom) ───────────────
-    heading_clockwise: true
+    heading_clockwise: false
     heading_offset_deg: 0.0
 
 run_timer:

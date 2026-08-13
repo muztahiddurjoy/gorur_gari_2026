@@ -536,7 +536,7 @@ class CustomDisparityExtender(Node):
         """Scale the spike threshold with distance.
 
         At long range the natural range difference between adjacent rays on an
-        obliquely-viewed wall approaches a fixed threshold, so the detector
+        obliquely-viewed wall approaches a heading_clockwisefixed threshold, so the detector
         fires on flat surfaces. Growing the threshold with range keeps it
         sensitive up close without constant false positives far away.
         """
