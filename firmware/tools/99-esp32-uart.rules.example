@@ -1,0 +1,59 @@
+# /dev/esp32_s3 for the USB-to-TTL adapter on UART1
+#
+# The MAVLink link moved off the ESP32-S3's native USB socket and onto UART1
+# (GPIO 18 RX / GPIO 17 TX) through a USB-to-TTL adapter. mcu_bridge still opens
+# /dev/esp32_s3 - the port name in ros2_ws/config/bot_config.yaml has not
+# changed - but the old rule matched the devkit's own USB id (303a:1001) and no
+# longer matches anything on the wire, so the alias has to be re-pointed here.
+#
+# Install:
+#   sudo cp 99-esp32-uart.rules.example /etc/udev/rules.d/99-esp32-uart.rules
+#   sudo rm /etc/udev/rules.d/99-esp32s3.rules      # the old native-USB rule
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#   ls -l /dev/esp32_s3                              # should point at ttyUSBn
+#
+# Do NOT put /dev/ttyUSB0 in bot_config.yaml instead. The RPLIDAR C1 is on the
+# same bus, and whichever of the two enumerates first gets ttyUSB0 - so the
+# number swaps between boots and the bridge ends up talking to the lidar.
+
+# --- Step 1: find your adapter -------------------------------------------
+# Plug in the adapter with the lidar unplugged, then:
+#   ls -l /dev/serial/by-id/
+#   udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'
+# Common adapter chips, for reference:
+#   10c4:ea60  Silicon Labs CP2102/CP2102N   <-- also what the RPLIDAR C1 uses
+#   1a86:7523  WCH CH340/CH341
+#   1a86:55d4  WCH CH9102
+#   0403:6001  FTDI FT232R
+#   067b:2303  Prolific PL2303
+
+# --- Step 2: pick ONE of the rules below ---------------------------------
+
+# (a) Preferred. Matches one specific adapter by its serial number, so it keeps
+#     working no matter what else is plugged in. Fill in all three values from
+#     step 1. Chips that report no serial (CH340 clones, most PL2303) cannot use
+#     this - use (b) or (c).
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", ATTRS{serial}=="XXXXXXXX", MODE="0666", SYMLINK+="esp32_s3"
+
+# (b) Matches any adapter with this vendor/product id. Fine when the adapter's
+#     chip differs from the lidar's - a CH340 adapter alongside the CP2102
+#     lidar, say. NEVER use this form with 10c4:ea60: it would match the lidar
+#     too, and both devices would fight over the symlink.
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666", SYMLINK+="esp32_s3"
+
+# (c) Last resort, for a serial-less adapter that shares a chip with the lidar:
+#     match the physical USB port instead, and always plug the adapter into that
+#     same socket on the Pi. Get KERNELS from
+#       udevadm info -a -n /dev/ttyUSB0 | grep -m1 'KERNELS=="[0-9]'
+#SUBSYSTEM=="tty", KERNELS=="1-1.3:1.0", MODE="0666", SYMLINK+="esp32_s3"
+
+# --- Step 3: check ---------------------------------------------------------
+# With both the adapter and the lidar plugged in:
+#   ls -l /dev/esp32_s3 /dev/ttyUSB*
+# The alias must point at the adapter, not the lidar. Then confirm the link
+# itself carries frames before launching the stack:
+#   python3 -c "import serial; s=serial.Serial('/dev/esp32_s3',115200,timeout=2); print(s.read(64).hex())"
+# Telemetry goes out every 50 ms, so a healthy link prints a run of bytes
+# starting with fd (the MAVLink 2 magic). Nothing at all means the wiring is
+# not crossed, the grounds are not tied, or the firmware never came up - check
+# the log port (the devkit's other USB socket, 115200) for the reason.

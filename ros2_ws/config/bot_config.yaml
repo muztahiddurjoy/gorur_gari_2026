@@ -36,8 +36,12 @@
 mcu_bridge:
   ros__parameters:
     # ── Serial link to the ESP32-S3 ───────────────────────────────
-    port: /dev/esp32_s3          # udev alias for the native USB CDC port
-    baudrate: 115200
+    # udev alias for the USB-to-TTL adapter on the MCU's UART1 (GPIO 18/17,
+    # see firmware/pin-map.md). The alias used to point at the devkit's native
+    # USB CDC port — re-point it with firmware/tools/99-esp32-uart.rules.example
+    # rather than naming /dev/ttyUSB0 here, which the RPLIDAR also competes for.
+    port: /dev/esp32_s3
+    baudrate: 115200             # must match MAVLINK_SERIAL_BAUD in firmware/include/mav_serial.h
 
     # ── /cmd_vel -> wire command scaling ──────────────────────────
     # The firmware applies whatever throttle/steering arrives on the

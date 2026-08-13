@@ -12,7 +12,7 @@ This folder holds block diagrams of the gorur_gari_2026 electronics, generated f
 
 ```mermaid
 flowchart LR
-    PI["Raspberry Pi 4B"] -->|"USB CDC, /dev/esp32_s3\nMAVLink 2 @ 115200"| ESP["ESP32-S3"]
+    PI["Raspberry Pi 4B"] -->|"USB-to-TTL into UART1 (RX 18 / TX 17)\n/dev/esp32_s3, MAVLink 2 @ 115200"| ESP["ESP32-S3"]
     ESP --> SF["Sonar Front (HC-SR04)"]
     ESP --> SL["Sonar Left (HC-SR04)"]
     ESP --> SR["Sonar Right (HC-SR04)"]
@@ -24,7 +24,9 @@ flowchart LR
     ESP --> PIX["Onboard WS2812 (GPIO 48)"]
 ```
 
-The Pi and the ESP32-S3 only talk over native USB CDC, there's no GPIO-level link between them. All sonars are wired but currently disabled in `config.h`: only the FRONT/LEFT/RIGHT HC-SR04s are actually fitted, and the REAR slot (GPIO 40/41) is reserved but unpopulated. Encoder A/B are intentionally swapped relative to the silkscreen so forward motion counts as positive, see `pins.h`.
+The Pi and the ESP32-S3 talk over a USB-to-TTL adapter into the MCU's UART1: adapter TX to GPIO 18, adapter RX to GPIO 17, grounds tied, VCC left disconnected. Firmware logs stay on UART0 (GPIO 43/44) out of the devkit's own CH343 socket, so nothing but binary MAVLink is ever on the link.
+
+That link takes two pins the sonar block also uses, so **the front and left HC-SR04s have to come off the board**, not just be disabled in `config.h`: front ECHO drives GPIO 17 against the UART's transmit pin, which clamps the link and shorts a 5 V sonar output into a 3V3 one. See `firmware/pin-map.md` for the full story. Otherwise all sonars are wired but currently disabled in `config.h`: only the FRONT/LEFT/RIGHT HC-SR04s are actually fitted, and the REAR slot (GPIO 40/41) is reserved but unpopulated. Encoder A/B are intentionally swapped relative to the silkscreen so forward motion counts as positive, see `pins.h`.
 
 ## Status lights
 

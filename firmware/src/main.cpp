@@ -9,6 +9,7 @@
 #include "pins.h"
 #include "config.h"
 #include "debug_serial.h"
+#include "mav_serial.h"
 #include "shared_data.h"
 #include "button_handler.h"
 #include "status_led.h"
@@ -153,8 +154,17 @@ void i2cTask(void *pvParameters) {
 
 
 void setup(){
-    Serial.begin(115200);        // native USB CDC, binary MAVLink only
+    // logs first, so a link that fails to come up has somewhere to say so
     DEBUG_SERIAL.begin(DEBUG_SERIAL_BAUD); // UART0, human readable logs
+    // UART1 out to the USB-to-TTL adapter, binary MAVLink only. See mav_serial.h
+    if (!mavlinkSerialBegin()) {
+        DEBUG_SERIAL.println("MAVLink UART failed to start - no link to ROS2");
+    }
+    // the devkit's native USB socket. Nothing is written to it any more, it is
+    // brought up so the port still enumerates for flashing and monitoring, and
+    // so a stray print from a bench-only library lands somewhere harmless
+    // instead of nowhere.
+    Serial.begin(115200);
     steer.begin(SERVO_FREQUENCY_HZ);
     steer.to(STEERING_CENTER_ANGLE);
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
@@ -262,13 +272,21 @@ void loop(){
             encoderCountField, encoderSpeedField, encoderDirectionField, steer.getAngle(),
             headingField, sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3], buttonField);
         uint16_t txLen = mavlink_msg_to_send_buffer(txBuf, &txMsg);
-        Serial.write(txBuf, txLen);
+        MAVLINK_SERIAL.write(txBuf, txLen);
     }
 
 
-    while(Serial.available()>0){
-        uint8_t c = Serial.read();
-        
+    // --- Take in whatever the bridge sent. Bounded per pass: a peer at the
+    // wrong baud rate or a shorted RX line can keep available() non-zero for as
+    // long as it likes, and this loop still owes the encoder, the sonars and the
+    // LEDs a turn. Anything past the budget stays in the RX ring buffer and is
+    // picked up next pass, so nothing is thrown away, it just waits ---
+    size_t rxBudget = MAVLINK_SERIAL_MAX_RX_PER_LOOP;
+    while(MAVLINK_SERIAL.available()>0 && rxBudget-- > 0){
+        int rxByte = MAVLINK_SERIAL.read();
+        if(rxByte < 0) break; // drained between available() and read()
+        uint8_t c = (uint8_t)rxByte;
+
         mavlink_message_t received_msg;
         mavlink_status_t status;
 
