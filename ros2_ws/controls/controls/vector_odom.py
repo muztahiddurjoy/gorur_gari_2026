@@ -24,7 +24,7 @@ OUTPUT_UNIT_SCALE = {'m': 1.0, 'cm': 100.0, 'mm': 1000.0}
 # The encoder tick counter is the MCU's raw signed 32 bit accumulator and
 # restarts at 0 whenever the MCU reboots. A jump larger than this many ticks
 # in one message is treated as a counter restart rather than real motion.
-COUNT_JUMP_REJECT_TICKS = 100000
+COUNT_JUMP_REJECT_TICKS = 1000
 
 
 def normalize_angle(angle):
@@ -134,11 +134,12 @@ class VectorOdometryNode(Node):
             return
 
         del_tick = count - self.last_tick
-        self.last_tick = count
         if abs(del_tick) > COUNT_JUMP_REJECT_TICKS:
             self.get_logger().warn(
                 f'Encoder count jumped by {del_tick}, treating as a restart')
+            self.last_tick = count
             return
+        self.last_tick = count
 
         del_distance = del_tick * self.metres_per_tick
         self.total_ticks += del_tick

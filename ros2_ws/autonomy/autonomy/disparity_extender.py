@@ -157,10 +157,17 @@ class DisparityExtenderNode(Node):
         self.has_reset_laps = False
         self.reset_timer_ticks = 0
 
+        self.declare_parameter('wait_for_track_ready', False)
+        self.wait_for_track_ready = bool(self.get_parameter('wait_for_track_ready').value)
+        self.track_ready = not self.wait_for_track_ready
+
         # ── Start Gate State ─────────────────────────────────────────
         # With the gate disabled the node behaves as it always did: it drives as
         # soon as it has scan data.
-        self.run_state = STATE_STANDBY if self.require_button_start else STATE_RUNNING
+        if self.wait_for_track_ready:
+            self.run_state = STATE_STANDBY
+        else:
+            self.run_state = STATE_STANDBY if self.require_button_start else STATE_RUNNING
         self.arm_start_time = 0.0
         self.prev_button = False       # for rising edge detection on /button_status
         self.last_countdown_logged = -1
@@ -168,6 +175,12 @@ class DisparityExtenderNode(Node):
         self.last_scan_time = 0.0         # Watchdog: last time /scan was received
 
         # ── Subscriptions & Publishers ────────────────────────────────
+        if self.wait_for_track_ready:
+            from rclpy.qos import DurabilityPolicy, QoSProfile
+            latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.track_ready_sub = self.create_subscription(
+                Bool, '/track_ready', self.track_ready_callback, latched)
+
         self.scan_sub = self.create_subscription(LaserScan, scan_topic, self.lidar_callback, 1)
         self.odom_sub = self.create_subscription(Odometry, odom_topic, self.odom_callback, 10)
         self.color_sub = self.create_subscription(Float32MultiArray, '/closest_obj', self.color_callback, 1)
@@ -178,6 +191,14 @@ class DisparityExtenderNode(Node):
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.debug_scan_pub = self.create_publisher(LaserScan, '/scan_processed', 10)
         self.marker_pub = self.create_publisher(Marker, '/disparity/target_marker', 10)
+
+    def track_ready_callback(self, msg: Bool):
+        if msg.data and not self.track_ready:
+            self.track_ready = True
+            self.get_logger().info('Received /track_ready from track_maker — track layout complete!')
+            if self.run_state == STATE_STANDBY and not self.require_button_start:
+                self.run_state = STATE_RUNNING
+
         self.tower_pub = self.create_publisher(Float32MultiArray, '/tower_detections', 10)
 
         self.last_color_time = 0.0

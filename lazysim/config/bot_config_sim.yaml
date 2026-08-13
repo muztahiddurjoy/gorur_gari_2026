@@ -96,6 +96,7 @@ lap_counter:
 open_round_run:
   ros__parameters:
     enable_auto_steering: true
+    wait_for_track_ready: true
     # SIM: false. There is no physical button on the mat; lazybridge
     # exposes /lazybot/press_start instead, and the launch files can
     # auto-press it. Set true and use that service to rehearse the real
@@ -128,6 +129,7 @@ open_round_run:
 custom_disparity_extender:
   ros__parameters:
     enable_drive: true
+    wait_for_track_ready: true
     scan_topic: /scan
     cmd_vel_topic: /cmd_vel
 
@@ -151,7 +153,9 @@ disparity_extender_node:
   ros__parameters:
     # SIM: false, same reasoning as open_round_run above.
     require_button_start: false
-    enable_auto_steering: true
+    enable_auto_steering: false
+    wait_for_track_ready: true
+
     start_delay_sec: 3.0
     scan_topic: /scan
     odom_topic: /odom
@@ -167,7 +171,7 @@ disparity_extender_node:
 vision_node:
   ros__parameters:
     efficient_mode: true
-    publish_debug_image: false
+    publish_debug_image: true
     process_every_n_frames: 2
     processing_width: 320
     processing_height: 240
@@ -180,15 +184,16 @@ vision_node:
     camera_hfov_deg: 60.0
 
     roi_top_crop: 0.4
-    min_contour_area: 250
-    min_aspect_ratio: 1.0
-    max_aspect_ratio: 3.5
-    min_solidity: 0.40
+    min_contour_area: 10
+    min_aspect_ratio: 0.8
+    max_aspect_ratio: 4.5
+    min_solidity: 0.30
 
     green_lower: [35, 80, 50]
     green_upper: [85, 255, 255]
 
-    red_lower_1: [0, 255, 87]
+    red_lower_1: [0, 80, 50]
     red_upper_1: [12, 255, 255]
-    red_lower_2: [165, 255, 87]
+    red_lower_2: [165, 80, 50]
     red_upper_2: [180, 255, 255]
+

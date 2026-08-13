@@ -97,7 +97,7 @@ def generate_launch_description():
     # Fuses /scan with the pillar colour and drives /cmd_vel.
     disparity_extender = Node(
         package='autonomy',
-        executable='disparity_extender',
+        executable='custom_disparity_extender',
         name='disparity_extender_node',
         parameters=[
             LaunchConfiguration('bot_config'),

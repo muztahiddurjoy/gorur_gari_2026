@@ -1,7 +1,7 @@
 vision_node:
   ros__parameters:
     # ── Performance & Modes ──────────────────────────────────────────
-    efficient_mode: true         # Set to true for competition (320x240 @ 15fps, no debug img). Set false for full debug.
+    efficient_mode: false         # Set to true for competition (320x240 @ 15fps, no debug img). Set false for full debug.
     publish_debug_image: true   # Auto-enabled if efficient_mode is false
     process_every_n_frames: 2   # Frame skip (only active when efficient_mode: true)
     processing_width: 320       # Target resolution width

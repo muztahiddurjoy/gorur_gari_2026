@@ -157,11 +157,21 @@ class CustomDisparityExtender(Node):
         # Drive gate. Default OFF in code so a bare `ros2 run` without the
         # config file can never move the car; bot_config.yaml enables it.
         self.enable_drive = bool(p('enable_drive', True))
+        self.wait_for_track_ready = bool(p('wait_for_track_ready', False))
+        self.track_ready = not self.wait_for_track_ready
 
         scan_topic = str(p('scan_topic', '/scan'))
         cmd_topic = str(p('cmd_vel_topic', '/cmd_vel'))
 
+        if self.wait_for_track_ready:
+            from std_msgs.msg import Bool
+            from rclpy.qos import DurabilityPolicy, QoSProfile
+            latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.track_ready_sub = self.create_subscription(
+                Bool, '/track_ready', self.track_ready_callback, latched)
+
         # ── LiDAR state (fallbacks until the first scan arrives) ──
+
         # 0.72 deg matches an RPLIDAR C1 at 10 Hz.
         self.min_ang = -math.pi
         self.max_ang = math.pi
@@ -331,7 +341,7 @@ class CustomDisparityExtender(Node):
 
         nav = raw.copy()
         nav[open_mask] = self.nav_max_range
-
+        
         if bad.any():
             good = ~bad
             if not good.any():
@@ -403,19 +413,16 @@ class CustomDisparityExtender(Node):
         idx = int(cand[np.argmin(np.abs(cand - centre))])
         return idx, float(d[idx])
 
+    def track_ready_callback(self, msg):
+        if msg.data and not self.track_ready:
+            self.track_ready = True
+            self.get_logger().info('Received /track_ready from track_maker — starting drive!')
+
     def drive_step(self, msg: LaserScan, raw, towers=None):
-        """One navigation step: nav view -> extend disparities -> pick the
-        target ray -> stop-cone gate -> publish speed and steering.
+        if not self.track_ready:
+            self.publish_stop('waiting for track_maker (/track_ready)')
+            return
 
-        The heading is computed and its RViz marker published on EVERY scan,
-        even with drive disabled or the bot blocked — otherwise the target
-        arrow is invisible exactly when you are bench-testing. Only /cmd_vel
-        is gated behind enable_drive.
-
-        Note the units on /cmd_vel: linear.x is m/s, but angular.z is NOT
-        an angular velocity — it is steering as a fraction [-1, 1] of the
-        physical lock, the convention the MCU bridge expects.
-        """
         nav = self.build_nav_ranges(msg, raw)
         if nav is None:
             if self.enable_drive:
@@ -490,13 +497,14 @@ class CustomDisparityExtender(Node):
 
     def watchdog(self):
         """Emergency stop if /scan goes quiet while we are allowed to drive."""
-        if not self.enable_drive or self.last_scan_time == 0.0:
+        if not self.enable_drive or not self.track_ready or self.last_scan_time == 0.0:
             return
-        if time.time() - self.last_scan_time > 0.3:
+        if time.time() - self.last_scan_time > 2.0:
             self.cmd_pub.publish(Twist())
             self.get_logger().error(
-                'LiDAR silent > 300 ms — emergency stop.',
+                'LiDAR silent > 2.0 s — emergency stop.',
                 throttle_duration_sec=1.0)
+
 
     # ──────────────────────────────────────────────────────────────
     # Edge detection + width measurement
@@ -667,7 +675,7 @@ class CustomDisparityExtender(Node):
     # ──────────────────────────────────────────────────────────────
 
     def make_marker(self, obj: dict, marker_id: int) -> Marker:
-        """One flat red disk per detected tower, for RViz."""
+        """One flat yellow disk per detected tower, for RViz."""
         m = Marker()
         m.header.frame_id = self.frame_id
         m.header.stamp = self.get_clock().now().to_msg()

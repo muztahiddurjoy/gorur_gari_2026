@@ -27,6 +27,8 @@ import subprocess
 import rclpy
 import yaml
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
+from std_msgs.msg import Bool
 
 # ambient, diffuse. Off-channels pinned to zero — see the module docstring.
 PILLAR_COLOURS = {
@@ -77,6 +79,9 @@ class TrackMaker(Node):
         self.settings = self.load_yaml(self.settings_path)
         self.tower_template = self.load_text(self.tower_template_path)
         self.wall_template = self.load_text(self.wall_template_path)
+
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.ready_pub = self.create_publisher(Bool, '/track_ready', latched)
 
     # ══════════════════════════════════════════════════════════════════
     # Loading
@@ -183,6 +188,9 @@ class TrackMaker(Node):
     # Track layout
     # ══════════════════════════════════════════════════════════════════
 
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.ready_pub = self.create_publisher(Bool, '/track_ready', latched)
+
     def colours_for(self, name):
         return PILLAR_COLOURS.get(str(name).strip().lower(), DEFAULT_COLOUR)
 
@@ -206,6 +214,14 @@ class TrackMaker(Node):
         start = self.settings.get('start')
         if start:
             self.place_car(start)
+
+        # Signal autonomy nodes that track layout & car placement are complete
+        msg = Bool()
+        msg.data = True
+        self.ready_pub.publish(msg)
+        self.get_logger().info('Track layout & car placement complete — published /track_ready')
+        import time
+        time.sleep(0.5)
 
     def build_parking(self, parking):
         if not parking or not parking.get('enabled') or not self.wall_template:

@@ -220,6 +220,7 @@ class OpenRoundRunNode(Node):
         self.declare_parameter('require_button_start', True)
         self.declare_parameter('start_delay_sec', 3.0)
         self.declare_parameter('button_topic', '/button_status')
+        self.declare_parameter('wait_for_track_ready', False)
 
         # ── Topics ───────────────────────────────────────────────────
         self.declare_parameter('scan_topic', '/scan')
@@ -372,8 +373,15 @@ class OpenRoundRunNode(Node):
         self.finish_logged = False
         self.home_captured = False
 
+        # ── Track Ready Gate (Simulation) ────────────────────────────
+        self.wait_for_track_ready = bool(self.get_parameter('wait_for_track_ready').value)
+        self.track_ready = not self.wait_for_track_ready
+
         # ── Start Gate State ─────────────────────────────────────────
-        self.run_state = STATE_STANDBY if self.require_button_start else STATE_RUNNING
+        if self.wait_for_track_ready:
+            self.run_state = STATE_STANDBY
+        else:
+            self.run_state = STATE_STANDBY if self.require_button_start else STATE_RUNNING
         self.arm_start_time = 0.0
         self.prev_button = False        # rising edge detection on /button_status
         self.last_countdown_logged = -1
@@ -382,6 +390,12 @@ class OpenRoundRunNode(Node):
             self.run_start_time = time.time()
 
         # ── Subscriptions & Publishers ───────────────────────────────
+        if self.wait_for_track_ready:
+            from rclpy.qos import DurabilityPolicy, QoSProfile
+            latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.track_ready_sub = self.create_subscription(
+                Bool, '/track_ready', self.track_ready_callback, latched)
+
         self.scan_sub = self.create_subscription(
             LaserScan, scan_topic, self.lidar_callback, 1)
         self.odom_sub = self.create_subscription(
@@ -396,6 +410,16 @@ class OpenRoundRunNode(Node):
         self.debug_scan_pub = self.create_publisher(LaserScan, '/open_round/scan_processed', 10)
         self.marker_pub = self.create_publisher(Marker, '/open_round/target_marker', 10)
         self.state_pub = self.create_publisher(String, '/open_round/state', 10)
+
+    def track_ready_callback(self, msg: Bool):
+        if msg.data and not self.track_ready:
+            self.track_ready = True
+            self.get_logger().info('Received /track_ready from track_maker — track layout complete!')
+            if self.run_state == STATE_STANDBY and not self.require_button_start:
+                self.run_state = STATE_RUNNING
+                self.run_start_time = time.time()
+                self.home_captured = False  # Recapture home at updated car pose
+
 
         # ── Control Loop Timer (40 Hz) ───────────────────────────────
         self.create_timer(0.025, self.control_loop)
@@ -637,10 +661,10 @@ class OpenRoundRunNode(Node):
             return
 
         # ── LIDAR WATCHDOG (both driving states) ──
-        if self.last_scan_time > 0.0 and (time.time() - self.last_scan_time) > 0.2:
+        if self.last_scan_time > 0.0 and (time.time() - self.last_scan_time) > 2.0:
             self.publish_zero_now()
             self.get_logger().error(
-                'LiDAR timeout! No /scan for >200ms — emergency stop.',
+                'LiDAR timeout! No /scan for >2.0s — emergency stop.',
                 throttle_duration_sec=1.0)
             return
 
