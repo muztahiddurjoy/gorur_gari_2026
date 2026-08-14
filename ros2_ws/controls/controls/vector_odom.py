@@ -51,7 +51,7 @@ class VectorOdometryNode(Node):
         # Whatever error is left once the geometry above is right. Drive a
         # measured straight line and set this to (tape measure / reported).
         # See the calibration note in the startup log.
-        self.declare_parameter('distance_scale', 1)
+        self.declare_parameter('distance_scale', 1.0)
 
         # Unit of the /odom_vector message only. The TF is always metres.
         self.declare_parameter('output_units', 'cm')
