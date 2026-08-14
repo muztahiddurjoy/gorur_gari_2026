@@ -2,7 +2,7 @@
 Open Round Run — open-space navigation, wall hugging, and return-to-start.
 
 Built for the WRO open round (no pillars on the mat) on top of the circle-cast
-pipeline from disparity_extender.py, with three additions:
+pipeline from disparity_extender.py, with five additions:
 
 1. OPEN SPACE DETECTION
    The forward FOV is swept with LazyGo's circle-cast ray marching: every
@@ -20,7 +20,20 @@ pipeline from disparity_extender.py, with three additions:
    the corner steering: it only applies while the open-space target is nearly
    straight ahead and the wall reading is close enough to really be the wall.
 
-3. VECTOR ODOM + RETURN TO START
+3. HEADING-FUSED STEERING
+   The raw pipeline was open loop: the LiDAR target angle went straight to
+   the servo and nothing checked whether the car actually rotated, so a
+   noisy scan (or one all-blocked frame) left the wheels pointing anywhere.
+   Now the chosen direction is latched as an ABSOLUTE heading the moment it
+   is picked (target_yaw = current yaw + relative target; the MCU heading
+   always boots at 0.0, so this frame is stable for the whole run) and the
+   40 Hz control loop closes the loop on /heading with a PD controller —
+   the same maths, gains and sign convention SteeringStabilizer /
+   box_lap_test proved on this car. If /heading is missing or stale the
+   node falls back to the old raw-LiDAR-angle steering, so a dead IMU
+   degrades the drive instead of parking it (and the sim needs no IMU).
+
+4. VECTOR ODOM + RETURN TO START
    The node consumes vector_odom's outputs directly: /odom_vector (x, y in
    output_units, cm by default) and /heading (raw MCU compass degrees,
    clockwise - converted here with the same convention vector_odom and
@@ -33,13 +46,28 @@ pipeline from disparity_extender.py, with three additions:
    an Ackermann car cannot turn in place - and stops once inside
    home_radius_m (5 cm) of it.
 
+5. ENCODER STALL ADAPTATION
+   /encoder/count is fused in as a "are the wheels actually turning" sense.
+   The commanded speed is a fixed drive_speed, multiplied by
+   turn_speed_gain (1.25x) while the servo is off centre — steering load
+   slows this drivetrain, so corners get MORE throttle, never less (all
+   the old corner-slowdown logic is removed). While the node is
+   commanding motion but the encoder count has not changed for
+   stall_timeout_sec, the throttle is multiplied by a boost that RAMPS UP
+   gently (stall_boost_step per second) to at most stall_boost_max — never
+   a full-throttle slam — and eases back to 1.0 as soon as the wheels turn
+   again. Only the THROTTLE is limited: steering is unrestricted, with
+   max_steer_cmd at 1.5 spanning the full 0-180 servo travel (the bridge
+   maps servo = 90 + angular.z*60). A dead /encoder/count stream disables
+   the boost (never blind-boost) and the base speed still drives the car.
+
 State machine:
     STANDBY -> ARMING -> RUNNING -> HOMING -> FINISHED
        ^          |
        start button + start_delay_sec, same gate as disparity_extender
 
 Edge cases handled:
-- LiDAR watchdog: no /scan for >200 ms stops the car in any driving state.
+- LiDAR watchdog: no /scan for >2 s stops the car in any driving state.
 - Stale lap counts: /reset_lap_count is published on startup and the local
   count forced to zero before the car may move; a lap-complete signal within
   min_run_time_sec of GO is ignored as a leftover from a previous run.
@@ -75,7 +103,10 @@ from threading import Lock
 
 from geometry_msgs.msg import Twist, Vector3
 import rclpy
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, Empty, Float32, Int32, String
 from visualization_msgs.msg import Marker
@@ -130,7 +161,7 @@ class OpenRoundRunNode(Node):
 
         # ── Master Controls ──────────────────────────────────────────
         # False by default so a bare `ros2 run` can never move the car.
-        self.declare_parameter('enable_auto_steering', False)
+        self.declare_parameter('enable_auto_steering', True)
 
         # ── Vehicle Geometry (Circle Cast) ───────────────────────────
         self.declare_parameter('cast_range_min', 0.13)
@@ -160,6 +191,45 @@ class OpenRoundRunNode(Node):
 
         # ── Steering ─────────────────────────────────────────────────
         self.declare_parameter('str_ang_thresh', 180.0)
+
+        # ── Heading-Fused Steering ───────────────────────────────────
+        # The LiDAR target becomes an absolute compass heading and the
+        # 40 Hz loop steers on the live /heading error (PD). Gains are
+        # the ones SteeringStabilizer / box_lap_test proved on this car.
+        self.declare_parameter('heading_fusion_enable', True)
+        self.declare_parameter('heading_kp', 0.03)
+        self.declare_parameter('heading_kd', 0.005)
+        # 1.5 = full 0-180 servo travel through the bridge's 90 + z*60 map.
+        self.declare_parameter('heading_max_steer', 1.5)
+        self.declare_parameter('heading_deadband_deg', 2.0)
+        # /heading older than this falls back to raw LiDAR-angle steering.
+        self.declare_parameter('heading_stale_sec', 0.5)
+
+        # ── Encoder Stall Adaptation ─────────────────────────────────
+        # Nominal linear.x while lapping — THE linear command limit.
+        self.declare_parameter('drive_speed', 1.25)
+        # |angular.z| ceiling. 1.5 is full servo travel (the bridge maps
+        # servo = 90 + z*60, so z = ±1.5 reaches the 0/180 endpoints):
+        # steering is deliberately unlimited, only linear is capped.
+        self.declare_parameter('max_steer_cmd', 1.5)
+        # Encoder count frozen this long while commanding motion = stalled.
+        self.declare_parameter('stall_timeout_sec', 0.4)
+        # Boost growth per second while stalled, and its ceiling — the
+        # peak throttle is drive_speed * stall_boost_max, deliberately
+        # well under full lock so the recovery is a nudge, not a slam.
+        self.declare_parameter('stall_boost_step', 0.5)
+        self.declare_parameter('stall_boost_max', 10.0)
+        # No /encoder/count at all for this long -> boost disabled (never
+        # boost blind), the base drive_speed still drives the car.
+        self.declare_parameter('encoder_stale_sec', 1.0)
+
+        # ── Corner Throttle Gain ─────────────────────────────────────
+        # Steering load slows the drivetrain, so turning gets MORE linear
+        # speed, not less. Applied whenever |angular.z| is above the
+        # threshold (0.0 = any nonzero steering command boosts); there
+        # is no corner slowdown anywhere any more.
+        self.declare_parameter('turn_speed_gain', 1.5)
+        self.declare_parameter('turn_steer_thresh', 0.0)
 
         # ── Wall Hugging ─────────────────────────────────────────────
         self.declare_parameter('wall_hug_enable', True)
@@ -226,6 +296,7 @@ class OpenRoundRunNode(Node):
         self.declare_parameter('scan_topic', '/scan')
         self.declare_parameter('odom_vector_topic', '/odom_vector')
         self.declare_parameter('heading_topic', '/heading')
+        self.declare_parameter('encoder_topic', '/encoder/count')
         self.declare_parameter('cmd_vel_topic', '/cmd_vel')
 
         # Load all parameters
@@ -252,6 +323,22 @@ class OpenRoundRunNode(Node):
         self.min_clear_dist_m = float(self.get_parameter('min_clear_dist_m').value)
 
         self.str_ang_thresh = float(self.get_parameter('str_ang_thresh').value)
+
+        self.heading_fusion_enable = bool(self.get_parameter('heading_fusion_enable').value)
+        self.heading_kp = float(self.get_parameter('heading_kp').value)
+        self.heading_kd = float(self.get_parameter('heading_kd').value)
+        self.heading_max_steer = float(self.get_parameter('heading_max_steer').value)
+        self.heading_deadband_deg = float(self.get_parameter('heading_deadband_deg').value)
+        self.heading_stale_sec = float(self.get_parameter('heading_stale_sec').value)
+
+        self.drive_speed = float(self.get_parameter('drive_speed').value)
+        self.max_steer_cmd = float(self.get_parameter('max_steer_cmd').value)
+        self.stall_timeout_sec = float(self.get_parameter('stall_timeout_sec').value)
+        self.stall_boost_step = float(self.get_parameter('stall_boost_step').value)
+        self.stall_boost_max = float(self.get_parameter('stall_boost_max').value)
+        self.encoder_stale_sec = float(self.get_parameter('encoder_stale_sec').value)
+        self.turn_speed_gain = float(self.get_parameter('turn_speed_gain').value)
+        self.turn_steer_thresh = float(self.get_parameter('turn_steer_thresh').value)
 
         self.wall_hug_enable = bool(self.get_parameter('wall_hug_enable').value)
         self.wall_target_dist_m = float(self.get_parameter('wall_target_dist_m').value)
@@ -293,6 +380,7 @@ class OpenRoundRunNode(Node):
         scan_topic = self.get_parameter('scan_topic').value
         odom_vector_topic = self.get_parameter('odom_vector_topic').value
         heading_topic = self.get_parameter('heading_topic').value
+        encoder_topic = self.get_parameter('encoder_topic').value
         cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
 
         # Fail fast on config that would silently break the homing maths.
@@ -358,7 +446,20 @@ class OpenRoundRunNode(Node):
         self.last_odom_time = 0.0
         self.last_odom_total_m = None   # for the speed estimate
         self.yaw_deg = None             # ROS convention (CCW+), None until /heading
+        self.last_heading_time = 0.0    # wall time of the last /heading message
         self.warned_no_odom = False
+
+        # ── Heading-Fused Steering State ─────────────────────────────
+        self.target_yaw_deg = None      # absolute heading the car should hold
+        self.last_heading_err = None    # PD memory; None resets the D-term
+        self.last_steer_time = None
+
+        # ── Encoder / Stall State ────────────────────────────────────
+        self.last_encoder_count = None      # None until /encoder/count arrives
+        self.last_encoder_change_time = 0.0  # when the count last CHANGED
+        self.last_encoder_msg_time = 0.0    # when the stream last spoke at all
+        self.stall_boost = 1.0              # live throttle multiplier
+        self.last_boost_update = None
 
         # ── Homing State ─────────────────────────────────────────────
         self.home_x_m = 0.0
@@ -389,21 +490,49 @@ class OpenRoundRunNode(Node):
         if self.run_state == STATE_RUNNING:
             self.run_start_time = time.time()
 
+        # ── Callback Groups ──────────────────────────────────────────
+        # The LiDAR pipeline (scan intake + the pure-Python circle-cast
+        # maths) lives in its own mutually-exclusive group; everything
+        # time-critical — the 40 Hz control loop, watchdog, button, odom,
+        # state heartbeat — lives in another. With the multi-threaded
+        # executor in main(), a slow scan-processing cycle can therefore
+        # never delay a drive command or the emergency stop, while the
+        # scan callback and the processing step still serialise with each
+        # other (same group), so they cannot race on the ray buffers.
+        self.cb_lidar = MutuallyExclusiveCallbackGroup()
+        self.cb_control = MutuallyExclusiveCallbackGroup()
+
         # ── Subscriptions & Publishers ───────────────────────────────
         if self.wait_for_track_ready:
             from rclpy.qos import DurabilityPolicy, QoSProfile
             latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.track_ready_sub = self.create_subscription(
-                Bool, '/track_ready', self.track_ready_callback, latched)
+                Bool, '/track_ready', self.track_ready_callback, latched,
+                callback_group=self.cb_control)
 
+        # BEST_EFFORT (sensor data) QoS: the C1 driver publishes BEST_EFFORT
+        # and a RELIABLE subscriber never matches it — the callback would
+        # simply never fire and the node would look hung, with the watchdog
+        # disarmed (it only arms after the first scan). Same fix as
+        # custom_disparity_extender and e_stop's FIX 2.
         self.scan_sub = self.create_subscription(
-            LaserScan, scan_topic, self.lidar_callback, 1)
+            LaserScan, scan_topic, self.lidar_callback, qos_profile_sensor_data,
+            callback_group=self.cb_lidar)
         self.odom_sub = self.create_subscription(
-            Vector3, odom_vector_topic, self.odom_vector_callback, 10)
+            Vector3, odom_vector_topic, self.odom_vector_callback, 10,
+            callback_group=self.cb_control)
         self.heading_sub = self.create_subscription(
-            Float32, heading_topic, self.heading_callback, 10)
-        self.lap_sub = self.create_subscription(Int32, '/lap_count', self.lap_callback, 10)
-        self.button_sub = self.create_subscription(Bool, button_topic, self.button_callback, 10)
+            Float32, heading_topic, self.heading_callback, 10,
+            callback_group=self.cb_control)
+        self.encoder_sub = self.create_subscription(
+            Int32, encoder_topic, self.encoder_callback, 10,
+            callback_group=self.cb_control)
+        self.lap_sub = self.create_subscription(
+            Int32, '/lap_count', self.lap_callback, 10,
+            callback_group=self.cb_control)
+        self.button_sub = self.create_subscription(
+            Bool, button_topic, self.button_callback, 10,
+            callback_group=self.cb_control)
         self.lap_reset_pub = self.create_publisher(Empty, '/reset_lap_count', 10)
 
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
@@ -411,24 +540,14 @@ class OpenRoundRunNode(Node):
         self.marker_pub = self.create_publisher(Marker, '/open_round/target_marker', 10)
         self.state_pub = self.create_publisher(String, '/open_round/state', 10)
 
-    def track_ready_callback(self, msg: Bool):
-        if msg.data and not self.track_ready:
-            self.track_ready = True
-            self.get_logger().info('Received /track_ready from track_maker — track layout complete!')
-            if self.run_state == STATE_STANDBY and not self.require_button_start:
-                self.run_state = STATE_RUNNING
-                self.run_start_time = time.time()
-                self.home_captured = False  # Recapture home at updated car pose
-
-
         # ── Control Loop Timer (40 Hz) ───────────────────────────────
-        self.create_timer(0.025, self.control_loop)
+        self.create_timer(0.025, self.control_loop, callback_group=self.cb_control)
 
         # ── LiDAR Processing Timer (20 Hz) ───────────────────────────
-        self.create_timer(0.05, self.calc_lidar_step)
+        self.create_timer(0.05, self.calc_lidar_step, callback_group=self.cb_lidar)
 
         # ── State Heartbeat (1 Hz) ───────────────────────────────────
-        self.create_timer(1.0, self.publish_state)
+        self.create_timer(1.0, self.publish_state, callback_group=self.cb_control)
 
         self.get_logger().info(
             f'[Open Round Run] Initialized | '
@@ -448,6 +567,17 @@ class OpenRoundRunNode(Node):
     # ══════════════════════════════════════════════════════════════════
     # Callbacks
     # ══════════════════════════════════════════════════════════════════
+
+    def track_ready_callback(self, msg: Bool):
+        """Simulation gate: track_maker says the mat is laid out."""
+        if msg.data and not self.track_ready:
+            self.track_ready = True
+            self.get_logger().info(
+                'Received /track_ready from track_maker — track layout complete!')
+            if self.run_state == STATE_STANDBY and not self.require_button_start:
+                self.run_state = STATE_RUNNING
+                self.run_start_time = time.time()
+                self.home_captured = False  # Recapture home at updated car pose
 
     def odom_vector_callback(self, msg: Vector3):
         """Track the vector odom pose (converted to metres) and estimate speed."""
@@ -489,6 +619,7 @@ class OpenRoundRunNode(Node):
                     throttle_duration_sec=1.0)
         self.last_raw_heading_yaw = yaw
         self.yaw_deg = yaw
+        self.last_heading_time = time.time()
 
         # Latch the outer wall once the lap direction is unambiguous:
         # CCW laps (left turns, positive yaw growth) keep the outer wall on
@@ -500,6 +631,18 @@ class OpenRoundRunNode(Node):
                 f'Lap direction latched: '
                 f'{"CCW" if self.cumulative_yaw_deg > 0.0 else "CW"} — hugging the '
                 f'{"right" if self.hug_side < 0 else "left"} (outer) wall.')
+
+    def encoder_callback(self, msg: Int32):
+        """
+        Raw encoder tick count from the MCU (any change = the wheels turned;
+        works in reverse too, and a count reset still reads as a change).
+        Only the CHANGE time matters — the stall detector compares against it.
+        """
+        now = time.time()
+        if self.last_encoder_count is None or msg.data != self.last_encoder_count:
+            self.last_encoder_count = msg.data
+            self.last_encoder_change_time = now
+        self.last_encoder_msg_time = now
 
     def lap_callback(self, msg: Int32):
         """Update lap count from the lap_counter node."""
@@ -629,6 +772,11 @@ class OpenRoundRunNode(Node):
         self.update_run_state()
 
         if not bool(self.get_parameter('enable_auto_steering').value):
+            # Say so, or a bare `ros2 run` without the params file looks
+            # exactly like a hung node: subscribed, alive, and silent.
+            self.get_logger().info(
+                'enable_auto_steering is false — planning only, /cmd_vel untouched.',
+                throttle_duration_sec=10.0)
             return
 
         # ── LAP RESET LOGIC ──
@@ -661,7 +809,18 @@ class OpenRoundRunNode(Node):
             return
 
         # ── LIDAR WATCHDOG (both driving states) ──
-        if self.last_scan_time > 0.0 and (time.time() - self.last_scan_time) > 2.0:
+        # Never seen a scan at all: refuse to drive and say why, loudly.
+        # Without this branch a dead/mismatched lidar leaves last_scan_time
+        # at 0.0, the timeout below never arms, and the node sits silently
+        # publishing zeros — indistinguishable from a hang.
+        if self.last_scan_time == 0.0:
+            self.publish_zero_now()
+            self.get_logger().error(
+                'No /scan received yet — holding. Is the lidar driver up '
+                '(and publishing BEST_EFFORT sensor-data QoS)?',
+                throttle_duration_sec=2.0)
+            return
+        if (time.time() - self.last_scan_time) > 2.0:
             self.publish_zero_now()
             self.get_logger().error(
 <<<<<<< HEAD
@@ -695,14 +854,115 @@ class OpenRoundRunNode(Node):
         self.cmd_pub.publish(cmd)
 
     def drive_running(self):
-        """Publish the command computed by the LiDAR pipeline."""
+        """
+        Publish the drive command: a fixed drive_speed (scaled by the encoder
+        stall boost) and the heading-fused steering with the full servo
+        travel available. The LiDAR pipeline's speed is only consulted as
+        a go/no-go: self.speed == 0 means the pipeline parked the car (all
+        blocked, or no scan processed yet) and the throttle must stay zero —
+        boosting into a wall is exactly what the stall sense must not do.
+        """
+        driving = self.speed > 0.0
+        boost = self.update_stall_boost(driving)
+        steer = clamp(self.compute_running_steer(),
+                      -self.max_steer_cmd, self.max_steer_cmd)
+        speed_cmd = self.drive_speed * boost
+        # Turning gets MORE throttle, never less: steering load slows this
+        # drivetrain by itself, so any nonzero steering command takes
+        # turn_speed_gain on top of the base speed (the old corner speed
+        # cap is gone on purpose).
+        if abs(steer) > self.turn_steer_thresh:
+            speed_cmd *= self.turn_speed_gain
         cmd = Twist()
-        capped = clamp(self.speed * self.speed_boost,
-                       -self.speed_cap * self.speed_boost,
-                       self.speed_cap * self.speed_boost)
-        cmd.linear.x = float(capped)
-        cmd.angular.z = float(self.str_angle)
+        cmd.linear.x = float(speed_cmd) if driving else 0.0
+        cmd.angular.z = float(steer)
         self.cmd_pub.publish(cmd)
+
+    def update_stall_boost(self, driving):
+        """
+        Fuse /encoder/count into the throttle: while a drive command is out
+        but the tick count is frozen (static friction won), ramp a gentle
+        boost up to stall_boost_max; the moment the wheels turn again, ramp
+        it back down to 1.0 at the same rate — never a step, so the car
+        cannot lurch. Not commanding motion, or a silent encoder stream,
+        resets the boost to 1.0 (a parked car is not stalled, and a blind
+        boost is worse than none).
+        """
+        now = time.time()
+        dt = 0.0
+        if self.last_boost_update is not None:
+            dt = clamp(now - self.last_boost_update, 0.0, 0.2)
+        self.last_boost_update = now
+
+        encoder_alive = (now - self.last_encoder_msg_time) <= self.encoder_stale_sec
+        if not driving or not encoder_alive:
+            if not encoder_alive and driving:
+                self.get_logger().warn(
+                    'No /encoder/count — stall boost disabled, driving at base speed.',
+                    throttle_duration_sec=5.0)
+            self.stall_boost = 1.0
+            return self.stall_boost
+
+        stalled = (now - self.last_encoder_change_time) > self.stall_timeout_sec
+        if stalled:
+            self.stall_boost = min(self.stall_boost + self.stall_boost_step * dt,
+                                   self.stall_boost_max)
+            self.get_logger().warn(
+                f'Wheels stalled ({now - self.last_encoder_change_time:.1f}s '
+                f'without a tick) — throttle boost x{self.stall_boost:.2f}',
+                throttle_duration_sec=1.0)
+        else:
+            self.stall_boost = max(1.0,
+                                   self.stall_boost - self.stall_boost_step * dt)
+        return self.stall_boost
+
+    def compute_running_steer(self):
+        """
+        Closed-loop steering for RUNNING: hold the absolute heading the LiDAR
+        pipeline latched (target_yaw_deg) against the live compass, at the
+        full 40 Hz of the control loop instead of the 20 Hz of the scans.
+
+        PD on the heading error — the exact shape SteeringStabilizer proved
+        on this car. Its steer = -(kp*err) is stated in raw CLOCKWISE compass
+        degrees; yaw here is the CCW conversion of the same stream, which
+        flips the error's sign, so the identical physical command is
+        +kp*err: positive error (target left of the nose) gives positive
+        angular.z, agreeing with the raw-LiDAR fallback mapping.
+
+        Falls back to the open-loop LiDAR angle (str_angle, the old
+        behaviour) when fusion is off, no target is latched yet, or /heading
+        is missing/stale — a dead IMU degrades the drive, never parks it.
+        """
+        now = time.time()
+        if not self.heading_fusion_enable:
+            return self.str_angle
+        if (self.target_yaw_deg is None or self.yaw_deg is None
+                or now - self.last_heading_time > self.heading_stale_sec):
+            self.last_heading_err = None
+            self.get_logger().warn(
+                'Heading fusion inactive (no /heading or no target yet) — '
+                'steering on the raw LiDAR angle.',
+                throttle_duration_sec=5.0)
+            return self.str_angle
+
+        error = normalize_angle_deg(self.target_yaw_deg - self.yaw_deg)
+
+        # Deadband: the BNO jitters a degree or two at rest; chasing that
+        # just saws the servo down every straight.
+        if abs(error) < self.heading_deadband_deg:
+            self.last_heading_err = None
+            return 0.0
+
+        d_term = 0.0
+        if self.last_heading_err is not None:
+            dt = now - self.last_steer_time
+            if dt > 1e-3:
+                d_term = self.heading_kd * (error - self.last_heading_err) / dt
+        self.last_heading_err = error
+        self.last_steer_time = now
+
+        return clamp(self.heading_kp * error + d_term,
+                     -self.heading_max_steer, self.heading_max_steer)
 
     # ══════════════════════════════════════════════════════════════════
     # Homing (drive back into the 5 cm circle around the start)
@@ -834,14 +1094,19 @@ class OpenRoundRunNode(Node):
             steer = -steer
 
         # ── Speed: ease down approaching the circle ──
+        # Same encoder stall fusion as RUNNING: the homing creep floor
+        # (0.25) is the speed most likely to lose to static friction, so
+        # the gentle boost matters most right here. Clamped to the same
+        # drive_speed linear limit as everything else.
         speed = remap(dist, self.home_radius_m, self.homing_slowdown_dist_m,
                       self.homing_min_speed, self.homing_max_speed)
+        speed = min(speed * self.update_stall_boost(True), 1.25 ) #self.drive_speed)
         if self.driving_reverse:
             speed = -speed
 
         cmd = Twist()
         cmd.linear.x = float(speed)
-        cmd.angular.z = float(steer)
+        cmd.angular.z = float(clamp(steer, -self.max_steer_cmd, self.max_steer_cmd))
         self.cmd_pub.publish(cmd)
 
         self.get_logger().info(
@@ -1156,14 +1421,14 @@ class OpenRoundRunNode(Node):
         if not self.new_lidar_val:
             return
 
-        # Atomically copy LiDAR data under lock, then process outside lock
+        # Snapshot the scan under the lock before the in-place fix-up
+        # passes mutate it. lidar_callback shares this node's LiDAR
+        # callback group, so the two can never overlap; the lock stays as
+        # a guard against any future regrouping.
         with self._scan_lock:
             self.new_lidar_val = False
-            ranges_copy = self.ranges.copy()
-            intensities_copy = self.intensities.copy()
-
-        self.ranges = ranges_copy
-        self.intensities = intensities_copy
+            self.ranges = self.ranges.copy()
+            self.intensities = self.intensities.copy()
 
         n = len(self.ranges)
         if n == 0 or self.ang_inc <= 0.0:
@@ -1197,6 +1462,9 @@ class OpenRoundRunNode(Node):
             self.speed = 0.0
             self.speed_boost = 1.0
             self.str_angle = 0.0
+            # target_yaw_deg is deliberately NOT cleared: one blocked frame
+            # must not snap the wheels straight mid-corner. Speed is zero,
+            # so holding the last good heading costs nothing.
             self.get_logger().warn(
                 f'All blocked (best {max_d:.2f} m) — holding.',
                 throttle_duration_sec=1.0)
@@ -1222,7 +1490,15 @@ class OpenRoundRunNode(Node):
         # 6. Emergency danger sense
         target_deg = self.danger_sense(target_deg)
 
-        # 7. Speed boosting on clear straights
+        # 7. Fuse with the compass: latch the fully-trimmed target as an
+        #    ABSOLUTE heading (the MCU heading boots at 0.0, so this frame
+        #    is stable for the whole run). drive_running closes the loop on
+        #    it at 40 Hz with fresh /heading; str_angle below stays as the
+        #    no-IMU fallback.
+        if self.yaw_deg is not None:
+            self.target_yaw_deg = normalize_angle_deg(self.yaw_deg + target_deg)
+
+        # 8. Speed boosting on clear straights
         self.speed_boost = 1.0
         boost_idx = self.a2i(math.radians(target_deg))
         if 0 <= boost_idx < n:
@@ -1231,30 +1507,25 @@ class OpenRoundRunNode(Node):
                     and marching_hit["dst"] > self.boost_dist_thresh):
                 self.speed_boost = self.boost_max
 
-        # 8. Map target angle to steering range [-1, 1]
+        # 9. Map target angle to steering range [-1, 1] (fallback path)
         self.str_angle = remap(target_deg, -self.str_ang_thresh, self.str_ang_thresh,
                                -1.0, 1.0)
 
-        # 9. Speed from open distance
-        mult = remap(max_d, 1.0, 2.0, 0.65, 1.0)
-        self.speed = self.max_speed * mult * self.speed_boost
-
-        # 10. Dynamic speed cap (instant decel, smooth accel)
-        self.target_cap = self.speed_cap_straight
-        if abs(target_deg) > 40.0:
-            self.target_cap = self.speed_cap_corner
-
-        if self.target_cap < self.speed_cap:
-            self.speed_cap = self.target_cap
-        else:
-            self.speed_cap = lerp(self.speed_cap, self.target_cap, min(dt * 5, 1.0))
+        # 10. Go signal for drive_running. The real throttle is drive_speed
+        #     (with the stall boost and the corner gain); the old
+        #     open-distance multiplier and corner speed cap LOWERED the
+        #     command while turning and are removed on purpose — this
+        #     drivetrain slows under steering load all by itself.
+        self.speed = self.max_speed
 
         # 11. Throttled terminal feedback
         hug = ('n/a' if self.hug_side is None
                else ('L' if self.hug_side > 0 else 'R') + f'{wall_corr:+.1f}°')
+        fuse = ('OPEN-LOOP' if self.target_yaw_deg is None or self.yaw_deg is None
+                else f'{self.yaw_deg:+6.1f}°→{self.target_yaw_deg:+6.1f}°')
         self.get_logger().info(
-            f'[NAV] Target: {target_deg:+6.1f}° | Dist: {max_d:4.2f}m | '
-            f'Wall: {hug} | Boost: {self.speed_boost:.2f}x | '
+            f'[NAV] Target: {target_deg:+6.1f}° | Yaw: {fuse} | '
+            f'Dist: {max_d:4.2f}m | Wall: {hug} | '
             f'Lap: {self.lap_count}/{self.target_laps}',
             throttle_duration_sec=0.5)
 
@@ -1307,11 +1578,17 @@ class OpenRoundRunNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = OpenRoundRunNode()
+    # Two threads, one per callback group: the LiDAR maths runs on one
+    # while the control loop / watchdog / button / state callbacks keep
+    # ticking on the other, so no single slow callback can freeze the node.
+    executor = MultiThreadedExecutor(num_threads=2)
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
+        executor.shutdown()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
