@@ -190,7 +190,7 @@ class OpenRoundRunNode(Node):
         self.declare_parameter('min_clear_dist_m', 0.15)
 
         # ── Steering ─────────────────────────────────────────────────
-        self.declare_parameter('str_ang_thresh', 60.0)
+        self.declare_parameter('str_ang_thresh', 180.0)
 
         # ── Heading-Fused Steering ───────────────────────────────────
         # The LiDAR target becomes an absolute compass heading and the
@@ -823,7 +823,11 @@ class OpenRoundRunNode(Node):
         if (time.time() - self.last_scan_time) > 2.0:
             self.publish_zero_now()
             self.get_logger().error(
+<<<<<<< HEAD
                 'LiDAR timeout! No /scan for >2.0s — emergency stop.',
+=======
+                'LiDAR timeout! No /scan for >500ms — emergency stop.',
+>>>>>>> 5e203c7 (Update LiDAR parameters and configurations for improved sensor handling and performance)
                 throttle_duration_sec=1.0)
             return
 

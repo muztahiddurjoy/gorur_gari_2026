@@ -90,6 +90,15 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'lidar_frame_id', default_value='laser',
             description='Frame ID for LiDAR scans.'),
+        DeclareLaunchArgument(
+            'lidar_inverted', default_value='true',
+            description='True when the C1 is bolted on upside down, which is how it '
+                        'is mounted on this car. Flipped over it sweeps the opposite '
+                        'way as seen from above, so the driver has to reverse ranges[] '
+                        'to put +angle back on the robot LEFT (REP-103). Without it '
+                        'every left/right decision downstream is mirrored. Check with: '
+                        'box 1 m to the LEFT must read at a POSITIVE angle in '
+                        '`ros2 topic echo /scan`.'),
     ]
 
     arguments += [
@@ -159,7 +168,7 @@ def generate_launch_description():
             'serial_port': LaunchConfiguration('lidar_serial_port'),
             'serial_baudrate': 460800,
             'frame_id': LaunchConfiguration('lidar_frame_id'),
-            'inverted': False,
+            'inverted': typed('lidar_inverted', bool),
             'angle_compensate': True,
         }],
     )

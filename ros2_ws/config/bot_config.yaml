@@ -22,8 +22,8 @@
       encoder_counts_per_rev: 185
       max_steer_deg: 180.0        # physical steering lock (one side)
       safety_margin_m: 0.01      # clearance kept on EACH side of the bot
-      max_speed_mps: 0.8         # cruise ceiling on open track
-      min_speed_mps: 0.5        # creep floor while threading gaps
+      max_speed_mps: 0.45         # cruise ceiling on open track
+      min_speed_mps: 0.4        # creep floor while threading gaps
       lidar:
         frame_id: laser          # must match the C1 driver's frame_id
         forward_offset_m: 0.0    # lidar origin ahead(+)/behind(-) of bot centre
@@ -47,7 +47,12 @@ mcu_bridge:
     throttle_min: -128           # int8 wire field floor (full reverse)
     throttle_max: 127            # int8 wire field ceiling (full forward)
     steering_center_deg: 90      # servo angle that rolls straight
-    steering_gain_deg: 60.0      # wire angle = center + angular.z * this
+    # Wire angle = center + angular.z * this. Every driving node clamps
+    # angular.z to [-1, 1], so this IS the usable servo half-travel: at
+    # 90.0 a full-lock command lands exactly on 0 / 180, using the whole
+    # range. Drop it if the linkage binds before the servo endpoints —
+    # the servo would stall against the stop and cook itself.
+    steering_gain_deg: 90.0      # wire angle = center + angular.z * this
     steering_min_deg: 0          # servo clamp, full left
     steering_max_deg: 180        # servo clamp, full right
 
@@ -70,18 +75,17 @@ open_round_run:
     min_run_time_sec: 5.0
 
     # ── Speed ─────────────────────────────────────────────────────
-    # The published throttle is drive_speed (below, in the encoder
-    # stall block) times the stall boost, times turn_speed_gain while
-    # turning. The old corner speed cap and open-distance multiplier
-    # that used to LOWER the command in turns are removed. max_speed
-    # only scales the dynamic cast radius now.
-    max_speed: 0.69
-
-    # ── Corner throttle ───────────────────────────────────────────
-    # Steering load slows the drivetrain, so turning gets MORE linear
-    # speed, not less.
-    turn_speed_gain: 1.5         # linear.x multiplier while turning
-    turn_steer_thresh: 0.0       # any nonzero |angular.z| counts as turning
+    # The commanded speed is max_speed scaled by how open the chosen
+    # path is (0.65x when the way ahead is under 1 m, 1.0x past 2 m),
+    # then held under whichever cap applies. The corner cap engages
+    # once the target heading passes 40 deg off the nose.
+    max_speed: 1.2
+    speed_cap_corner: 0.75       # raised from 0.60 — faster through turns
+    speed_cap_straight: 0.80
+    # Note: in a tight corner the open-path scaling floors at 0.65, so
+    # the speed offered to the cap is 1.2 * 0.65 = 0.78. A corner cap
+    # above that stops binding at all — to go faster mid-turn from
+    # there, raise max_speed rather than the cap.
 
     # ── Wall hugging ──────────────────────────────────────────────
     wall_hug_enable: true
@@ -163,7 +167,7 @@ custom_disparity_extender:
     # Master switch: the node never publishes /cmd_vel unless this is
     # true. The in-code default is false, so a bare `ros2 run` without
     # this file can never move the car.
-    enable_drive: true
+    enable_drive: false
 
     scan_topic: /scan
     cmd_vel_topic: /cmd_vel

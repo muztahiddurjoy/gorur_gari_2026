@@ -62,7 +62,7 @@ class LapCounterNode(Node):
 
         # The BNO055 heading grows clockwise, ROS yaw grows counter clockwise
         # (REP-103). Only affects which way a turn is labelled.
-        self.declare_parameter('heading_clockwise', True)
+        self.declare_parameter('heading_clockwise', False)
 
         # -- logging --
         # Seconds between progress lines while driving. 0 disables them; the
