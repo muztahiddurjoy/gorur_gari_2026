@@ -225,10 +225,11 @@ class OpenRoundRunNode(Node):
 
         # ── Corner Throttle Gain ─────────────────────────────────────
         # Steering load slows the drivetrain, so turning gets MORE linear
-        # speed, not less. Applied whenever |angular.z| passes the
-        # threshold; there is no corner slowdown anywhere any more.
-        self.declare_parameter('turn_speed_gain', 1.25)
-        self.declare_parameter('turn_steer_thresh', 0.15)
+        # speed, not less. Applied whenever |angular.z| is above the
+        # threshold (0.0 = any nonzero steering command boosts); there
+        # is no corner slowdown anywhere any more.
+        self.declare_parameter('turn_speed_gain', 1.5)
+        self.declare_parameter('turn_steer_thresh', 0.0)
 
         # ── Wall Hugging ─────────────────────────────────────────────
         self.declare_parameter('wall_hug_enable', True)
@@ -863,9 +864,10 @@ class OpenRoundRunNode(Node):
                       -self.max_steer_cmd, self.max_steer_cmd)
         speed_cmd = self.drive_speed * boost
         # Turning gets MORE throttle, never less: steering load slows this
-        # drivetrain by itself, so corners take turn_speed_gain on top of
-        # the base speed (the old corner speed cap is gone on purpose).
-        if abs(steer) >= self.turn_steer_thresh:
+        # drivetrain by itself, so any nonzero steering command takes
+        # turn_speed_gain on top of the base speed (the old corner speed
+        # cap is gone on purpose).
+        if abs(steer) > self.turn_steer_thresh:
             speed_cmd *= self.turn_speed_gain
         cmd = Twist()
         cmd.linear.x = float(speed_cmd) if driving else 0.0

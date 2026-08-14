@@ -80,8 +80,8 @@ open_round_run:
     # ── Corner throttle ───────────────────────────────────────────
     # Steering load slows the drivetrain, so turning gets MORE linear
     # speed, not less.
-    turn_speed_gain: 1.25        # linear.x multiplier while turning
-    turn_steer_thresh: 0.15      # |angular.z| that counts as turning
+    turn_speed_gain: 1.5         # linear.x multiplier while turning
+    turn_steer_thresh: 0.0       # any nonzero |angular.z| counts as turning
 
     # ── Wall hugging ──────────────────────────────────────────────
     wall_hug_enable: true
