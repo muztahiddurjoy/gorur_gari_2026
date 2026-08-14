@@ -19,7 +19,7 @@
       width_m: 0.12              # chassis width including wheels
       length_m: 0.21             # bumper to bumper
       wheel_diameter_m: 0.050    # drive wheel diameter
-      encoder_counts_per_rev: 200
+      encoder_counts_per_rev: 185
       max_steer_deg: 180.0        # physical steering lock (one side)
       safety_margin_m: 0.01      # clearance kept on EACH side of the bot
       max_speed_mps: 0.8         # cruise ceiling on open track
@@ -70,25 +70,18 @@ open_round_run:
     min_run_time_sec: 5.0
 
     # ── Speed ─────────────────────────────────────────────────────
-    # Hard ceiling on /cmd_vel linear.x for this round: 0.45 m/s, the
-    # bot.max_speed_mps cruise ceiling at the top of this file.
-    #
-    # The commanded speed is max_speed scaled by how open the chosen
-    # path is (0.65x when the way ahead is under 1 m, 1.0x past 2 m),
-    # then held under whichever cap applies — the corner cap once the
-    # target heading passes 40 deg off the nose, the straight cap
-    # otherwise. max_speed sits ABOVE both caps on purpose, so the caps
-    # are what actually decide the speed and 0.45 is genuinely the peak:
-    # even down at the 0.65x tight-corner floor, 0.69 * 0.65 = 0.45 is
-    # still above the corner cap.
+    # The published throttle is drive_speed (below, in the encoder
+    # stall block) times the stall boost, times turn_speed_gain while
+    # turning. The old corner speed cap and open-distance multiplier
+    # that used to LOWER the command in turns are removed. max_speed
+    # only scales the dynamic cast radius now.
     max_speed: 0.69
-    speed_cap_straight: 0.45     # THE ceiling — nothing publishes above this
-    speed_cap_corner: 0.42       # ~94% of straight, keeping turns quick
-    # Must stay 1.0. The boost scales the CAP as well as the speed (see
-    # drive_running in open_round_run.py), so anything above 1.0 lifts
-    # the real ceiling with it — at the in-code default of 1.35 the true
-    # peak would be 0.45 * 1.35 = 0.61, not 0.45.
-    boost_max: 1.0
+
+    # ── Corner throttle ───────────────────────────────────────────
+    # Steering load slows the drivetrain, so turning gets MORE linear
+    # speed, not less.
+    turn_speed_gain: 1.25        # linear.x multiplier while turning
+    turn_steer_thresh: 0.15      # |angular.z| that counts as turning
 
     # ── Wall hugging ──────────────────────────────────────────────
     wall_hug_enable: true
@@ -109,8 +102,40 @@ open_round_run:
     max_gear_flips: 6            # anti-hunting: settle after this many reversals
 
     # ── Heading convention (must match vector_odom) ───────────────
-    heading_clockwise: false
+    # The BNO055 heading grows CLOCKWISE (compass style) and boots at
+    # 0.0; vector_odom is launched with heading_clockwise=true. This
+    # MUST be true as well or this node's yaw is sign-flipped against
+    # the odometry frame: the auto wall latch hugs the INNER wall, the
+    # fused steering turns the wrong way, and homing steers backwards.
+    heading_clockwise: true
     heading_offset_deg: 0.0
+
+    # ── Heading-fused steering ────────────────────────────────────
+    # The LiDAR target is latched as an absolute compass heading and
+    # the 40 Hz loop steers on the live /heading error (PD), so the
+    # car tracks its own rotation instead of open-looping the servo.
+    # Gains proven by sensors_processing SteeringStabilizer /
+    # box_lap_test on this chassis.
+    heading_fusion_enable: true
+    heading_kp: 0.03             # steer per degree of heading error
+    heading_kd: 0.005            # damping against error swing
+    # 1.5 is FULL servo travel: the bridge maps servo = 90 + z*60, so
+    # z = ±1.5 reaches 0/180. Steering is deliberately unlimited.
+    heading_max_steer: 1.5
+    heading_deadband_deg: 2.0    # BNO jitter suppression on straights
+    heading_stale_sec: 0.5       # /heading older -> raw LiDAR steering
+
+    # ── Encoder stall adaptation ──────────────────────────────────
+    # /encoder/count fused as a wheels-actually-turning sense: while a
+    # drive command is out but the tick count is frozen, the throttle
+    # ramps up GENTLY (never a slam) until the wheels move, then eases
+    # back. Peak throttle = drive_speed * stall_boost_max = 1.10.
+    drive_speed: 1.25           # nominal linear.x while lapping — THE linear limit
+    max_steer_cmd: 1.5           # steering unlimited: full 0-180 servo travel
+    stall_timeout_sec: 0.2       # frozen ticks this long while driving = stalled
+    stall_boost_step: 0.2        # boost ramp per second (up and down)
+    stall_boost_max: 10.0         # boost ceiling ("not too much")
+    encoder_stale_sec: 1.0       # dead /encoder/count -> boost disabled
 
 run_timer:
   ros__parameters:
