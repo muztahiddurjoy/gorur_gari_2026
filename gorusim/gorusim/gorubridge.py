@@ -1,5 +1,5 @@
 """
-lazybridge — the simulator's stand-in for mcu_bridge.
+gorubridge — the simulator's stand-in for mcu_bridge.
 
 On the real car, controls/mcu_bridge.py is the only thing that talks to
 the ESP32: it takes /cmd_vel in and puts encoder, heading, servo and
@@ -16,16 +16,16 @@ unchanged, which is the whole point of the exercise.
                                           encoder/direction  Int8  (-1/0/+1)
     Ignition in (via ros_gz_bridge)       steering_angle     UInt8 (degrees)
     ──────────────────────────────        heading            Float32 (degrees)
-    /lazybot/joint_states  JointState     /button_status     Bool
+    /gorubot/joint_states  JointState     /button_status     Bool
     /imu                   Imu            /joint_states      JointState
 
     Ignition out (via ros_gz_bridge)
     ────────────────────────────────
-    /lazybot/steer_left    Float64 (rad)
-    /lazybot/steer_right   Float64 (rad)
-    /lazybot/drive_left    Float64 (rad/s)
-    /lazybot/drive_right   Float64 (rad/s)
-    /lazybot/cam_servo     Float64 (rad)
+    /gorubot/steer_left    Float64 (rad)
+    /gorubot/steer_right   Float64 (rad)
+    /gorubot/drive_left    Float64 (rad/s)
+    /gorubot/drive_right   Float64 (rad/s)
+    /gorubot/cam_servo     Float64 (rad)
 
 Two deliberate departures from mcu_bridge:
 
@@ -70,12 +70,12 @@ def quaternion_yaw(x, y, z, w):
     return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 
-class LazyBridge(Node):
+class GoruBridge(Node):
     def __init__(self):
-        super().__init__('lazybridge')
+        super().__init__('gorubridge')
 
         # ── Geometry: mirrors ros2_ws/config/bot_config.yaml and the
-        #    xacro properties in description/lazyBot.xacro. All three
+        #    xacro properties in description/goruBot.xacro. All three
         #    have to agree or the sim steers differently from the model
         #    it is drawing. ────────────────────────────────────────────
         self.declare_parameter('wheelbase_m', 0.140)
@@ -165,11 +165,11 @@ class LazyBridge(Node):
         self.heading_deg = 0.0
 
         # ── Ignition-side command publishers ────────────────────────────
-        self.steer_left_pub = self.create_publisher(Float64, '/lazybot/steer_left', 10)
-        self.steer_right_pub = self.create_publisher(Float64, '/lazybot/steer_right', 10)
-        self.drive_left_pub = self.create_publisher(Float64, '/lazybot/drive_left', 10)
-        self.drive_right_pub = self.create_publisher(Float64, '/lazybot/drive_right', 10)
-        self.cam_servo_pub = self.create_publisher(Float64, '/lazybot/cam_servo', 10)
+        self.steer_left_pub = self.create_publisher(Float64, '/gorubot/steer_left', 10)
+        self.steer_right_pub = self.create_publisher(Float64, '/gorubot/steer_right', 10)
+        self.drive_left_pub = self.create_publisher(Float64, '/gorubot/drive_left', 10)
+        self.drive_right_pub = self.create_publisher(Float64, '/gorubot/drive_right', 10)
+        self.cam_servo_pub = self.create_publisher(Float64, '/gorubot/cam_servo', 10)
 
         # ── Real-bot telemetry publishers (mcu_bridge's interface) ──────
         self.encoder_count_pub = self.create_publisher(Int32, 'encoder/count', 10)
@@ -186,13 +186,13 @@ class LazyBridge(Node):
         # ── Subscriptions ───────────────────────────────────────────────
         self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
         self.create_subscription(Int8, '/cam_servo', self.cam_servo_callback, 1)
-        self.create_subscription(JointState, '/lazybot/joint_states',
+        self.create_subscription(JointState, '/gorubot/joint_states',
                                  self.joint_state_callback, 10)
         self.create_subscription(Imu, '/imu', self.imu_callback, 10)
 
         # Press the start button by hand:
-        #   ros2 service call /lazybot/press_start std_srvs/srv/Trigger
-        self.create_service(Trigger, '/lazybot/press_start', self.press_start)
+        #   ros2 service call /gorubot/press_start std_srvs/srv/Trigger
+        self.create_service(Trigger, '/gorubot/press_start', self.press_start)
 
         # 50 Hz for both loops, matching the MCU's telemetry cadence.
         self.create_timer(0.02, self.control_loop)
@@ -203,12 +203,12 @@ class LazyBridge(Node):
                 self.auto_start_sec, self.auto_start)
 
         self.get_logger().info(
-            f'lazybridge up — wheelbase {self.wheelbase * 1000:.0f} mm, '
+            f'gorubridge up — wheelbase {self.wheelbase * 1000:.0f} mm, '
             f'track {self.track * 1000:.0f} mm, wheel {self.wheel_radius * 2000:.0f} mm, '
             f'lock ±{math.degrees(self.max_steer):.0f}°, '
             f'{self.counts_per_rev} ticks/rev')
         self.get_logger().info(
-            'Start button: ros2 service call /lazybot/press_start std_srvs/srv/Trigger'
+            'Start button: ros2 service call /gorubot/press_start std_srvs/srv/Trigger'
             + (f' (auto-pressing in {self.auto_start_sec:.0f}s)'
                if self.auto_start_sec > 0.0 else ''))
 
@@ -387,7 +387,7 @@ class LazyBridge(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = LazyBridge()
+    node = GoruBridge()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

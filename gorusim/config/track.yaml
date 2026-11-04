@@ -1,7 +1,7 @@
 # ════════════════════════════════════════════════════════════════════
 # Track layout, applied by track_maker once Ignition is up.
 #
-# Coordinates are world metres. The mat in worlds/lazyWorld.sdf is a 3 m
+# Coordinates are world metres. The mat in worlds/goruWorld.sdf is a 3 m
 # square centred on (0, 1) with a 1 m square block in the middle, so the
 # driving corridor is the 1 m ring between them:
 #
@@ -32,7 +32,7 @@ objects: true
 # car starts fully behind the line rather than straddling it.
 # angle is degrees counter-clockwise, 0 = facing +X.
 start:
-    model: lazyBot
+    model: goruBot
     nose_offset_m: 0.105        # half of bot.length_m
     pos:
         x: 0.0

@@ -4,7 +4,7 @@ The simulator on its own — Ignition, the car, the bridge and the track.
 Brings up everything that stands in for hardware, and nothing that
 drives. Use it to poke at the car by hand:
 
-    ros2 launch lazysim sim.launch.py
+    ros2 launch gorusim sim.launch.py
     ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist \\
         '{linear: {x: 0.3}, angular: {z: 0.4}}'
 
@@ -14,9 +14,9 @@ obstacle_round_sim.launch.py instead — both include this file.
     ign gazebo ─┬─ gpu_lidar ─┐
                 ├─ imu        ├─ ros_gz_bridge ─┬─ /scan /imu /odom
                 ├─ camera ────┘                 ├─ /camera/image_raw
-                └─ joint controllers ◀──────────┘  /lazybot/joint_states
+                └─ joint controllers ◀──────────┘  /gorubot/joint_states
                                                           │
-                     /cmd_vel ──▶ lazybridge ◀────────────┘
+                     /cmd_vel ──▶ gorubridge ◀────────────┘
                                       │
                                       └──▶ encoder/count, heading,
                                            steering_angle, /joint_states
@@ -36,20 +36,20 @@ from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-PACKAGE = 'lazysim'
-# Must match <world name="..."> in worlds/lazyWorld.sdf: the Ignition
+PACKAGE = 'gorusim'
+# Must match <world name="..."> in worlds/goruWorld.sdf: the Ignition
 # services track_maker calls are scoped by it.
-WORLD_NAME = 'lazyWorld'
+WORLD_NAME = 'goruWorld'
 # Must match the -name given to `create` below, because the Ignition
 # controller plugin topics in control.xacro are scoped by model name.
-MODEL_NAME = 'lazyBot'
+MODEL_NAME = 'goruBot'
 
 
 def generate_launch_description():
     share = get_package_share_directory(PACKAGE)
-    xacro_file = os.path.join(share, 'description', 'lazyBot.xacro')
-    world_file = os.path.join(share, 'worlds', 'lazyWorld.sdf')
-    rviz_file = os.path.join(share, 'config', 'lazySim.rviz')
+    xacro_file = os.path.join(share, 'description', 'goruBot.xacro')
+    world_file = os.path.join(share, 'worlds', 'goruWorld.sdf')
+    rviz_file = os.path.join(share, 'config', 'goruSim.rviz')
     default_track = os.path.join(share, 'config', 'track.yaml')
     default_params = os.path.join(share, 'config', 'bot_config_sim.yaml')
 
@@ -64,7 +64,7 @@ def generate_launch_description():
         DeclareLaunchArgument('track_config', default_value=default_track,
                               description='Pillar / parking / start layout YAML.'),
         DeclareLaunchArgument('bot_config', default_value=default_params,
-                              description='Parameters for lazybridge and the autonomy '
+                              description='Parameters for gorubridge and the autonomy '
                                           'stack. Defaults to this package\'s copy; '
                                           'point it at ros2_ws/config/bot_config.yaml '
                                           'to run the real tuning.'),
@@ -99,7 +99,7 @@ def generate_launch_description():
     )
 
     # robot_state_publisher owns TF for everything on the car. It is
-    # fed by lazybridge's rate-limited /joint_states, not by Ignition
+    # fed by gorubridge's rate-limited /joint_states, not by Ignition
     # directly, which publishes one joint state per physics step.
     robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -144,30 +144,30 @@ def generate_launch_description():
             '/camera/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
             '/camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
 
-            # Joint feedback (1 kHz — lazybridge decimates it) and the
+            # Joint feedback (1 kHz — gorubridge decimates it) and the
             # simulator's ground truth pose.
-            '/lazybot/joint_states@sensor_msgs/msg/JointState[ignition.msgs.Model',
-            '/lazybot/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
+            '/gorubot/joint_states@sensor_msgs/msg/JointState[ignition.msgs.Model',
+            '/gorubot/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
 
             # Actuators
-            '/lazybot/steer_left@std_msgs/msg/Float64]ignition.msgs.Double',
-            '/lazybot/steer_right@std_msgs/msg/Float64]ignition.msgs.Double',
-            '/lazybot/drive_left@std_msgs/msg/Float64]ignition.msgs.Double',
-            '/lazybot/drive_right@std_msgs/msg/Float64]ignition.msgs.Double',
-            '/lazybot/cam_servo@std_msgs/msg/Float64]ignition.msgs.Double',
+            '/gorubot/steer_left@std_msgs/msg/Float64]ignition.msgs.Double',
+            '/gorubot/steer_right@std_msgs/msg/Float64]ignition.msgs.Double',
+            '/gorubot/drive_left@std_msgs/msg/Float64]ignition.msgs.Double',
+            '/gorubot/drive_right@std_msgs/msg/Float64]ignition.msgs.Double',
+            '/gorubot/cam_servo@std_msgs/msg/Float64]ignition.msgs.Double',
         ],
         remappings=[
             # disparity_extender subscribes to /odom.
-            ('/lazybot/odom', '/odom'),
+            ('/gorubot/odom', '/odom'),
         ],
         parameters=[{'use_sim_time': True}],
         output='screen',
     )
 
-    lazybridge = Node(
+    gorubridge = Node(
         package=PACKAGE,
-        executable='lazybridge',
-        name='lazybridge',
+        executable='gorubridge',
+        name='gorubridge',
         parameters=[LaunchConfiguration('bot_config'), {'use_sim_time': True}],
         output='screen',
         emulate_tty=True,
@@ -205,7 +205,7 @@ def generate_launch_description():
         gazebo_headless,
         robot_state_publisher,
         bridge,
-        lazybridge,
+        gorubridge,
         # Ignition needs a moment to stand the world up before it will
         # answer a spawn request, and the track can only be laid out
         # once the car it repositions actually exists.

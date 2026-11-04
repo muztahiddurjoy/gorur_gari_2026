@@ -11,7 +11,7 @@ it exposes its own transport services instead:
     /world/<world>/set_pose   ignition.msgs.Pose          -> Boolean
 
 Both are served by the UserCommands system, which is why
-worlds/lazyWorld.sdf loads it. rclpy cannot speak Ignition transport, so
+worlds/goruWorld.sdf loads it. rclpy cannot speak Ignition transport, so
 the requests go out through the `ign service` CLI from ignition-tools.
 
 Pillar colours are not cosmetic. vision_node thresholds red at S=255
@@ -60,7 +60,7 @@ class TrackMaker(Node):
     def __init__(self):
         super().__init__('track_maker')
 
-        self.declare_parameter('world_name', 'lazyWorld')
+        self.declare_parameter('world_name', 'goruWorld')
         self.declare_parameter('tower_template_path', '')
         self.declare_parameter('wall_template_path', '')
         self.declare_parameter('settings_path', '')
@@ -257,7 +257,7 @@ class TrackMaker(Node):
         yaw = math.radians(yaw_deg)
         offset = float(start.get('nose_offset_m', 0.105))  # half of length_m
         self.set_pose(
-            start.get('model', 'lazyBot'),
+            start.get('model', 'goruBot'),
             float(start['pos']['x']) - offset * math.cos(yaw),
             float(start['pos']['y']) - offset * math.sin(yaw),
             0.0,

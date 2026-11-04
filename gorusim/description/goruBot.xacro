@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!--
   ════════════════════════════════════════════════════════════════════
-  lazyBot — simulation model of the Gorur Gari 2026 car.
+  goruBot — simulation model of the Gorur Gari 2026 car.
 
   Every dimension below is the REAL car, so the sim and the track agree
   on what fits through a gap. The source of truth for the shared numbers
@@ -13,7 +13,7 @@
   are driven by Ignition's own controller plugins (see control.xacro).
   ════════════════════════════════════════════════════════════════════
 -->
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
     <!-- ══ Chassis envelope ═══════════════════════════════════════════
          bot.length_m / bot.width_m in bot_config.yaml. `width` is the
@@ -82,9 +82,9 @@
 
     <!-- ══ Model name, must match the <name> ros_gz_sim spawns it as,
          because the Ignition plugin topics are scoped by model name. -->
-    <xacro:property name="model_name"    value="lazyBot" />
+    <xacro:property name="model_name"    value="goruBot" />
 
-    <xacro:include filename="lazyBotCore.xacro" />
+    <xacro:include filename="goruBotCore.xacro" />
     <xacro:include filename="lidar.xacro" />
     <xacro:include filename="IMU.xacro" />
     <xacro:include filename="camera.xacro" />

@@ -50,7 +50,7 @@ t=506.5s  track_maker: Gazebo is up
 t=506.9s  Spawned tower_1
 t=507.2s  Spawned tower_2
 ...
-t=508.8s  Moved lazyBot to (-0.10, 0.00)
+t=508.8s  Moved goruBot to (-0.10, 0.00)
 ```
 
 The bot has already completed **Turn 1** and is driving fast before `track_maker` even starts spawning the inner towers. Then at `t=508.8s`, `track_maker` **teleports the bot back to the start**. This creates chaos:

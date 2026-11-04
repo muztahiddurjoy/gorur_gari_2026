@@ -28,7 +28,7 @@
   frame_id must stay `laser`: it is bot.lidar.frame_id in
   ros2_ws/config/bot_config.yaml and the frame RViz resolves scans in.
 -->
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
     <!-- bot.lidar.forward_offset_m = 0.0 and yaw_deg = 0.0, so the unit
          sits over base_link with its 0° ray pointing straight ahead. -->

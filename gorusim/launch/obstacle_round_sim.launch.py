@@ -1,27 +1,24 @@
 """
-Open round, in simulation — three laps of the mat, then park on the
-start point.
+Obstacle round, in simulation — laps with red and green traffic pillars,
+passing red on the right and green on the left.
 
-The same node graph as ros2_ws/launch/gorurgari_open_round.launch.py,
-with the two nodes that need hardware swapped out:
+Mirrors ros2_ws/launch/gorurgari_obstacle_round.launch.py with the
+hardware nodes swapped for the simulator:
 
-    mcu_bridge   -> lazybridge   (no ESP32, no serial port)
-    rplidar_c1   -> ros_gz_bridge (no LiDAR, /scan comes from gpu_lidar)
+    mcu_bridge   -> gorubridge
+    rplidar_c1   -> ros_gz_bridge  (/scan from gpu_lidar)
+    usb_cam      -> ros_gz_bridge  (/camera/image_raw from the sim camera)
 
-vector_odom, lap_counter and open_round_run are the real nodes, running
-their real code, against a /scan and a /heading that look like the
-hardware's. That is what makes a result here mean something.
+The pillar colours in the world are chosen so vision_node's real HSV
+thresholds work unchanged — see the note in config/object_template.sdf
+about why the pillars have a black specular term.
 
-    ros2 launch lazysim open_round_sim.launch.py
+    ros2 launch gorusim obstacle_round_sim.launch.py
 
-Watch it think without letting it move:
+Check what the camera actually sees:
 
-    ros2 launch lazysim open_round_sim.launch.py enable_auto_steering:=false
-
-Rehearse the real start sequence (standby until the button):
-
-    ros2 launch lazysim open_round_sim.launch.py require_button_start:=true
-    ros2 service call /lazybot/press_start std_srvs/srv/Trigger
+    ros2 run rqt_image_view rqt_image_view /camera/image_raw
+    ros2 topic echo /closest_obj
 
 Adapted from Team LazyGo's simulator:
 https://github.com/A-N-M-Noor/LazyGo_WRO2025/
@@ -37,7 +34,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-PACKAGE = 'lazysim'
+PACKAGE = 'gorusim'
 
 
 def generate_launch_description():
@@ -52,11 +49,8 @@ def generate_launch_description():
                               description='Pillar / parking / start layout.'),
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value='true'),
-        DeclareLaunchArgument('enable_auto_steering', default_value='true',
-                              description='false to watch it plan without moving.'),
-        DeclareLaunchArgument('require_button_start', default_value='false',
-                              description='true holds the car in standby until '
-                                          '/lazybot/press_start is called.'),
+        DeclareLaunchArgument('enable_auto_steering', default_value='true'),
+        DeclareLaunchArgument('require_button_start', default_value='false'),
     ]
 
     def typed(name, value_type):
@@ -72,7 +66,6 @@ def generate_launch_description():
         }.items(),
     )
 
-    # encoder/count + heading -> /odom_vector and the odom -> base_link TF.
     vector_odom = Node(
         package='controls',
         executable='vector_odom',
@@ -91,10 +84,21 @@ def generate_launch_description():
         emulate_tty=True,
     )
 
-    open_round_run = Node(
+    # /camera/image_raw -> /closest_obj ("R", "G" or nothing in range)
+    vision_node = Node(
         package='autonomy',
-        executable='open_round_run',
-        name='open_round_run',
+        executable='vision_node',
+        name='vision_node',
+        parameters=[LaunchConfiguration('bot_config'), {'use_sim_time': True}],
+        output='screen',
+        emulate_tty=True,
+    )
+
+    # Fuses /scan with the pillar colour and drives /cmd_vel.
+    disparity_extender = Node(
+        package='autonomy',
+        executable='custom_disparity_extender',
+        name='disparity_extender_node',
         parameters=[
             LaunchConfiguration('bot_config'),
             {
@@ -111,5 +115,6 @@ def generate_launch_description():
         simulator,
         vector_odom,
         lap_counter,
-        open_round_run,
+        vision_node,
+        disparity_extender,
     ])

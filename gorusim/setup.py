@@ -3,7 +3,7 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = 'lazysim'
+package_name = 'gorusim'
 
 setup(
     name=package_name,
@@ -30,8 +30,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'lazybridge = lazysim.lazybridge:main',
-            'track_maker = lazysim.track_maker:main',
+            'gorubridge = gorusim.gorubridge:main',
+            'track_maker = gorusim.track_maker:main',
         ],
     },
 )

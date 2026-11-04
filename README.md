@@ -100,7 +100,7 @@ Here's a breakdown of the project folders:
 - **[`ros2_ws`](./ros2_ws/)**: The ROS 2 workspace that runs on the Raspberry Pi. Contains our three packages (`controls`, `autonomy`, and `sensors_processing`) plus launch files and tuning configs.
 - **[`mav_msg`](./mav_msg/)**: The MAVLink message definitions (XML) shared between the Pi and the microcontroller, so both sides always agree on what the bytes mean.
 - **[`circuit_diagram`](./circuit_diagram/)**: Wiring diagrams and the ESP32 pin map, plus the script that generates them.
-- **[`lazysim`](./lazysim/)**: An Ignition Gazebo simulation of the car, used **for testing purposes only** and not part of the competition build. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)); see [Acknowledgements](#acknowledgements).
+- **[`gorusim`](./gorusim/)**: An Ignition Gazebo simulation of the car, used **for testing purposes only** and not part of the competition build. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)); see [Acknowledgements](#acknowledgements).
 - **[`QUICKSTART.md`](./QUICKSTART.md)**: Copy-paste commands for running and debugging each part of the stack.
 
 <!-- Placeholder: add t-photos (team photos) and v-photos (vehicle photos from all six sides) folders before submission -->
@@ -325,7 +325,7 @@ A few things that saved us many hours:
 - **A debug image topic** from the vision node: showing exactly what the camera thinks is a pillar, bounding boxes and all.
 - **The OLED display** on the car: showing status without a laptop, including the run stopwatch, so a practice run is timed and read off the robot itself.
 - **The removable RC mode**: for driving the chassis around by hand during mechanical testing.
-- **[`lazysim`](./lazysim/)**: a Gazebo simulation of the car, so a navigation change can be tried without a mat, a battery, and a car to pick up off the floor. It presents the same ROS interface as the real robot, so the autonomy nodes run against it unmodified. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and exists **purely for testing**: nothing in it ships on the competition car.
+- **[`gorusim`](./gorusim/)**: a Gazebo simulation of the car, so a navigation change can be tried without a mat, a battery, and a car to pick up off the floor. It presents the same ROS interface as the real robot, so the autonomy nodes run against it unmodified. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and exists **purely for testing**: nothing in it ships on the competition car.
 
 ## Mobility and Mechanical Design
 
@@ -459,7 +459,7 @@ ros2 launch launch/gorurgari_obstacle_round.launch.py
 
 After launch the car sits in standby until the start button on the car is pressed. All tuning lives in [`ros2_ws/config/bot_config.yaml`](./ros2_ws/config/bot_config.yaml): one file, commented, no magic numbers buried in code. For bench testing, every driving node has an enable flag that defaults to off, so nothing moves unless you explicitly ask it to. More copy-paste commands for individual nodes and debugging tools are in [`QUICKSTART.md`](./QUICKSTART.md).
 
-**Optional: running it in simulation.** If you don't have the car in front of you, [`lazysim`](./lazysim/) will run the same autonomy nodes against a simulated one. It is a **testing tool only** and takes no part in a competition run. See [`lazysim/README.md`](./lazysim/README.md) for the build and launch commands.
+**Optional: running it in simulation.** If you don't have the car in front of you, [`gorusim`](./gorusim/) will run the same autonomy nodes against a simulated one. It is a **testing tool only** and takes no part in a competition run. See [`gorusim/README.md`](./gorusim/README.md) for the build and launch commands.
 
 ## Submission Checklist
 
@@ -480,7 +480,7 @@ Commit and publication deadlines are hard cutoffs, not soft targets — anything
 
 ## Acknowledgements
 
-- **[Team LazyGo](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)** — our simulator, [`lazysim`](./lazysim/), is taken from their WRO 2025 repository [`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/) and adapted to our chassis, sensors, and ROS interface. We use it **for testing purposes only**; none of it runs on the competition car. The circle-cast ray marching at the core of our navigation nodes also comes from their work, as noted in the source. Thanks to them for publishing it.
+- **[Team LazyGo](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)** — our simulator, [`gorusim`](./gorusim/), is taken from their WRO 2025 repository [`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/) and adapted to our chassis, sensors, and ROS interface. We use it **for testing purposes only**; none of it runs on the competition car. The circle-cast ray marching at the core of our navigation nodes also comes from their work, as noted in the source. Thanks to them for publishing it.
 - **The F1TENTH community** — for the disparity extender idea our obstacle-round navigation is built on.
 
 ---

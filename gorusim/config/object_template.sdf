@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!--
   Traffic pillar template, spawned by track_maker through the Ignition
-  /world/lazyWorld/create service. Python str.format fills {name},
+  /world/goruWorld/create service. Python str.format fills {name},
   {ambient} and {diffuse}.
 
   50 x 50 x 100 mm is the WRO Future Engineers traffic sign, and it is

@@ -3,7 +3,7 @@
   ════════════════════════════════════════════════════════════════════
   WRO Future Engineers mat, for Ignition Gazebo Fortress.
 
-  Ported from the Gazebo Classic lazyWorld.world. The geometry is
+  Ported from the Gazebo Classic goruWorld.world. The geometry is
   unchanged (it was already right); what changed is the plumbing:
   libgazebo_ros_* plugins are gone, replaced by Ignition systems, and
   the Ogre .material scripts are replaced by inline colours.
@@ -28,12 +28,12 @@
 
   The car's LiDAR sits 78 mm off the floor, so a 100 mm wall is a solid
   return all the way round — that 22 mm of margin is the real thing too,
-  and it is why the lidar mount height in lazyBot.xacro is not a free
+  and it is why the lidar mount height in goruBot.xacro is not a free
   parameter.
   ════════════════════════════════════════════════════════════════════
 -->
 <sdf version="1.8">
-  <world name="lazyWorld">
+  <world name="goruWorld">
 
     <physics name="1ms" type="ignored">
       <max_step_size>0.001</max_step_size>
@@ -42,7 +42,7 @@
 
     <!-- ══ Systems ═══════════════════════════════════════════════════
          UserCommands is not optional here: it is what serves
-         /world/lazyWorld/create and /world/lazyWorld/set_pose, the two
+         /world/goruWorld/create and /world/goruWorld/set_pose, the two
          services track_maker uses to place pillars and the car. -->
     <plugin filename="ignition-gazebo-physics-system"
             name="ignition::gazebo::systems::Physics" />

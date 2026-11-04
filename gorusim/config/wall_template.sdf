@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!--
   Parking-lot barrier template, spawned by track_maker through the
-  Ignition /world/lazyWorld/create service. Python str.format fills
+  Ignition /world/goruWorld/create service. Python str.format fills
   {name}, {sz_x}, {sz_y}, {static}, {ambient} and {diffuse}.
 
   The obstacle round finishes with a parallel park between two of these.

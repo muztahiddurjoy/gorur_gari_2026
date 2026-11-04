@@ -18,7 +18,7 @@
   TF frame, so it has no inertia and is folded into camera_link when the
   model is converted to SDF — robot_state_publisher still publishes it.
 -->
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
     <!-- Pan servo. Driven through /cam_servo (std_msgs/Int8, degrees)
          exactly like the old bridge, and physically limited to ±90°. -->

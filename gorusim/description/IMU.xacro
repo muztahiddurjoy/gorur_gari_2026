@@ -9,7 +9,7 @@
   controls/vector_odom.py).
 
   Ignition publishes a full sensor_msgs/Imu with a world-referenced
-  quaternion instead, so lazybridge does the conversion: it captures the
+  quaternion instead, so gorubridge does the conversion: it captures the
   first yaw it sees as the zero and republishes -degrees(yaw - zero) as
   /heading. That reproduces both the sign convention and the
   power-on-relative behaviour, so vector_odom and lap_counter can run
@@ -17,7 +17,7 @@
 
   Update rate is 50 Hz to match mcu_bridge's 0.02 s telemetry poll.
 -->
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
     <!-- Mounted INSIDE the chassis, not on the lid. On the real car the
          BNO055 is a chip on the board, and in simulation the difference

@@ -1,6 +1,6 @@
-# lazysim
+# gorusim
 
-> **Credit and scope.** `lazysim` is adapted from **Team LazyGo**'s simulator, published at
+> **Credit and scope.** `gorusim` is adapted from **Team LazyGo**'s simulator, published at
 > [github.com/A-N-M-Noor/LazyGo_WRO2025](https://github.com/A-N-M-Noor/LazyGo_WRO2025/). We
 > retargeted their Gazebo setup to our chassis, sensors, and ROS interface; the original work is
 > theirs. It is here **for testing and development purposes only** — it is a bench tool for
@@ -9,7 +9,7 @@
 
 This is the simulation of the Gorur Gari 2026 car, built on Ignition Gazebo Fortress.
 
-The whole point of this package is that nothing downstream of it knows it's a simulation. `lazybridge` presents the exact same ROS interface that `controls/mcu_bridge` does on the real robot, and the simulated `/scan` looks like the RPLIDAR C1's. That means `vector_odom`, `lap_counter`, `open_round_run`, `vision_node`, and `disparity_extender` all run their real, unmodified code, with no sim-specific branches anywhere.
+The whole point of this package is that nothing downstream of it knows it's a simulation. `gorubridge` presents the exact same ROS interface that `controls/mcu_bridge` does on the real robot, and the simulated `/scan` looks like the RPLIDAR C1's. That means `vector_odom`, `lap_counter`, `open_round_run`, `vision_node`, and `disparity_extender` all run their real, unmodified code, with no sim-specific branches anywhere.
 
 ## Data flow
 
@@ -27,25 +27,25 @@ flowchart LR
     BRIDGE --> TOPICS1["/scan, /imu, /odom"]
     BRIDGE --> TOPICS2["/camera/image_raw"]
     BRIDGE <--> JC
-    BRIDGE -->|"/lazybot/joint_states"| LB["lazybridge"]
+    BRIDGE -->|"/gorubot/joint_states"| LB["gorubridge"]
     CMDVEL["/cmd_vel"] --> LB
     LB --> TELEM["encoder/count, encoder/speed,\nencoder/direction, heading,\nsteering_angle, /button_status,\n/joint_states"]
 ```
 
-The sensors (LiDAR, IMU, camera) and the joint controllers all sit inside Gazebo and talk to the rest of the stack through `ros_gz_bridge`. `lazybridge` is the piece that stands in for the real MCU: it takes `/cmd_vel` and Gazebo's joint states as input, and produces the same telemetry topics the real robot would.
+The sensors (LiDAR, IMU, camera) and the joint controllers all sit inside Gazebo and talk to the rest of the stack through `ros_gz_bridge`. `gorubridge` is the piece that stands in for the real MCU: it takes `/cmd_vel` and Gazebo's joint states as input, and produces the same telemetry topics the real robot would.
 
 ## Running it
 
 ```bash
 cd <repo>
-colcon build --base-paths lazysim ros2_ws \
+colcon build --base-paths gorusim ros2_ws \
              --build-base ros2_ws/build --install-base ros2_ws/install \
              --symlink-install
 source ros2_ws/install/setup.bash
 
-ros2 launch lazysim open_round_sim.launch.py        # three laps, then home
-ros2 launch lazysim obstacle_round_sim.launch.py    # with traffic pillars
-ros2 launch lazysim sim.launch.py                   # simulator only, drive it yourself
+ros2 launch gorusim open_round_sim.launch.py        # three laps, then home
+ros2 launch gorusim obstacle_round_sim.launch.py    # with traffic pillars
+ros2 launch gorusim sim.launch.py                   # simulator only, drive it yourself
 ```
 
 All three launch files accept the same arguments:
@@ -70,7 +70,7 @@ ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist \
 There's no physical start button in sim, so press it over a service call instead:
 
 ```bash
-ros2 service call /lazybot/press_start std_srvs/srv/Trigger
+ros2 service call /gorubot/press_start std_srvs/srv/Trigger
 ```
 
 ## What's modeled, and where the numbers come from
@@ -92,11 +92,11 @@ Everything shared with the real car lives in `ros2_ws/config/bot_config.yaml`. `
 
 ### Things worth knowing
 
-**The wheelbase is a guess.** 140 mm is not measured. It's not in `bot_config.yaml`, not in the README chassis table, and `cad_files/` is empty. It sets the turning circle, so measure the real axle-to-axle distance and correct `wheelbase` in `description/lazyBot.xacro` and `lazybridge.wheelbase_m` in `config/bot_config_sim.yaml` before trusting any tight-gap result.
+**The wheelbase is a guess.** 140 mm is not measured. It's not in `bot_config.yaml`, not in the README chassis table, and `cad_files/` is empty. It sets the turning circle, so measure the real axle-to-axle distance and correct `wheelbase` in `description/goruBot.xacro` and `gorubridge.wheelbase_m` in `config/bot_config_sim.yaml` before trusting any tight-gap result.
 
 **Wheel diameter disagrees across the repo.** `bot_config.yaml` says 50 mm, but both `ros2_ws/launch/*.launch.py` still pass `0.065` to `vector_odom`, and `vector_odom` itself defaults to `0.065`. The sim uses 50 mm throughout. On the real car, that 30% gap goes straight into every distance odometry reports, so the launch defaults are worth revisiting.
 
-**Steering commands are inner-wheel angles.** `angular.z = ±1.0` puts the *inner* front wheel at the 60° stop, and `lazybridge` derives the outer wheel angle (40.7° at full lock) from the Ackermann geometry. Reading 60° as a centreline angle instead would demand 74° from the inner wheel, which no linkage on the car can actually reach.
+**Steering commands are inner-wheel angles.** `angular.z = ±1.0` puts the *inner* front wheel at the 60° stop, and `gorubridge` derives the outer wheel angle (40.7° at full lock) from the Ackermann geometry. Reading 60° as a centreline angle instead would demand 74° from the inner wheel, which no linkage on the car can actually reach.
 
 **Pillar colours are not decorative.** `vision_params.yaml` thresholds red at `S = 255` exactly, so the pillars render with zero green and zero blue in both ambient and diffuse light, plus a black specular term. Any white highlight drops saturation below 255 and makes them invisible to `vision_node`.
 
@@ -124,14 +124,14 @@ The sim camera itself has been verified correct: a red pillar at 0.5 m reads `HS
 
 ```
 config/
-  bot_config_sim.yaml   tuning for lazybridge + the whole autonomy stack
+  bot_config_sim.yaml   tuning for gorubridge + the whole autonomy stack
   track.yaml            pillar / parking / start layout
   object_template.sdf   traffic pillar, spawned at runtime
   wall_template.sdf     parking barrier, spawned at runtime
-  lazySim.rviz
+  goruSim.rviz
 description/
-  lazyBot.xacro         every dimension, in one place
-  lazyBotCore.xacro     chassis, wheels, Ackermann linkage
+  goruBot.xacro         every dimension, in one place
+  goruBotCore.xacro     chassis, wheels, Ackermann linkage
   lidar.xacro           RPLIDAR C1
   IMU.xacro             BNO055
   camera.xacro          USB camera on its pan servo
@@ -141,9 +141,9 @@ launch/
   sim.launch.py                 simulator only
   open_round_sim.launch.py      + vector_odom, lap_counter, open_round_run
   obstacle_round_sim.launch.py  + vision_node, disparity_extender
-lazysim/
-  lazybridge.py         stands in for mcu_bridge
+gorusim/
+  gorubridge.py         stands in for mcu_bridge
   track_maker.py        builds the track over Ignition transport
 worlds/
-  lazyWorld.sdf         the mat
+  goruWorld.sdf         the mat
 ```

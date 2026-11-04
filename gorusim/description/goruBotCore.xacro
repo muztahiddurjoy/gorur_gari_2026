@@ -20,10 +20,10 @@
   sign chain from planner to tyre is consistent end to end.
 
   Both rear wheels rotate POSITIVELY when the car drives forward, which
-  is what lets lazybridge treat them as one solid axle and count
+  is what lets gorubridge treat them as one solid axle and count
   encoder ticks off either of them.
 -->
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
     <material name="black"><color rgba="0.15 0.15 0.15 1.0" /></material>
     <material name="blue"><color rgba="0.30 0.57 1.00 1.0" /></material>
@@ -99,7 +99,7 @@
 
     <!-- ══ Rear axle (driven, solid — no differential) ════════════════
          WRO rules require the driven wheels to be physically coupled,
-         so lazybridge commands both of these at the SAME speed. -->
+         so gorubridge commands both of these at the SAME speed. -->
     <joint name="base_to_back_left_wheel" type="continuous">
         <parent link="base_link" />
         <child link="back_left_wheel" />
@@ -120,7 +120,7 @@
 
     <!-- ══ Front axle (steered, free-rolling) ═════════════════════════
          The limits are the real servo's ±60° lock (bot.max_steer_deg).
-         lazybridge never commands past them, but the joint enforces it
+         gorubridge never commands past them, but the joint enforces it
          anyway so a bad command cannot bend the model into a shape the
          real car could not make. -->
     <joint name="base_to_front_left_hinge" type="revolute">

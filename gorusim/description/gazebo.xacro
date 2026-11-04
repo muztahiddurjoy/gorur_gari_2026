@@ -5,7 +5,7 @@
   Note there are no <material>Gazebo/Blue</material> tags here any more.
   Those name Ogre material scripts from Gazebo Classic's media library,
   which Ignition does not ship; colours now come from the plain URDF
-  <material><color rgba="..."/> blocks in lazyBotCore.xacro, which
+  <material><color rgba="..."/> blocks in goruBotCore.xacro, which
   sdformat converts into SDF ambient/diffuse/specular on its own.
 
   Friction is what actually decides whether the car turns or ploughs
@@ -13,7 +13,7 @@
   velocity, so grip here is what converts that spin into forward motion,
   and the front tyres' grip is what generates the cornering force.
 -->
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lazyBot">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
     <xacro:macro name="tyre_surface" params="link">
         <gazebo reference="${link}">

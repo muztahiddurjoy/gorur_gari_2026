@@ -7,7 +7,7 @@
 # bot, re-sync this file and keep those four.
 #
 # Point the launch files at the real file instead with:
-#   ros2 launch lazysim open_round_sim.launch.py \
+#   ros2 launch gorusim open_round_sim.launch.py \
 #       bot_config:=/path/to/ros2_ws/config/bot_config.yaml
 # ════════════════════════════════════════════════════════════════════
 
@@ -31,9 +31,9 @@
         min_separation_m: 0.15
 
 # ── The simulator's stand-in for mcu_bridge ─────────────────────────
-# Geometry must agree with description/lazyBot.xacro or the car steers
+# Geometry must agree with description/goruBot.xacro or the car steers
 # differently from the model on screen.
-lazybridge:
+gorubridge:
   ros__parameters:
     wheelbase_m: 0.140           # ⚠ UNVERIFIED — measure the real axle spacing
     track_m: 0.106
@@ -71,7 +71,7 @@ vector_odometry:
   ros__parameters:
     # SIM: 0.050, not the 0.065 both ros2_ws launch files still pass.
     # 50 mm is the measured wheel (bot.wheel_diameter_m) and it is what
-    # lazybridge generates ticks from, so the sim has to agree with
+    # gorubridge generates ticks from, so the sim has to agree with
     # itself. See the README note in this package.
     wheel_diameter_m: 0.050
     encoder_counts_per_rev: 363
@@ -97,8 +97,8 @@ open_round_run:
   ros__parameters:
     enable_auto_steering: true
     wait_for_track_ready: true
-    # SIM: false. There is no physical button on the mat; lazybridge
-    # exposes /lazybot/press_start instead, and the launch files can
+    # SIM: false. There is no physical button on the mat; gorubridge
+    # exposes /gorubot/press_start instead, and the launch files can
     # auto-press it. Set true and use that service to rehearse the real
     # start sequence.
     require_button_start: false
