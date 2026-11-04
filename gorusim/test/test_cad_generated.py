@@ -46,7 +46,8 @@ def test_linkage_defaults_match_the_extracted_geometry(geo):
 
 def test_steering_stops_agree_everywhere(sim_mcu_params):
     props = xacro_properties('goruBot.xacro')
-    for key, param in (('steer_stop_inner', 'inner_stop_deg'), ('steer_stop_outer', 'outer_stop_deg')):
+    for key, param in (('steer_stop_inner', 'inner_stop_deg'),
+                       ('steer_stop_outer', 'outer_stop_deg')):
         degrees = float(re.search(r'radians\(([\d.]+)\)', props[key]).group(1))
         assert degrees == sim_mcu_params[param]
 

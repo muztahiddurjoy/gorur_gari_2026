@@ -3,7 +3,8 @@
 verify_dynamics - drive the simulated car and check it against the numbers it was built
 from. Run it with the simulator up and nothing else driving:
 
-    ros2 launch gorusim sim.launch.py gui:=false rviz:=false build_track:=false world:=flatWorld
+    ros2 launch gorusim sim.launch.py gui:=false rviz:=false build_track:=false \\
+        world:=flatWorld
     python3 gorusim/tools/verify_dynamics.py
 
 Exits non-zero if a check fails. Ground truth is the simulator's own odometry.
@@ -143,7 +144,8 @@ def main():
     front = [r for i, r in enumerate(scan.ranges)
              if abs(scan.angle_min + i * scan.angle_increment) < math.radians(80)
              and scan.range_min < r < 0.10]
-    print(f'    rear arc rays under 0.30 m: {len(rear)}, front arc rays under 0.10 m: {len(front)}')
+    print(f'    rear arc rays under 0.30 m: {len(rear)}, '
+          f'front arc rays under 0.10 m: {len(front)}')
     report.check('nothing of the car in the front +-80 deg', len(front), 0, 0)
 
     print('Below the breakaway throttle')
@@ -159,7 +161,8 @@ def main():
     start = node.ticks
     node.drive(0.40, 0.0, 2.5)
     moved_ticks = node.ticks - start
-    report.check('rolls on at wire 40 after the launch boost, speed', node.speed, 0.10, 1.0, ' m/s')
+    report.check('rolls on at wire 40 after the launch boost, speed',
+                 node.speed, 0.10, 1.0, ' m/s')
     print(f'    {moved_ticks} ticks')
     node.stop(1.5)
 
@@ -168,14 +171,15 @@ def main():
     tick0 = node.ticks
     speeds = []
     node.drive(1.25, 0.0, 2.5, each=lambda: speeds.append(node.speed))
+    top = max(speeds)
+    # Compare at rest: telemetry is up to 50 ms old, which at speed is 2-3% of this run.
+    node.stop(2.5)
     moved = math.hypot(node.pose[0] - x0, node.pose[1] - y0)
     ticks = node.ticks - tick0
-    top = max(speeds)
-    print(f'    {moved:.3f} m in 2.5 s, top speed {top:.2f} m/s, {ticks} ticks')
+    print(f'    {moved:.3f} m, top speed {top:.2f} m/s, {ticks} ticks')
     report.check('odometry reads true: ticks x 0.549 mm / truth',
-                 ticks * METRES_PER_TICK / moved, 0.97, 1.03)
+                 ticks * METRES_PER_TICK / moved, 0.98, 1.02)
     report.check('top speed under the 50% duty ceiling', top, 0.3, 1.31, ' m/s')
-    node.stop(2.0)
 
     for name, command, wire in (('left', 0.5, 135), ('right', -0.5, 45)):
         horn = horn_from_wire(wire)
@@ -198,7 +202,8 @@ def main():
                      left - 0.06, left + 0.06, ' rad')
         yaw_start = node.pose[3]
         node.drive(1.25, command, 0.5, each=sample)
-        turned = math.atan2(math.sin(node.pose[3] - yaw_start), math.cos(node.pose[3] - yaw_start))
+        step = node.pose[3] - yaw_start
+        turned = math.atan2(math.sin(step), math.cos(step))
         # REP-103: + is counter-clockwise, which is what angular.z > 0 has to produce.
         report.check('yaw goes the commanded way', math.copysign(1.0, turned),
                      *((1.0, 1.0) if command > 0 else (-1.0, -1.0)))
@@ -217,9 +222,11 @@ def main():
         left, right = (node.joints.get('front_left_kingpin', 0.0),
                        node.joints.get('front_right_kingpin', 0.0))
         expect_left, expect_right = linkage.angles(math.radians(horn_from_wire(wire)))
-        print(f'    {name}: wire {wire}, wheels {math.degrees(left):.1f}/{math.degrees(right):.1f} '
-              f'deg, linkage says {math.degrees(expect_left):.1f}/{math.degrees(expect_right):.1f}')
-        report.check(f'{name} lock, left kingpin', left, expect_left - 0.08, expect_left + 0.08, ' rad')
+        print(f'    {name}: wire {wire}, wheels {math.degrees(left):.1f}/'
+              f'{math.degrees(right):.1f} deg, linkage says '
+              f'{math.degrees(expect_left):.1f}/{math.degrees(expect_right):.1f}')
+        report.check(f'{name} lock, left kingpin', left,
+                     expect_left - 0.08, expect_left + 0.08, ' rad')
         node.stop(1.5)
 
     print(f'{report.failed} check(s) failed.' if report.failed else 'All checks passed.')

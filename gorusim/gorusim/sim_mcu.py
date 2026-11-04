@@ -155,7 +155,9 @@ class SimMcu(Node):
         self.declare_parameter('outer_stop_deg', 31.0)
         self.declare_parameter('auto_start_sec', 0.0)
 
-        param = lambda name: self.get_parameter(name).value
+        def param(name):
+            return self.get_parameter(name).value
+
         self.counts_per_rev = float(param('encoder_counts_per_wheel_rev'))
         self.no_load_speed = float(param('motor_no_load_speed_rad_s'))
         self.breakaway_duty = float(param('motor_breakaway_duty'))
