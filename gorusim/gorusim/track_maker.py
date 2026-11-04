@@ -1,6 +1,8 @@
 """
-track_maker — lays out the traffic pillars, the parking bay and the car's
-start pose from config/track.yaml.
+track_maker — lays out the traffic pillars and the parking bay from
+config/track.yaml, then announces /track_ready. The launch file spawns the car
+directly on its start pose, so nothing here ever teleports it: a teleport under
+a live encoder and IMU is exactly the jump odometry cannot explain.
 
 Ported from the Gazebo Classic version, which called the ROS services
 /spawn_entity and /set_entity_state that libgazebo_ros_factory and
@@ -8,9 +10,8 @@ libgazebo_ros_state used to provide. Ignition has no such ROS services;
 it exposes its own transport services instead:
 
     /world/<world>/create     ignition.msgs.EntityFactory -> Boolean
-    /world/<world>/set_pose   ignition.msgs.Pose          -> Boolean
 
-Both are served by the UserCommands system, which is why
+That is served by the UserCommands system, which is why
 worlds/goruWorld.sdf loads it. rclpy cannot speak Ignition transport, so
 the requests go out through the `ign service` CLI from ignition-tools.
 
@@ -74,7 +75,6 @@ class TrackMaker(Node):
         self.service_timeout = float(self.get_parameter('service_timeout_sec').value)
 
         self.create_service_name = f'/world/{self.world}/create'
-        self.set_pose_service_name = f'/world/{self.world}/set_pose'
 
         self.settings = self.load_yaml(self.settings_path)
         self.tower_template = self.load_text(self.tower_template_path)
@@ -169,27 +169,9 @@ class TrackMaker(Node):
             return True
         return False
 
-    def set_pose(self, name, x, y, z, yaw_deg):
-        yaw = math.radians(yaw_deg)
-        qx, qy, qz, qw = yaw_to_quaternion(yaw)
-        request = (
-            f'name: "{name}" '
-            f'position: {{ x: {x} y: {y} z: {z} }} '
-            f'orientation: {{ x: {qx} y: {qy} z: {qz} w: {qw} }}'
-        )
-        if self.call_service(self.set_pose_service_name,
-                             'ignition.msgs.Pose', request):
-            self.get_logger().info(
-                f'Moved {name} to ({x:.2f}, {y:.2f}) facing {yaw_deg:.0f}°.')
-            return True
-        return False
-
     # ══════════════════════════════════════════════════════════════════
     # Track layout
     # ══════════════════════════════════════════════════════════════════
-
-        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-        self.ready_pub = self.create_publisher(Bool, '/track_ready', latched)
 
     def colours_for(self, name):
         return PILLAR_COLOURS.get(str(name).strip().lower(), DEFAULT_COLOUR)
@@ -211,17 +193,9 @@ class TrackMaker(Node):
 
         self.build_parking(self.settings.get('parking', {}))
 
-        start = self.settings.get('start')
-        if start:
-            self.place_car(start)
-
-        # Signal autonomy nodes that track layout & car placement are complete
-        msg = Bool()
-        msg.data = True
-        self.ready_pub.publish(msg)
-        self.get_logger().info('Track layout & car placement complete — published /track_ready')
-        import time
-        time.sleep(0.5)
+        # Latched, so a driving node that starts later still hears it.
+        self.ready_pub.publish(Bool(data=True))
+        self.get_logger().info('Track layout complete, published /track_ready.')
 
     def build_parking(self, parking):
         if not parking or not parking.get('enabled') or not self.wall_template:
@@ -246,29 +220,15 @@ class TrackMaker(Node):
                        OBJECT_HALF_HEIGHT,
                        yaw=angle + math.pi / 2.0)
 
-    def place_car(self, start):
-        """Put the car on the start line.
-
-        track.yaml gives where the car's NOSE should sit, so the model
-        origin (base_link, the centre of the footprint) is pulled back
-        half a car length along the heading.
-        """
-        yaw_deg = float(start.get('angle', 0.0))
-        yaw = math.radians(yaw_deg)
-        offset = float(start.get('nose_offset_m', 0.105))  # half of length_m
-        self.set_pose(
-            start.get('model', 'goruBot'),
-            float(start['pos']['x']) - offset * math.cos(yaw),
-            float(start['pos']['y']) - offset * math.sin(yaw),
-            0.0,
-            yaw_deg)
-
 
 def main(args=None):
     rclpy.init(args=args)
     node = TrackMaker()
     try:
         node.build()
+        # Stay up: /track_ready is latched by this publisher, and a node that
+        # subscribes after this one exits would never see it.
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:

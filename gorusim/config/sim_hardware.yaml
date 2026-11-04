@@ -1,0 +1,36 @@
+# ════════════════════════════════════════════════════════════════════
+# What the virtual ESP32 needs that neither the firmware nor the CAD fixes.
+# Geometry comes from cad_geometry.yaml; the driving stack's own tuning comes
+# from the REAL ros2_ws/config/*.yaml files, loaded directly (config/ here has
+# symlinks to them). Only hardware constants belong in this file.
+# ════════════════════════════════════════════════════════════════════
+
+sim_mcu:
+  ros__parameters:
+    # The pty mcu_bridge opens instead of /dev/esp32_s3. See sim_overlay.yaml.
+    port_link: /tmp/gorusim_esp32
+
+    # Encoder ticks per turn of the wheel. Taken from the calibration the car
+    # actually runs with rather than from bot.encoder_counts_per_rev (185),
+    # which no running node reads: the launch files give vector_odom 363 ticks,
+    # a 0.065 m wheel and a tape-measured scale of 0.976. That is one fixed
+    # distance per tick, 0.549 mm, whatever the numbers were labelled at the time.
+    # Around the CAD's 53 mm tyre:
+    #   363 * 0.053 / (0.065 * 0.976) = 303.26 ticks
+    # so vector_odom reads true distance in the sim, exactly as it was calibrated to.
+    encoder_counts_per_wheel_rev: 303.26
+
+    # At full duty on a 3S pack. Must match motor_no_load_speed in
+    # description/control.xacro: see there for the working and the caveat.
+    motor_no_load_speed_rad_s: 98.3
+
+    # MG996R datasheet: 0.17 s per 60 deg at 4.8 V, on the 5 V rail.
+    servo_slew_deg_per_s: 353.0
+
+    # Tyres touch the chassis here: tools/steering_lock.py. Must match
+    # steer_stop_inner / steer_stop_outer in description/goruBot.xacro.
+    inner_stop_deg: 39.0
+    outer_stop_deg: 31.0
+
+    # > 0 presses the start button by itself this many seconds after boot.
+    auto_start_sec: 0.0
