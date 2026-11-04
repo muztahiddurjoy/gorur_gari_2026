@@ -107,6 +107,9 @@ def generate_launch_description():
         output='screen',
         emulate_tty=True,
         parameters=[os.path.join(config, 'vision_params.yaml'), {'use_sim_time': True}],
+        # ROS Humble's cv_bridge is built against NumPy 1.x. A newer NumPy in
+        # ~/.local makes this node segfault, so it runs on the system's packages.
+        additional_env={'PYTHONNOUSERSITE': '1'},
     )
 
     disparity_extender = Node(

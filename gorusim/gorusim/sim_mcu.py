@@ -62,6 +62,7 @@ WIRE_DIRECTION = {0: 0, 1: 1, -1: 2}
 HORN_CENTRE_SERVO_DEG = STEERING_CENTER_ANGLE - SERVO_CORRECTION_DEG
 
 REAR_AXLE_JOINT = 'rear_axle_joint'
+AXLE_STOPPED_RAD_S = 0.05
 
 
 def clamp(value, low, high):
@@ -71,6 +72,16 @@ def clamp(value, low, high):
 def duty_from_throttle(throttle):
     """Signed duty 0..1 for a wire throttle. MotorController::to(), 8 bit PWM."""
     return clamp(throttle, -MOTOR_MAX_DUTY, MOTOR_MAX_DUTY) / float(MOTOR_MAX_DUTY)
+
+
+def duty_after_stiction(duty, axle_rate, breakaway_duty):
+    """A stopped gearbox ignores a command too weak to break it free.
+
+    Once rolling, only rolling friction applies, which the axle joint carries.
+    """
+    if abs(axle_rate) < AXLE_STOPPED_RAD_S and abs(duty) < breakaway_duty:
+        return 0.0
+    return duty
 
 
 def horn_from_wire(steering):
@@ -138,6 +149,7 @@ class SimMcu(Node):
         # See config/sim_hardware.yaml for where each of these comes from.
         self.declare_parameter('encoder_counts_per_wheel_rev', 303.26)
         self.declare_parameter('motor_no_load_speed_rad_s', 98.3)
+        self.declare_parameter('motor_breakaway_duty', 0.15)
         self.declare_parameter('servo_slew_deg_per_s', 353.0)
         self.declare_parameter('inner_stop_deg', 39.0)
         self.declare_parameter('outer_stop_deg', 31.0)
@@ -146,6 +158,7 @@ class SimMcu(Node):
         param = lambda name: self.get_parameter(name).value
         self.counts_per_rev = float(param('encoder_counts_per_wheel_rev'))
         self.no_load_speed = float(param('motor_no_load_speed_rad_s'))
+        self.breakaway_duty = float(param('motor_breakaway_duty'))
         self.servo_slew = float(param('servo_slew_deg_per_s'))
         self.auto_start_sec = float(param('auto_start_sec'))
 
@@ -162,6 +175,7 @@ class SimMcu(Node):
         self.connected = False
 
         self.axle_angle = None
+        self.axle_rate = 0.0
         self.latest_joints = None
         self.ticks_prev = 0
         self.rpm = 0.0
@@ -251,8 +265,9 @@ class SimMcu(Node):
         self.horn_deg += clamp(target - self.horn_deg, -reach, reach)
         left, right = interpolate(self.steer_table, math.radians(self.horn_deg))
 
-        self.motor_pub.publish(Float64(data=duty_from_throttle(self.throttle)
-                                       * self.no_load_speed))
+        duty = duty_after_stiction(duty_from_throttle(self.throttle), self.axle_rate,
+                                   self.breakaway_duty)
+        self.motor_pub.publish(Float64(data=duty * self.no_load_speed))
         self.steer_left_pub.publish(Float64(data=float(left)))
         self.steer_right_pub.publish(Float64(data=float(right)))
 
@@ -261,7 +276,10 @@ class SimMcu(Node):
     def on_joints(self, msg):
         self.latest_joints = msg
         if REAR_AXLE_JOINT in msg.name:
-            self.axle_angle = msg.position[list(msg.name).index(REAR_AXLE_JOINT)]
+            index = list(msg.name).index(REAR_AXLE_JOINT)
+            self.axle_angle = msg.position[index]
+            if index < len(msg.velocity):
+                self.axle_rate = msg.velocity[index]
 
     def ticks(self):
         if self.axle_angle is None:

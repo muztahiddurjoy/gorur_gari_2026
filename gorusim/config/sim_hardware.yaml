@@ -24,6 +24,10 @@ sim_mcu:
     # description/control.xacro: see there for the working and the caveat.
     motor_no_load_speed_rad_s: 98.3
 
+    # Below this a stopped axle stays stopped: gearbox stiction, 15% duty = wire 38.
+    # Typical, not measured. See the note in description/control.xacro.
+    motor_breakaway_duty: 0.15
+
     # MG996R datasheet: 0.17 s per 60 deg at 4.8 V, on the 5 V rail.
     servo_slew_deg_per_s: 353.0
 

@@ -102,6 +102,9 @@ AXLE_REFLECTED_INERTIA = 2e-6 * 6.9 ** 2
 
 MM = 0.001
 
+# Half the height of the C1's optical window, around the scan plane.
+LIDAR_WINDOW_HALF_M = 0.004
+
 _KEEP_ALIVE = []
 
 
@@ -534,6 +537,14 @@ def main():
                 continue
             robot = stacked.reshape(-1, 3) @ R_CAD.T * MM - origins[name]
             stacked = robot.reshape(-1, 3, 3).astype(np.float32)
+            if name == 'laser':
+                # The laser leaves through a window in the housing, and the sim's
+                # beam starts inside the mesh. Gazebo's gpu_lidar reports no return
+                # for a ray whose first surface is under range_min, so a solid belt
+                # here would blind the scanner in every direction.
+                zs = stacked[:, :, 2]
+                stacked = stacked[(zs.max(axis=1) < -LIDAR_WINDOW_HALF_M)
+                                  | (zs.min(axis=1) > LIDAR_WINDOW_HALF_M)]
             tag = ''.join(f'{int(c * 8):x}' for c in rgb)
             filename = f'{name}__{tag}.stl'
             write_stl(os.path.join(mesh_dir, filename), stacked)

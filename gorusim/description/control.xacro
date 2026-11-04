@@ -33,14 +33,18 @@
                               linear.x as about m/s.
            stall    0.20 N m  12 V / 628 rad/s = 0.019 N m/A at 2 A, through the
                               same ratio at 85% efficiency
-           friction 0.03 N m  Gearbox and bearings, standing. Puts the breakaway
-                              at about 15% duty (wire 38), matching the journal's
-                              "low-speed starts sometimes just hummed in place" at
-                              0.25-0.45 linear.x and mcu_bridge's doubled launch.
+           friction 0.015 N m  Gearbox and bearings, rolling: wire 19. The repo pins it
+                              from both sides: bot_config runs linear.x 0.40 as a rolling
+                              creep speed, so rolling friction sits well under wire 40,
+                              while the journal has standing starts "sometimes just
+                              hummed in place" at 0.25-0.45 until mcu_bridge doubled them.
+                              Static friction is the higher of the two, so a joint with one
+                              friction value cannot show both: sim_mcu holds a stopped axle
+                              below motor_breakaway_duty (sim_hardware.yaml), wire 38.
          Run the bench test the journal asks for and replace these. -->
     <xacro:property name="motor_stall_torque" value="0.20" />
     <xacro:property name="motor_no_load_speed" value="98.3" />
-    <xacro:property name="axle_friction" value="0.03" />
+    <xacro:property name="axle_friction" value="0.015" />
     <xacro:property name="axle_damping" value="0.00002" />
 
     <gazebo>

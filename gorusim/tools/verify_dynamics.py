@@ -153,6 +153,16 @@ def main():
     report.check('wire 10 stays stalled, ticks', abs(node.ticks - start), 0, 5)
     node.stop(1.0)
 
+    print('The breakaway, then rolling below it')
+    # mcu_bridge doubles this for the first second, which breaks the car free, and it
+    # has to keep rolling at the plain command afterwards: bot_config's creep speed.
+    start = node.ticks
+    node.drive(0.40, 0.0, 2.5)
+    moved_ticks = node.ticks - start
+    report.check('rolls on at wire 40 after the launch boost, speed', node.speed, 0.10, 1.0, ' m/s')
+    print(f'    {moved_ticks} ticks')
+    node.stop(1.5)
+
     print('Straight line at the lapping throttle, drive_speed 1.25')
     x0, y0 = node.pose[0], node.pose[1]
     tick0 = node.ticks
@@ -175,7 +185,6 @@ def main():
         print(f'{name} turn, angular.z {command:+.1f}: wire {wire}, horn {horn:+.0f} deg, '
               f'wheels {math.degrees(left):.1f}/{math.degrees(right):.1f} deg')
         points = []
-        yaw_start = None
 
         def sample():
             if node.speed > 0.05:
@@ -188,13 +197,14 @@ def main():
         report.check('kingpin joint (left)', node.joints.get('front_left_kingpin', 99.0),
                      left - 0.06, left + 0.06, ' rad')
         yaw_start = node.pose[3]
-        node.drive(1.25, command, 5.0, each=sample)
+        node.drive(1.25, command, 0.5, each=sample)
         turned = math.atan2(math.sin(node.pose[3] - yaw_start), math.cos(node.pose[3] - yaw_start))
+        # REP-103: + is counter-clockwise, which is what angular.z > 0 has to produce.
+        report.check('yaw goes the commanded way', math.copysign(1.0, turned),
+                     *((1.0, 1.0) if command > 0 else (-1.0, -1.0)))
+        node.drive(1.25, command, 4.5, each=sample)
         radius = circle_radius(points) if len(points) > 20 else float('nan')
         print(f'    radius {radius:.3f} m, kinematic {expected:.3f} m')
-        report.check('turns the commanded way (yaw sign)',
-                     turned * (1.0 if command > 0 else -1.0) if abs(turned) > 0.02 else -1.0,
-                     -3.2, 3.2)
         # A solid axle scrubs, so the real arc runs wider than the kinematic one.
         report.check('radius against kinematics (solid axle runs wide)',
                      radius / expected, 0.95, 1.6)
