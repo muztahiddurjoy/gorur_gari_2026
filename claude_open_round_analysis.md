@@ -1,3 +1,5 @@
+> **Historical.** Written against the old `lazysim`, before `gorusim` was rebuilt from the CAD and firmware. The tick jump, the teleport on start and the towers in the open round described here no longer apply.
+
 # Open Round Simulation Analysis
 
 ## Test Summary

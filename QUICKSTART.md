@@ -191,7 +191,7 @@ ros2 run autonomy custom_disparity_extender --ros-args \
 
 ## 6. Running it in simulation (testing only)
 
-`gorusim` runs the whole stack against a simulated car, which is handy when the real one isn't on the bench. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and is **for testing and development purposes only** — it never takes part in a competition run.
+`gorusim` runs the whole stack against a simulated car, built from the CAD and firmware, which is handy when the real one isn't on the bench. Its track tooling is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and it is **for testing and development purposes only** — it never takes part in a competition run.
 
 ```bash
 cd ~/Documents/GitHub/gorur_gari_2026
@@ -208,7 +208,7 @@ ros2 launch gorusim sim.launch.py                   # simulator only, drive it y
 There is no physical start button in sim, so trigger it over a service call:
 
 ```bash
-ros2 service call /gorubot/press_start std_srvs/srv/Trigger
+ros2 service call /gorusim/press_start std_srvs/srv/Trigger
 ```
 
 Full details, launch arguments, and the list of what is and isn't modeled are in [`gorusim/README.md`](./gorusim/README.md).

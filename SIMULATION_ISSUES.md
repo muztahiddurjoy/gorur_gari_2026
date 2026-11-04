@@ -1,3 +1,5 @@
+> **Historical.** Written against the old `lazysim`, before `gorusim` was rebuilt from the CAD and firmware. The tick jump, the teleport on start and the towers in the open round described here no longer apply.
+
 Ran command: `source ros2_ws/install/setup.bash && timeout 90 ros2 launch gorusim open_round_sim.launch.py gui:=false rviz:=false > sim_test.log 2>&1 || true`
 Used tool: schedule
 

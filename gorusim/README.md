@@ -1,38 +1,28 @@
 # gorusim
 
-> **Credit and scope.** `gorusim` is adapted from **Team LazyGo**'s simulator, published at
-> [github.com/A-N-M-Noor/LazyGo_WRO2025](https://github.com/A-N-M-Noor/LazyGo_WRO2025/). We
-> retargeted their Gazebo setup to our chassis, sensors, and ROS interface; the original work is
-> theirs. It is here **for testing and development purposes only** — it is a bench tool for
-> exercising the autonomy stack without the physical car, and is not part of the competition
-> vehicle or its run.
+> **Credit and scope.** The track tooling here (`track_maker`, the pillar and wall templates) is adapted from **Team LazyGo**'s simulator, published at [github.com/A-N-M-Noor/LazyGo_WRO2025](https://github.com/A-N-M-Noor/LazyGo_WRO2025/). The car itself is built from our own CAD and firmware. It is here **for testing and development purposes only**: a bench tool for exercising the autonomy stack without the physical car, not part of the competition vehicle or its run.
 
-This is the simulation of the Gorur Gari 2026 car, built on Ignition Gazebo Fortress.
-
-The whole point of this package is that nothing downstream of it knows it's a simulation. `gorubridge` presents the exact same ROS interface that `controls/mcu_bridge` does on the real robot, and the simulated `/scan` looks like the RPLIDAR C1's. That means `vector_odom`, `lap_counter`, `open_round_run`, `vision_node`, and `disparity_extender` all run their real, unmodified code, with no sim-specific branches anywhere.
+This is the Gorur Gari 2026 car, simulated in Ignition Gazebo Fortress. Everything physical comes from [`CAD/WRO_Bot_v2.step`](../CAD/WRO_Bot_v2.step), and everything electronic comes from [`firmware/`](../firmware/). The driving stack runs its real code with its real config: the real `mcu_bridge` is in the loop, talking MAVLink over a virtual serial port to an emulated ESP32. Nothing downstream knows it is a simulation.
 
 ## Data flow
 
 ```mermaid
 flowchart LR
     subgraph GZ["Ignition Gazebo Fortress"]
-        LIDAR["gpu_lidar"]
-        IMU["imu"]
-        CAM["camera"]
-        JC["joint controllers"]
+        LIDAR["gpu_lidar (C1)"]
+        IMU["imu (BNO055)"]
+        CAM["camera (C920)"]
+        JC["motor + kingpin controllers"]
     end
-    LIDAR --> BRIDGE["ros_gz_bridge"]
-    IMU --> BRIDGE
-    CAM --> BRIDGE
-    BRIDGE --> TOPICS1["/scan, /imu, /odom"]
-    BRIDGE --> TOPICS2["/camera/image_raw"]
-    BRIDGE <--> JC
-    BRIDGE -->|"/gorubot/joint_states"| LB["gorubridge"]
-    CMDVEL["/cmd_vel"] --> LB
-    LB --> TELEM["encoder/count, encoder/speed,\nencoder/direction, heading,\nsteering_angle, /button_status,\n/joint_states"]
+    LIDAR --> SCAN["/scan"]
+    CAM --> IMG["/camera/image_raw"]
+    IMU --> MCU["sim_mcu<br/>firmware emulation"]
+    JC -->|joint states| MCU
+    MCU -->|motor target, kingpin angles| JC
+    MCU <-->|"MAVLink over a pty"| BRIDGE["mcu_bridge<br/>(real, unmodified)"]
+    CMD["/cmd_vel"] --> BRIDGE
+    BRIDGE --> TELEM["encoder/*, heading,<br/>steering_angle, /button_status"]
 ```
-
-The sensors (LiDAR, IMU, camera) and the joint controllers all sit inside Gazebo and talk to the rest of the stack through `ros_gz_bridge`. `gorubridge` is the piece that stands in for the real MCU: it takes `/cmd_vel` and Gazebo's joint states as input, and produces the same telemetry topics the real robot would.
 
 ## Running it
 
@@ -43,107 +33,149 @@ colcon build --base-paths gorusim ros2_ws \
              --symlink-install
 source ros2_ws/install/setup.bash
 
-ros2 launch gorusim open_round_sim.launch.py        # three laps, then home
+ros2 launch gorusim open_round_sim.launch.py        # three laps on the bare mat, then home
 ros2 launch gorusim obstacle_round_sim.launch.py    # with traffic pillars
 ros2 launch gorusim sim.launch.py                   # simulator only, drive it yourself
 ```
 
-All three launch files accept the same arguments:
-
 | Argument | Default | What it does |
 | :-- | :-- | :-- |
-| `gui` | `true` | `false` runs the server headless, which is much faster |
+| `gui` | `true` | `false` runs the server headless |
 | `rviz` | `true` | Opens RViz |
 | `enable_auto_steering` | `true` | `false` plans without moving the car |
 | `require_button_start` | `false` | `true` waits for the start button |
-| `track_config` | `config/track.yaml` | Pillar, parking, and start layout |
-| `bot_config` | `config/bot_config_sim.yaml` | Tuning for the whole stack |
-| `build_track` | `true` | `false` leaves a bare mat |
+| `track_config` | `track_open.yaml` (open), `track.yaml` (obstacle) | Pillar, parking, and start layout |
+| `world` | `goruWorld` | Only on `sim.launch.py`. `flatWorld` is an open floor for measuring dynamics |
 
-To drive it by hand:
-
-```bash
-ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist \
-    '{linear: {x: 0.3}, angular: {z: 0.4}}'      # angular.z > 0 steers LEFT
-```
-
-There's no physical start button in sim, so press it over a service call instead:
+To drive it by hand (`angular.z > 0` steers left, as the stack assumes; the throttle maps as on the car, so `linear.x` is not m/s):
 
 ```bash
-ros2 service call /gorubot/press_start std_srvs/srv/Trigger
+ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
+    '{linear: {x: 1.25}, angular: {z: 0.3}}'
 ```
 
-## What's modeled, and where the numbers come from
+Press the start button with:
 
-Everything shared with the real car lives in `ros2_ws/config/bot_config.yaml`. `config/bot_config_sim.yaml` mirrors it and marks its four deltas `SIM:`.
+```bash
+ros2 service call /gorusim/press_start std_srvs/srv/Trigger
+```
+
+## Where every number comes from
+
+**Measured from the STEP** by [`tools/extract_cad.py`](tools/extract_cad.py), which writes `description/cad_generated.xacro`, `config/cad_geometry.yaml` and `meshes/`:
+
+| | Value | Taken from |
+| :-- | :-- | :-- |
+| Wheelbase | 140 mm | wheel axle cylinders |
+| Track, front and rear | 107 mm | tread centres |
+| Tyre | Ø53 × 12 mm | outermost cylinder of each wheel |
+| Kingpins | ±29.75 mm, 23.75 mm inboard of the wheel plane | bores in the front wheel holder |
+| Steering arms | 20 mm, leaning in 12° | tie bar pins to kingpins |
+| Servo horn, rod | 10 mm, 34.12 mm | horn boss and rod ball centres |
+| Rear axle | one solid shaft, 1:1 spur gears to the motor | rear_shaft, the 23-tooth gear pair |
+| LiDAR | 76 mm ahead of `base_link`, scan plane 68.25 mm up, hung under the third deck | C1 body and optical window |
+| Camera | 120 mm ahead, 127 mm up, level, on a fixed arm | C920 lens glass |
+| IMU | on the perfboard stack, near mid wheelbase | GY-BNO055 breakout |
+| Mass properties | per link, integrated over the solids | volumes × the assumptions below |
+
+`base_link` is the CAD origin: on the ground, midway between the axles.
+
+**Behaviour from the firmware**, emulated in [`gorusim/sim_mcu.py`](gorusim/sim_mcu.py), with the constants checked against `firmware/` by the tests:
 
 | | Value | Source |
 | :-- | :-- | :-- |
-| Length | 210 mm | `bot.length_m`, README chassis table |
-| Width over tyres | 120 mm | `bot.width_m` |
-| Wheel diameter | 50 mm | `bot.wheel_diameter_m` |
-| **Wheelbase** | **140 mm** | **Not recorded anywhere, see the note below** |
-| Steering lock | ±60° | `bot.max_steer_deg` |
-| Encoder | 363 ticks / wheel rev | `bot.encoder_counts_per_rev` |
-| LiDAR | RPLIDAR C1: 720 rays, 10 Hz, 0.05-12 m | `rplidar_ros` launch args |
-| IMU | BNO055 at 50 Hz | MCU telemetry poll rate |
-| Camera | 60° HFOV, 640x480 | `vision_params.yaml camera_hfov_deg` |
-| Mat | 3 m field, 1 m centre block, 1 m corridor | WRO Future Engineers |
+| Throttle | duty = \|wire\| / 255, so full-scale int8 is under 50% | `motor_control.cpp`, 8-bit PWM |
+| Steering | `servoCorrection = 23`: horn travel −67° .. +90° about centre | `steering_control.h` |
+| Telemetry | 50 ms | `SENSOR_TX_INTERVAL_MS` |
+| Encoder rpm | 50 ms samples over 1320 counts | `ENCODER_COUNTS_PER_REV` |
+| Heading | 0..360°, clockwise, zero at power-on | `heading.cpp` |
+| Drive watchdog | none: the last throttle stays latched | `main.cpp` |
 
-### Things worth knowing
+**Behaviour from the driver and datasheets:** RPLIDAR C1 at 10 Hz, 0.05–12 m, ±30 mm, on `rplidar_ros`'s 720-ray grid from −179° to +180°. BNO055 at 100 Hz. MG996R at 0.17 s/60°. C920 at 640×480 with `camera_hfov_deg` from `vision_params.yaml`.
 
-**The wheelbase is a guess.** 140 mm is not measured. It's not in `bot_config.yaml`, not in the README chassis table, and `cad_files/` is empty. It sets the turning circle, so measure the real axle-to-axle distance and correct `wheelbase` in `description/goruBot.xacro` and `gorubridge.wheelbase_m` in `config/bot_config_sim.yaml` before trusting any tight-gap result.
+**Configuration is the real files.** `config/bot_config.yaml`, `vision_params.yaml` and `disparity_extender_params.yaml` are symlinks into `ros2_ws/config`, and the launch files pass the same `vector_odom` and `lap_counter` values as the real launch files. [`config/sim_overlay.yaml`](config/sim_overlay.yaml) is the complete list of what the simulator overrides: the serial port, and waiting for the track to be laid out.
 
-**Wheel diameter disagrees across the repo.** `bot_config.yaml` says 50 mm, but both `ros2_ws/launch/*.launch.py` still pass `0.065` to `vector_odom`, and `vector_odom` itself defaults to `0.065`. The sim uses 50 mm throughout. On the real car, that 30% gap goes straight into every distance odometry reports, so the launch defaults are worth revisiting.
+**Derived:** with no real data to fit, the steering's full travel works out as:
 
-**Steering commands are inner-wheel angles.** `angular.z = ±1.0` puts the *inner* front wheel at the 60° stop, and `gorubridge` derives the outer wheel angle (40.7° at full lock) from the Ackermann geometry. Reading 60° as a centreline angle instead would demand 74° from the inner wheel, which no linkage on the car can actually reach.
+| Command | Wheels (inner / outer) | Stopped by |
+| :-- | :-- | :-- |
+| Full left (wire 158 and up) | 37.3° / 31.0° | Outer tyre touching the chassis |
+| Full right (wire 23 and below) | 30.9° / 26.7° | Servo end of travel, from `servoCorrection` |
 
-**Pillar colours are not decorative.** `vision_params.yaml` thresholds red at `S = 255` exactly, so the pillars render with zero green and zero blue in both ambient and diffuse light, plus a black specular term. Any white highlight drops saturation below 255 and makes them invisible to `vision_node`.
+### Not measured: please replace these
 
-**Surfaces need `laser_retro`.** `open_round_run.ray_valid()` discards any ray with intensity at or below 0.05. Ignition returns zero intensity for a surface with no `laser_retro` set, so a new obstacle without one is invisible to the navigation code, even though its range still comes back correctly.
+The repo has no data for these, so they are typical values. Each is in one place, so measuring the car fixes it there:
 
-**Don't set `use_velocity_commands` on the steering.** Fortress's `JointPositionController` feeds the position error back with the wrong sign in that mode. The kingpins run away to their limits and sit there while the command topic still reads 0.0.
+| | Assumed | Where | Effect if wrong |
+| :-- | :-- | :-- | :-- |
+| Total mass | 1212 g, from volumes × densities and datasheet weights | `MASS_RULES` in `tools/extract_cad.py`. Weigh the car, then re-run with `--total-mass-g` | Acceleration, cornering |
+| Motor no-load speed | 98.3 rad/s at full duty | `description/control.xacro`, `config/sim_hardware.yaml` | Every speed and lap time |
+| Motor stall torque | 0.20 N·m at the axle | `description/control.xacro` | Acceleration, whether it stalls in corners |
+| Friction | 0.015 N·m rolling, breakaway at 15% duty | `description/control.xacro`, `config/sim_hardware.yaml` | Creep speeds, stalling |
+| Tyre grip | μ = 1.0 | `description/gazebo.xacro` | Cornering, solid axle scrub |
+| Camera tilt | 0°, as modelled in CAD (the README mentions a slight tilt) | `camera_pitch` in `description/goruBot.xacro` | Where pillars sit in the frame |
 
-## Known environment issue
-
-`vision_node` currently can't start on this machine:
-
-```
-from cv_bridge import CvBridge  ->  AttributeError: _ARRAY_API not found
-```
-
-ROS Humble's `cv_bridge` is built against NumPy 1.x, and this machine has NumPy 2.2.6. This is unrelated to the simulator itself: a bare `python3 -c "from cv_bridge import CvBridge"` fails the same way, and it breaks `vision_node` on the real robot too. Fix it with:
+## Checking it
 
 ```bash
-pip3 install "numpy<2"
+python3 -m pytest gorusim/test
+
+# with the simulator up on the open floor, and nothing else driving:
+ros2 launch gorusim sim.launch.py gui:=false rviz:=false build_track:=false world:=flatWorld
+python3 gorusim/tools/verify_dynamics.py
 ```
 
-The sim camera itself has been verified correct: a red pillar at 0.5 m reads `HSV(0, 255, 170)` over 8227 px with an aspect ratio of 1.97, and a green one reads `HSV(60, 255, 162)`. Both are inside the real thresholds, with no cross-talk between colors. `vision_node` will work unchanged once NumPy is sorted out.
+## Things worth knowing
+
+**The car's own parts are in the scan.** The scan plane is above the bumper and wheels but cuts through the standoffs and the Pi's connectors behind the scanner, so the rear arc has around 110 rays under 0.3 m. The real scanner sees those too. The front ±80° is clear.
+
+**`mcu_bridge` must start after `sim_mcu`.** It opens the port once at startup, so the launch file waits for the virtual ESP32, just as you would plug in the USB cable first.
+
+**Surfaces need `laser_retro`.** `open_round_run.ray_valid()` discards any ray with intensity at or below 0.05, and Ignition returns zero for a surface with no `laser_retro`. A new obstacle without one is invisible to navigation, even though its range comes back correctly.
+
+**The C1's optical window is left out of its visual mesh.** The beam starts inside the housing, and `gpu_lidar` reports no return for a ray whose first surface is under `range_min`. With a solid belt there, the scanner is blind in every direction.
+
+**Pillar colours are not decorative.** `vision_params.yaml` thresholds red at `S = 255` exactly, so the pillars render with zero green and blue and a black specular term.
+
+**Don't set `use_velocity_commands` on the steering.** In Fortress that mode feeds the position error back with the wrong sign, and the kingpins run to their stops while the command topic still reads correct.
+
+**`vision_node` runs with `PYTHONNOUSERSITE=1`.** ROS Humble's `cv_bridge` is built against NumPy 1.x, and a NumPy 2 in `~/.local` makes the node segfault, so the launch file puts it on the system packages.
+
+**The steering linkage is static in the visuals.** The horn, rod and tie bar are part of the chassis mesh and do not move on screen. Their kinematics are fully modelled in `gorusim/linkage.py`, and the knuckles and wheels do move.
 
 ## Layout
 
 ```
 config/
-  bot_config_sim.yaml   tuning for gorubridge + the whole autonomy stack
+  bot_config.yaml, vision_params.yaml,
+  disparity_extender_params.yaml   symlinks to the real ros2_ws/config files
+  sim_overlay.yaml      everything the simulator overrides in them
+  sim_hardware.yaml     constants for the emulated ESP32
+  cad_geometry.yaml     generated from the STEP
   track.yaml            pillar / parking / start layout
-  object_template.sdf   traffic pillar, spawned at runtime
-  wall_template.sdf     parking barrier, spawned at runtime
+  track_open.yaml       the bare mat
+  object_template.sdf, wall_template.sdf
   goruSim.rviz
 description/
-  goruBot.xacro         every dimension, in one place
-  goruBotCore.xacro     chassis, wheels, Ackermann linkage
-  lidar.xacro           RPLIDAR C1
-  IMU.xacro             BNO055
-  camera.xacro          USB camera on its pan servo
-  control.xacro         Ignition joint controllers, odometry, joint states
-  gazebo.xacro          friction
-launch/
-  sim.launch.py                 simulator only
-  open_round_sim.launch.py      + vector_odom, lap_counter, open_round_run
-  obstacle_round_sim.launch.py  + vision_node, disparity_extender
+  goruBot.xacro         entry point
+  cad_generated.xacro   generated: dimensions, masses, inertias, visuals
+  goruBotCore.xacro     chassis, solid rear axle, steered corners, collisions
+  control.xacro         motor equation, kingpin controllers, joint states
+  lidar.xacro, IMU.xacro, camera.xacro, gazebo.xacro
 gorusim/
-  gorubridge.py         stands in for mcu_bridge
-  track_maker.py        builds the track over Ignition transport
+  sim_mcu.py            the emulated ESP32
+  linkage.py            servo horn -> rod -> tie bar -> knuckles
+  track_maker.py        lays out the mat
+launch/
+  sim.launch.py, open_round_sim.launch.py, obstacle_round_sim.launch.py
+meshes/                 generated from the STEP
+tools/
+  extract_cad.py        STEP -> meshes, masses, geometry
+  steering_lock.py      where the tyres hit the chassis
+  verify_dynamics.py    drives the car and checks it against the numbers
 worlds/
   goruWorld.sdf         the mat
+  flatWorld.sdf         an open floor, for verify_dynamics.py
 ```
+
+`CAD/gorusim_collision.step` is the simplified convex model behind the collision shapes in `goruBotCore.xacro`.
