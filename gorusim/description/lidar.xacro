@@ -1,70 +1,51 @@
 <?xml version="1.0"?>
 <!--
-  RPLIDAR C1 — the car's primary sensor.
+  RPLIDAR C1, where the CAD puts it: hanging upside down under the third deck,
+  76 mm ahead of base_link, with its scan plane 68.25 mm off the ground (through
+  the optical window of the housing). That clears the bumper (52.5 mm) and the
+  wheels (53 mm) in front, and cuts through the standoffs and the Pi's connectors
+  behind: the real scanner sees those too, so the meshes are left in the beam.
 
-  Configured to match what rplidar_ros actually publishes on the real
-  car, because open_round_run and disparity_extender index straight into
-  ranges[] and derive angles from angle_min/angle_increment. If the ray
-  count or the angular span drift from the hardware, every tuned
-  threshold in bot_config.yaml (spike_threshold_m, edge_stride,
-  width_min_cm ...) quietly means something different in the sim.
+  bot.lidar.forward_offset_m in bot_config.yaml says 0.0 and open_round_run treats
+  the scanner as the car's centre. The simulator does not correct for that: it
+  mounts the sensor where the car has it, so the stack sees what it sees on the car.
 
-  Datasheet / driver settings this mirrors:
-    launch arg serial_baudrate  460800
-    launch arg angle_compensate true   -> fixed 720-ray grid
-    launch arg lidar_inverted   true   -> standard REP-103 CCW ordering
+  The numbers match what rplidar_ros publishes on the real car:
 
-  Note the sim models the corrected scan, not the physical mount. The
-  real C1 is bolted on UPSIDE DOWN, so it sweeps the opposite way as
-  seen from above and the driver's `inverted` flag reverses ranges[] to
-  put +angle back on the robot's left. This sensor is simply modelled
-  right way up, which yields the same CCW ordering the real driver
-  publishes once inverted is set — so the two stay interchangeable and
-  nothing here needs to change.
-    scan rate                   10 Hz
-    range                       0.05 m .. 12 m
-    accuracy                    ~±30 mm  -> gaussian stddev 0.01 m
+    angle_compensate true   720 rays: points_per_circle = 1e6 / 200 us / 10 Hz = 500,
+                            multiple = int(500 / 360 + 1) = 2, count = 360 * 2
+    angles                  -179 .. +180 deg (publish_scan: pi - 359 deg .. pi)
+    scan rate               10 Hz, C1 typical
+    range                   0.05 .. 12 m, datasheet (white target)
+    accuracy                +-30 mm, gaussian stddev 10 mm; resolution 15 mm
 
-  frame_id must stay `laser`: it is bot.lidar.frame_id in
-  ros2_ws/config/bot_config.yaml and the frame RViz resolves scans in.
+  The sensor frame is modelled upright. The driver's `inverted` flag on the real
+  car exists to undo the upside down mount, so the published scan is already
+  REP-103 counter-clockwise, and that published scan is what is modelled here.
+
+  frame_id stays `laser`: bot.lidar.frame_id.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
-    <!-- bot.lidar.forward_offset_m = 0.0 and yaw_deg = 0.0, so the unit
-         sits over base_link with its 0° ray pointing straight ahead. -->
     <joint name="base_to_laser" type="fixed">
         <parent link="base_link" />
         <child link="laser" />
-        <origin xyz="${lidar_x} 0 ${ground_offset + body_height + lidar_height/2}"
-                rpy="0 0 ${lidar_yaw}" />
+        <origin xyz="${laser_xyz}" />
     </joint>
 
     <link name="laser">
-        <visual>
-            <geometry>
-                <cylinder radius="${lidar_radius}" length="${lidar_height}" />
-            </geometry>
-            <material name="grey" />
-        </visual>
+        <xacro:laser_cad />
         <collision>
+            <origin xyz="0 0 ${lidar_body_center_z}" />
             <geometry>
-                <cylinder radius="${lidar_radius}" length="${lidar_height}" />
+                <cylinder radius="${lidar_radius}" length="${lidar_body_length}" />
             </geometry>
         </collision>
-        <inertial>
-            <mass value="${laser_mass}" />
-            <inertia
-                ixx="${(laser_mass/12)*(3*lidar_radius*lidar_radius + lidar_height*lidar_height)}"
-                iyy="${(laser_mass/12)*(3*lidar_radius*lidar_radius + lidar_height*lidar_height)}"
-                izz="${(laser_mass/2)*lidar_radius*lidar_radius}"
-                ixy="0" ixz="0" iyz="0" />
-        </inertial>
     </link>
 
     <gazebo reference="laser">
-        <!-- Keep `laser` as a real link in the converted SDF instead of
-             letting sdformat fold it into base_link, so the sensor frame
-             and the TF frame carry the same name. -->
+        <!-- Keep `laser` a real link in the converted SDF, so the sensor frame and
+             the TF frame carry the same name. -->
         <disableFixedJointLumping>true</disableFixedJointLumping>
 
         <sensor name="lidar" type="gpu_lidar">
@@ -78,7 +59,7 @@
                     <horizontal>
                         <samples>720</samples>
                         <resolution>1</resolution>
-                        <min_angle>${-pi}</min_angle>
+                        <min_angle>${radians(-179.0)}</min_angle>
                         <max_angle>${pi}</max_angle>
                     </horizontal>
                     <vertical>
@@ -91,7 +72,7 @@
                 <range>
                     <min>0.05</min>
                     <max>12.0</max>
-                    <resolution>0.01</resolution>
+                    <resolution>0.015</resolution>
                 </range>
                 <noise>
                     <type>gaussian</type>

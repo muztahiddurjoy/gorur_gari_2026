@@ -1,70 +1,32 @@
 <?xml version="1.0"?>
 <!--
-  USB HD camera on the pan servo — tells red pillars from green ones.
+  Logitech C920 on its fixed arm, frame origin on the lens as the CAD has it:
+  120 mm ahead of base_link, 127 mm off the ground. There is no pan servo on the
+  car (the arm is rigid and the firmware has no second servo), so nothing here moves.
 
-  Matched to ros2_ws/config/vision_params.yaml:
-    camera_topic     /camera/image_raw
-    camera_hfov_deg  60.0     -> horizontal_fov 1.0472 rad
+  HFOV comes from the code, not the datasheet: vision_node turns pixel columns into
+  bearings with camera_hfov_deg (config/vision_params.yaml), and 60 deg is also about
+  what the C920's 78 deg diagonal comes to after the 4:3 crop of 640x480.
 
-  vision_node turns pixel columns into bearings with that HFOV, so the
-  sim camera has to agree with the parameter or every angular match
-  between a camera blob and a LiDAR tower lands in the wrong place.
-
-  The image is published at the sensor's native 640x480; vision_node
-  downscales to 320x240 itself when efficient_mode is on.
-
-  camera_link_optical carries the REP-103 optical convention (z forward,
-  x right, y down) that cv_bridge and vision_node assume. It is a pure
-  TF frame, so it has no inertia and is folded into camera_link when the
-  model is converted to SDF — robot_state_publisher still publishes it.
+  camera_link_optical is the REP-103 optical frame (z forward, x right, y down) that
+  cv_bridge and vision_node assume. It is a pure TF frame.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
-    <!-- Pan servo. Driven through /cam_servo (std_msgs/Int8, degrees)
-         exactly like the old bridge, and physically limited to ±90°. -->
-    <joint name="chassis_to_cam_servo" type="revolute">
-        <parent link="base_link" />
-        <child link="cam_servo_link" />
-        <origin xyz="${camera_x} 0 ${camera_z}" />
-        <axis xyz="0 0 1" />
-        <limit lower="${-pi/2}" upper="${pi/2}" effort="5" velocity="10" />
-        <dynamics damping="0.01" friction="0.01" />
-    </joint>
-
-    <link name="cam_servo_link">
-        <visual>
-            <origin xyz="0 0 -0.015" />
-            <geometry>
-                <cylinder radius="0.008" length="0.030" />
-            </geometry>
-            <material name="black" />
-        </visual>
-        <inertial>
-            <mass value="${hinge_mass}" />
-            <inertia ixx="1e-6" iyy="1e-6" izz="1e-6" ixy="0" ixz="0" iyz="0" />
-        </inertial>
-    </link>
-
-    <!-- Tilted down a few degrees so the pillar bases stay in frame at
-         close range; vision_params crops the top 40% of the image away
-         (roi_top_crop) which assumes roughly this framing. -->
     <joint name="camera_joint" type="fixed">
-        <parent link="cam_servo_link" />
+        <parent link="base_link" />
         <child link="camera_link" />
-        <origin xyz="0.010 0 0" rpy="0 ${camera_pitch} 0" />
+        <origin xyz="${camera_link_xyz}" rpy="0 ${camera_pitch} 0" />
     </joint>
 
     <link name="camera_link">
-        <visual>
+        <xacro:camera_link_cad />
+        <collision>
+            <origin xyz="${camera_box_xyz}" />
             <geometry>
-                <box size="0.010 0.030 0.025" />
+                <box size="${camera_box_size}" />
             </geometry>
-            <material name="red" />
-        </visual>
-        <inertial>
-            <mass value="0.020" />
-            <inertia ixx="1e-6" iyy="1e-6" izz="1e-6" ixy="0" ixz="0" iyz="0" />
-        </inertial>
+        </collision>
     </link>
 
     <joint name="camera_optical_joint" type="fixed">
@@ -79,6 +41,8 @@
         <disableFixedJointLumping>true</disableFixedJointLumping>
 
         <sensor name="camera" type="camera">
+            <!-- Sits just ahead of the glass so the housing is not in frame. -->
+            <pose>0.002 0 0 0 0 0</pose>
             <topic>camera/image_raw</topic>
             <ignition_frame_id>camera_link_optical</ignition_frame_id>
             <update_rate>30</update_rate>

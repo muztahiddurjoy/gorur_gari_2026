@@ -1,94 +1,44 @@
 <?xml version="1.0"?>
 <!--
   ════════════════════════════════════════════════════════════════════
-  goruBot — simulation model of the Gorur Gari 2026 car.
+  goruBot — the Gorur Gari 2026 car, as built.
 
-  Every dimension below is the REAL car, so the sim and the track agree
-  on what fits through a gap. The source of truth for the shared numbers
-  is ros2_ws/config/bot_config.yaml — if you change one, change both.
-  The cross-references are noted per property.
+  Dimensions, masses, inertias and the visual meshes all come from
+  CAD/WRO_Bot_v2.step through tools/extract_cad.py, which writes
+  cad_generated.xacro (included below) and config/cad_geometry.yaml.
+  Nothing geometric is typed in here: to change the car, change the CAD
+  and re-run the tool.
+
+  base_link is the CAD origin: on the ground, midway between the axles,
+  on the centreline. REP-103: +X forward, +Y left, +Z up.
 
   Target simulator: Ignition Gazebo Fortress (6.x), driven through
-  ros_gz_sim / ros_gz_bridge. There is no ros2_control here; the joints
-  are driven by Ignition's own controller plugins (see control.xacro).
+  ros_gz_sim / ros_gz_bridge, with Ignition's own controller plugins
+  (control.xacro).
   ════════════════════════════════════════════════════════════════════
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
 
-    <!-- ══ Chassis envelope ═══════════════════════════════════════════
-         bot.length_m / bot.width_m in bot_config.yaml. `width` is the
-         envelope OVER THE WHEELS, which is what the gap-finding code
-         cares about, so the body box itself is narrower and the tyres
-         make up the difference. -->
-    <xacro:property name="length"        value="0.210" />  <!-- bumper to bumper -->
-    <xacro:property name="width"         value="0.120" />  <!-- across the tyres -->
-    <xacro:property name="body_width"    value="0.090" />  <!-- the box between the wheels -->
-    <xacro:property name="body_height"   value="0.060" />
-    <xacro:property name="ground_offset" value="0.008" />  <!-- underside to floor -->
+    <xacro:include filename="cad_generated.xacro" />
 
-    <!-- ══ Drivetrain geometry ════════════════════════════════════════
-         wheel_diameter 50 mm = bot.wheel_diameter_m. NOTE this disagrees
-         with the 0.065 both ros2_ws launch files still pass to
-         vector_odom; 50 mm is the measured wheel, see the README note in
-         this package. -->
-    <xacro:property name="wheel_radius"  value="0.025" />  <!-- 50 mm diameter -->
-    <xacro:property name="wheel_width"   value="0.014" />
+    <!-- Where the tyres touch the chassis: tools/steering_lock.py.
+         The servo and linkage stop before these on the outer wheel, the
+         joint limits are here so nothing can bend the model further. -->
+    <xacro:property name="steer_stop_inner" value="${radians(39.0)}" />
+    <xacro:property name="steer_stop_outer" value="${radians(31.0)}" />
 
-    <!-- Wheel centre to wheel centre, so the tyres just reach `width`. -->
-    <xacro:property name="track"         value="${width - wheel_width}" />
+    <!-- Lens height and attitude are on the CAD: the glass disc's axis
+         runs exactly along the car, so there is no tilt on the model.
+         The README mentions "a slight downward tilt" and the C920's clip
+         can be set that way; change this if the real one is tilted. -->
+    <xacro:property name="camera_pitch" value="0.0" />
 
-    <!-- ⚠ THE ONE MEASUREMENT THAT IS NOT RECORDED ANYWHERE IN THE REPO.
-         Not in bot_config.yaml, not in the README table, and cad_files/
-         is empty. 0.140 m is a plausible value for a 210 mm car (it
-         leaves 35 mm of overhang at each end) but it drives the turning
-         circle, so measure the real axle-to-axle distance and correct
-         it here before trusting any tight-gap result from the sim. -->
-    <xacro:property name="wheelbase"     value="0.140" />
-
-    <!-- Steering knuckle inboard offset: how far the kingpin sits from
-         the wheel centre plane. Only affects the Ackermann split. -->
-    <xacro:property name="hinge_inset"   value="0.012" />
-
-    <!-- Physical steering lock, one side. bot.max_steer_deg. -->
-    <xacro:property name="max_steer_deg" value="60.0" />
-    <xacro:property name="max_steer"     value="${radians(max_steer_deg)}" />
-
-    <!-- ══ Sensor mounting ════════════════════════════════════════════
-         base_link is the CENTRE of the footprint at ground level, so
-         bot.lidar.forward_offset_m = 0.0 means the lidar sits exactly
-         over base_link — which is what these values encode. -->
-    <xacro:property name="lidar_x"       value="0.0" />    <!-- bot.lidar.forward_offset_m -->
-    <xacro:property name="lidar_yaw"     value="0.0" />    <!-- bot.lidar.yaw_deg -->
-    <xacro:property name="lidar_height"  value="0.020" />
-    <xacro:property name="lidar_radius"  value="0.027" />  <!-- RPLIDAR C1 body -->
-
-    <xacro:property name="imu_x"         value="-0.060" /> <!-- BNO055 sits at the rear -->
-    <xacro:property name="imu_size"      value="0.020" />
-
-    <!-- USB camera on the pan servo, looking forward and slightly down. -->
-    <xacro:property name="camera_x"      value="0.060" />
-    <xacro:property name="camera_z"      value="0.115" />
-    <xacro:property name="camera_pitch"  value="${radians(8.0)}" />
-
-    <!-- ══ Masses ═════════════════════════════════════════════════════
-         Total ~0.95 kg. The real car has not been weighed (the README
-         still says [Placeholder]); these are sane values that keep the
-         car planted without making it sluggish. -->
-    <xacro:property name="base_mass"     value="0.800" />
-    <xacro:property name="wheel_mass"    value="0.030" />
-    <xacro:property name="hinge_mass"    value="0.010" />
-    <xacro:property name="laser_mass"    value="0.050" />
-    <xacro:property name="imu_mass"      value="0.005" />
-
-    <!-- ══ Model name, must match the <name> ros_gz_sim spawns it as,
-         because the Ignition plugin topics are scoped by model name. -->
-    <xacro:property name="model_name"    value="goruBot" />
-
+    <!-- control.xacro first: it holds the motor's friction, which the axle joint uses. -->
+    <xacro:include filename="control.xacro" />
     <xacro:include filename="goruBotCore.xacro" />
     <xacro:include filename="lidar.xacro" />
     <xacro:include filename="IMU.xacro" />
     <xacro:include filename="camera.xacro" />
-    <xacro:include filename="control.xacro" />
     <xacro:include filename="gazebo.xacro" />
 
 </robot>
