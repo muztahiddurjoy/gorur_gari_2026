@@ -1,16 +1,12 @@
 """
-Open round, in simulation — three laps of the mat, then park on the
-start point.
+Open round, in simulation: three laps of the bare mat, then park on the start point.
 
-The same node graph as ros2_ws/launch/gorurgari_open_round.launch.py,
-with the two nodes that need hardware swapped out:
+The same nodes, with the same parameters, as ros2_ws/launch/gorurgari_autonomy_boot.launch.py
+plus the hardware services it leaves to systemd. Only what physically needs the car is
+swapped, and mcu_bridge is not on that list:
 
-    mcu_bridge   -> gorubridge   (no ESP32, no serial port)
-    rplidar_c1   -> ros_gz_bridge (no LiDAR, /scan comes from gpu_lidar)
-
-vector_odom, lap_counter and open_round_run are the real nodes, running
-their real code, against a /scan and a /heading that look like the
-hardware's. That is what makes a result here mean something.
+    ESP32-S3     -> sim_mcu        (real mcu_bridge, over a virtual serial port)
+    rplidar_c1   -> ros_gz_bridge  (/scan from gpu_lidar)
 
     ros2 launch gorusim open_round_sim.launch.py
 
@@ -21,11 +17,11 @@ Watch it think without letting it move:
 Rehearse the real start sequence (standby until the button):
 
     ros2 launch gorusim open_round_sim.launch.py require_button_start:=true
-    ros2 service call /gorubot/press_start std_srvs/srv/Trigger
+    ros2 service call /gorusim/press_start std_srvs/srv/Trigger
 
-Adapted from Team LazyGo's simulator:
+Track tooling adapted from Team LazyGo's simulator:
 https://github.com/A-N-M-Noor/LazyGo_WRO2025/
-For testing purposes only — none of this runs on the competition car.
+For testing purposes only: none of this runs on the competition car.
 """
 import os
 
@@ -42,21 +38,30 @@ PACKAGE = 'gorusim'
 
 def generate_launch_description():
     share = get_package_share_directory(PACKAGE)
-    default_params = os.path.join(share, 'config', 'bot_config_sim.yaml')
+    config = os.path.join(share, 'config')
+    bot_config = os.path.join(config, 'bot_config.yaml')
+    overlay = os.path.join(config, 'sim_overlay.yaml')
 
     arguments = [
-        DeclareLaunchArgument('bot_config', default_value=default_params,
-                              description='Tuning for the whole stack.'),
         DeclareLaunchArgument('track_config',
-                              default_value=os.path.join(share, 'config', 'track.yaml'),
-                              description='Pillar / parking / start layout.'),
+                              default_value=os.path.join(config, 'track_open.yaml'),
+                              description='Bare mat by default: this is the open round.'),
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('enable_auto_steering', default_value='true',
                               description='false to watch it plan without moving.'),
         DeclareLaunchArgument('require_button_start', default_value='false',
                               description='true holds the car in standby until '
-                                          '/gorubot/press_start is called.'),
+                                          '/gorusim/press_start is called.'),
+        DeclareLaunchArgument('start_delay_sec', default_value='3.0'),
+        # gorurgari_autonomy_boot.launch.py's defaults, verbatim.
+        DeclareLaunchArgument('wheel_diameter_m', default_value='0.065'),
+        DeclareLaunchArgument('encoder_counts_per_rev', default_value='363'),
+        DeclareLaunchArgument('distance_scale', default_value='0.976'),
+        DeclareLaunchArgument('output_units', default_value='cm'),
+        DeclareLaunchArgument('heading_clockwise', default_value='true'),
+        DeclareLaunchArgument('turn_angle_deg', default_value='90.0'),
+        DeclareLaunchArgument('turns_per_lap', default_value='4'),
     ]
 
     def typed(name, value_type):
@@ -67,44 +72,66 @@ def generate_launch_description():
         launch_arguments={
             'gui': LaunchConfiguration('gui'),
             'rviz': LaunchConfiguration('rviz'),
-            'bot_config': LaunchConfiguration('bot_config'),
             'track_config': LaunchConfiguration('track_config'),
         }.items(),
     )
 
-    # encoder/count + heading -> /odom_vector and the odom -> base_link TF.
     vector_odom = Node(
         package='controls',
         executable='vector_odom',
         name='vector_odometry',
-        parameters=[LaunchConfiguration('bot_config'), {'use_sim_time': True}],
         output='screen',
         emulate_tty=True,
+        parameters=[{
+            'wheel_diameter_m': typed('wheel_diameter_m', float),
+            'encoder_counts_per_rev': typed('encoder_counts_per_rev', int),
+            'distance_scale': typed('distance_scale', float),
+            'output_units': typed('output_units', str),
+            'heading_clockwise': typed('heading_clockwise', bool),
+            'use_sim_time': True,
+        }],
     )
 
     lap_counter = Node(
         package='autonomy',
         executable='lap_counter',
         name='lap_counter',
-        parameters=[LaunchConfiguration('bot_config'), {'use_sim_time': True}],
         output='screen',
         emulate_tty=True,
+        parameters=[{
+            'turn_angle_deg': typed('turn_angle_deg', float),
+            'turns_per_lap': typed('turns_per_lap', int),
+            'heading_clockwise': typed('heading_clockwise', bool),
+            'odom_distance_units': typed('output_units', str),
+            'use_sim_time': True,
+        }],
     )
 
     open_round_run = Node(
         package='autonomy',
         executable='open_round_run',
         name='open_round_run',
-        parameters=[
-            LaunchConfiguration('bot_config'),
-            {
-                'use_sim_time': True,
-                'enable_auto_steering': typed('enable_auto_steering', bool),
-                'require_button_start': typed('require_button_start', bool),
-            },
-        ],
         output='screen',
         emulate_tty=True,
+        parameters=[
+            bot_config,
+            overlay,
+            {
+                'enable_auto_steering': typed('enable_auto_steering', bool),
+                'require_button_start': typed('require_button_start', bool),
+                'start_delay_sec': typed('start_delay_sec', float),
+                'use_sim_time': True,
+            },
+        ],
+    )
+
+    run_timer = Node(
+        package='autonomy',
+        executable='run_timer',
+        name='run_timer',
+        output='screen',
+        emulate_tty=True,
+        parameters=[bot_config, {'use_sim_time': True}],
     )
 
     return LaunchDescription(arguments + [
@@ -112,4 +139,5 @@ def generate_launch_description():
         vector_odom,
         lap_counter,
         open_round_run,
+        run_timer,
     ])

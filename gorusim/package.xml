@@ -2,13 +2,14 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>gorusim</name>
-  <version>1.0.0</version>
+  <version>2.0.0</version>
   <description>
     Ignition Gazebo Fortress simulation of the Gorur Gari 2026 WRO Future
-    Engineers car. Presents the same ROS interface as the real vehicle so
-    the controls and autonomy packages run against it unchanged.
+    Engineers car, built from CAD/WRO_Bot_v2.step and the firmware. The real
+    mcu_bridge talks to an emulated ESP32 over a virtual serial port, so the
+    controls and autonomy packages run against it unchanged.
 
-    Adapted from Team LazyGo's simulator:
+    Track tooling adapted from Team LazyGo's simulator:
     https://github.com/A-N-M-Noor/LazyGo_WRO2025/
     For testing and development purposes only; not part of the competition
     vehicle or its run.
@@ -17,7 +18,6 @@
   <license>MIT</license>
 
   <depend>rclpy</depend>
-  <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>std_msgs</depend>

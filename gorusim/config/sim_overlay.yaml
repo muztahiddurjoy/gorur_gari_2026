@@ -1,0 +1,21 @@
+# ════════════════════════════════════════════════════════════════════
+# Everything the simulator changes in the real stack's configuration.
+#
+# The launch files load the real ros2_ws/config/*.yaml first and this on top.
+# If a value is not here, the sim runs exactly what the car runs, so retuning
+# the real files retunes the sim too. Keep this list as short as it is.
+# ════════════════════════════════════════════════════════════════════
+
+mcu_bridge:
+  ros__parameters:
+    # The virtual ESP32 instead of /dev/esp32_s3.
+    port: /tmp/gorusim_esp32
+
+open_round_run:
+  ros__parameters:
+    # Hold still until track_maker has finished laying out the mat.
+    wait_for_track_ready: true
+
+disparity_extender_node:
+  ros__parameters:
+    wait_for_track_ready: true

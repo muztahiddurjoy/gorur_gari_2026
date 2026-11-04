@@ -24,16 +24,15 @@
 # past them.
 # ════════════════════════════════════════════════════════════════════
 
-# false leaves the mat bare — that is the Open Round.
+# false leaves the mat bare: see track_open.yaml for the Open Round.
 objects: true
 
-# Where the car starts. `pos` is where the NOSE of the car sits; the
-# model origin is pulled back nose_offset_m along the heading, so the
-# car starts fully behind the line rather than straddling it.
+# Where the car starts. `pos` is where the very front of the car sits, which is
+# the camera, 120.5 mm ahead of base_link on the CAD. The launch file spawns the
+# model there, so the car starts fully behind the line rather than straddling it.
 # angle is degrees counter-clockwise, 0 = facing +X.
 start:
-    model: goruBot
-    nose_offset_m: 0.105        # half of bot.length_m
+    nose_offset_m: 0.1205
     pos:
         x: 0.0
         y: 0.0
