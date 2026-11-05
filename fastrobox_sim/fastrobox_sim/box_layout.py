@@ -115,7 +115,7 @@ def generate_layout(count: Optional[int] = None, seed: Optional[int] = None,
 
 def box_sdf(name: str, box: Box) -> str:
     """Return the SDF of a solid box standing on the floor."""
-    rgb = '0.9 0.02 0.02' if box.color == RED else '0.02 0.85 0.02'
+    rgb = '1 0 0' if box.color == RED else '0 1 0'
     mass = 0.05
     side_inertia = mass * (BOX_SIDE ** 2 + BOX_HEIGHT ** 2) / 12
     top_inertia = mass * (2 * BOX_SIDE ** 2) / 12

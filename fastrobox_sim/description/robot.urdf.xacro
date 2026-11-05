@@ -158,8 +158,11 @@
                     <height>${camera_height}</height>
                     <format>R8G8B8</format>
                 </image>
+                <!-- Not lower: at 0.02 m a flat dark band covered the frame from the
+                     horizon to the image centre, hiding the boxes. Its source was not
+                     identified, but nothing the node needs is closer than 0.1 m. -->
                 <clip>
-                    <near>0.02</near>
+                    <near>0.1</near>
                     <far>10.0</far>
                 </clip>
                 <noise>
