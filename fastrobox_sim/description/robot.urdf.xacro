@@ -24,9 +24,10 @@
     <!-- Wheel centres. The outer tyre faces come to +-0.075. -->
     <xacro:property name="wheel_y" value="0.065" />
     <!-- What the DiffDrive plugin divides by. A skid-steer's wheels must slip sideways
-         to turn, so it yaws slower than its geometric track says. This is the measured
-         effective value (see the README), so /odom and commanded rates hold true. -->
-    <xacro:property name="effective_track" value="0.13" />
+         to turn, so it yaws slower than its 0.13 m geometric track says: 0.62x as fast,
+         as measured against ground truth. This effective value makes /odom and
+         commanded rates hold true; re-measure it after changing the wheels or friction. -->
+    <xacro:property name="effective_track" value="0.22" />
 
     <xacro:property name="camera_x" value="0.08" />
     <xacro:property name="camera_z" value="0.16" />

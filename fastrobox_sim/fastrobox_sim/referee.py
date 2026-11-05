@@ -26,10 +26,14 @@ TRACK_LENGTH = 3.0
 
 
 def wall_gap(x, y, yaw):
-    """Return the gap between a robot footprint at (x, y, yaw) and the nearest wall."""
+    """
+    Return the gap between a robot footprint at (x, y, yaw) and the side or end walls.
+
+    The wall behind the start zone is left out: the robot starts 5 mm from it by design.
+    """
     reach_x = ROBOT_LENGTH / 2 * abs(math.cos(yaw)) + ROBOT_WIDTH / 2 * abs(math.sin(yaw))
     reach_y = ROBOT_LENGTH / 2 * abs(math.sin(yaw)) + ROBOT_WIDTH / 2 * abs(math.cos(yaw))
-    return min(x - reach_x, TRACK_LENGTH - x - reach_x, TRACK_HALF_WIDTH - abs(y) - reach_y)
+    return min(TRACK_LENGTH - x - reach_x, TRACK_HALF_WIDTH - abs(y) - reach_y)
 
 
 class Referee(Node):
