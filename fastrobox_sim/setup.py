@@ -24,5 +24,9 @@ setup(
     description='Simulation of the BUBT FastRobox 1.0 Smart Navigation Challenge.',
     license='MIT',
     tests_require=['pytest'],
-    entry_points={'console_scripts': []},
+    entry_points={
+        'console_scripts': [
+            'spawn_boxes = fastrobox_sim.spawn_boxes:main',
+        ],
+    },
 )
