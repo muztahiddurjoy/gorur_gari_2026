@@ -32,7 +32,8 @@ SYSTEM_PYTHON = {'PYTHONNOUSERSITE': '1'}
 
 def nodes_after_spawn(context):
     """Start the boxes, then what depends on them, once the launch arguments are known."""
-    spawn_arguments = ['--layout-file', LaunchConfiguration('layout_file').perform(context)]
+    layout_file = LaunchConfiguration('layout_file').perform(context)
+    spawn_arguments = ['--layout-file', layout_file]
     for option, argument in (('--seed', 'seed'), ('--count', 'box_count')):
         value = LaunchConfiguration(argument).perform(context)
         if value:
@@ -46,6 +47,14 @@ def nodes_after_spawn(context):
             package=PACKAGE, executable='smart_navigation', name='smart_navigation',
             parameters=[{'use_sim_time': True}], additional_env=SYSTEM_PYTHON,
             output='screen', emulate_tty=True))
+        referee_arguments = ['--layout-file', layout_file]
+        result_file = LaunchConfiguration('result_file').perform(context)
+        if result_file:
+            referee_arguments += ['--result-file', result_file]
+        followers.append(Node(
+            package=PACKAGE, executable='referee', name='referee',
+            arguments=referee_arguments, parameters=[{'use_sim_time': True}],
+            additional_env=SYSTEM_PYTHON, output='screen', emulate_tty=True))
     if not followers:
         return [spawn_boxes]
     return [spawn_boxes, RegisterEventHandler(OnProcessExit(
@@ -68,6 +77,8 @@ def generate_launch_description():
                               description='Start smart_navigation.'),
         DeclareLaunchArgument('layout_file', default_value='/tmp/fastrobox_layout.yaml',
                               description='Where spawn_boxes records the layout.'),
+        DeclareLaunchArgument('result_file', default_value='',
+                              description="Where the referee writes its verdict as JSON."),
     ]
 
     gazebo_args = ['ign', 'gazebo', '-r', '-v', '2']

@@ -27,6 +27,7 @@ setup(
     entry_points={
         'console_scripts': [
             'smart_navigation = fastrobox_sim.smart_navigation:main',
+            'referee = fastrobox_sim.referee:main',
             'spawn_boxes = fastrobox_sim.spawn_boxes:main',
         ],
     },
