@@ -134,3 +134,231 @@ def find_finish_row(bgr: np.ndarray) -> Optional[int]:
     mask = _clean(cv2.inRange(hsv, FINISH_LOWER, FINISH_UPPER))
     rows = np.nonzero(np.count_nonzero(mask, axis=1) >= FINISH_MIN_ROW_COVERAGE * mask.shape[1])[0]
     return int(rows[-1]) if rows.size else None
+
+
+# ---------------------------------------------------------------------- control
+
+
+FORWARD = 'FORWARD'
+TURN_LEFT = 'TURN_LEFT'
+TURN_RIGHT = 'TURN_RIGHT'
+FINISHED = 'FINISHED'
+
+# Sightings further than this are too rough to act on, and need no action yet.
+MAX_SIGHTING_RANGE = 1.1
+# A sighting this close to a remembered box of the same colour is the same box.
+SAME_BOX_RADIUS = 0.15
+BOX_HALF_DEPTH = 0.025
+
+# Robot centre to box centre, across the track, when passing: half box 0.025 + half
+# robot 0.075 + 0.04 of air. A little under box_layout.PASS_CLEARANCE, which layouts
+# are generated to allow.
+PASS_CLEARANCE = 0.14
+# Robot centre to centre line. Wall face 0.5 - half robot 0.075 - 0.035 of air.
+LANE_LIMIT = 0.39
+# A box starts to constrain the lane this far ahead of the robot's centre, and stops
+# once the tail is past it: half robot length 0.095 + half box 0.025 + 0.04 of air.
+LOOKAHEAD = 0.70
+RELEASE_BEHIND = 0.16
+# Base centre past the finish line when stopping: inside the zone, with the nose
+# (0.095 ahead) about 3 cm short of the end wall.
+STOP_PAST_LINE = 0.07
+# Finish line sightings are only trusted within this range.
+MAX_FINISH_RANGE = 1.0
+
+LANE_GAIN = 4.0
+MAX_HEADING = 0.65
+HEADING_GAIN = 3.5
+MAX_TURN_RATE = 1.5
+ON_LANE_TOLERANCE = 0.015
+MIN_SPEED_SCALE = 0.5
+
+
+@dataclass
+class TrackedBox:
+    """A box remembered in the odom frame."""
+
+    color: str
+    x: float
+    y: float
+
+
+def wrap_angle(angle: float) -> float:
+    return math.atan2(math.sin(angle), math.cos(angle))
+
+
+class Navigator:
+    """Remembers what the camera has seen and decides how to steer. No ROS in here."""
+
+    def __init__(self, speed: float = 0.18):
+        self.speed = speed
+        self.boxes: List[TrackedBox] = []
+        self.finish_x: Optional[float] = None
+        self.finished = False
+
+    def observe_box(self, color: str, forward: float, left: float,
+                    x: float, y: float, yaw: float) -> None:
+        """Record a box sighted at (forward, left) of its near edge from pose (x, y, yaw)."""
+        if math.hypot(forward, left) > MAX_SIGHTING_RANGE:
+            return
+        forward += BOX_HALF_DEPTH
+        box_x = x + forward * math.cos(yaw) - left * math.sin(yaw)
+        box_y = y + forward * math.sin(yaw) + left * math.cos(yaw)
+        for box in self.boxes:
+            if box.color == color and math.hypot(box.x - box_x, box.y - box_y) < SAME_BOX_RADIUS:
+                # Sightings improve as the robot closes in, so the latest counts most.
+                box.x += 0.5 * (box_x - box.x)
+                box.y += 0.5 * (box_y - box.y)
+                return
+        self.boxes.append(TrackedBox(color, box_x, box_y))
+
+    def observe_finish(self, forward: float, x: float, yaw: float) -> None:
+        """Record the finish line, sighted `forward` of the robot along its heading."""
+        if forward <= MAX_FINISH_RANGE:
+            self.finish_x = x + forward * math.cos(yaw)
+
+    def allowed_lane(self, x: float) -> Tuple[float, float]:
+        """
+        Return the y range the boxes in reach allow, nearest box first.
+
+        A red box raises the lowest y allowed (robot to its left) and a green box lowers
+        the highest (robot to its right), so red can only ever cause a left turn and
+        green a right one. If a further box asks for what a nearer one forbids, the
+        nearer one wins and the further one waits its turn.
+        """
+        low, high = -LANE_LIMIT, LANE_LIMIT
+        nearby = [box for box in self.boxes if -RELEASE_BEHIND <= box.x - x <= LOOKAHEAD]
+        for box in sorted(nearby, key=lambda item: item.x):
+            if box.color == RED:
+                needed = min(box.y + PASS_CLEARANCE, LANE_LIMIT)
+                if needed > high:
+                    break
+                low = max(low, needed)
+            else:
+                needed = max(box.y - PASS_CLEARANCE, -LANE_LIMIT)
+                if needed < low:
+                    break
+                high = min(high, needed)
+        return low, high
+
+    def command(self, x: float, y: float, yaw: float) -> Tuple[float, float, str]:
+        """Return (linear speed, turn rate, state) for the robot's pose."""
+        if self.finished or (self.finish_x is not None and x >= self.finish_x + STOP_PAST_LINE):
+            self.finished = True
+            return 0.0, 0.0, FINISHED
+
+        low, high = self.allowed_lane(x)
+        lane = min(max(y, low), high)
+        lane_error = lane - y
+        heading = max(-MAX_HEADING, min(MAX_HEADING, LANE_GAIN * lane_error))
+        heading_error = wrap_angle(heading - yaw)
+        turn = max(-MAX_TURN_RATE, min(MAX_TURN_RATE, HEADING_GAIN * heading_error))
+        speed_scale = max(MIN_SPEED_SCALE, 1.0 - abs(heading_error))
+
+        if lane_error > ON_LANE_TOLERANCE:
+            state = TURN_LEFT
+        elif lane_error < -ON_LANE_TOLERANCE:
+            state = TURN_RIGHT
+        else:
+            state = FORWARD
+        return self.speed * speed_scale, turn, state
+
+
+def main(args=None):
+    # Imported here so that the logic above can be tested without a ROS environment.
+    from cv_bridge import CvBridge
+    from geometry_msgs.msg import Twist
+    from nav_msgs.msg import Odometry
+    import rclpy
+    from rclpy.node import Node
+    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from sensor_msgs.msg import Image
+    from std_msgs.msg import String
+
+    class SmartNavigation(Node):
+
+        def __init__(self):
+            super().__init__('smart_navigation')
+            self.declare_parameter('linear_speed', 0.18)
+            self.navigator = Navigator(self.get_parameter('linear_speed').value)
+            self.camera = CameraModel()
+            self.bridge = CvBridge()
+            self.pose = None
+            self.state = None
+            self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+            self.debug_pub = self.create_publisher(Image, '/nav/debug_image', 1)
+            # Latched, so that a late subscriber still learns the robot has finished.
+            self.state_pub = self.create_publisher(
+                String, '/nav/state',
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            self.create_subscription(Odometry, '/odom', self.on_odom, 20)
+            self.create_subscription(Image, '/camera/image_raw', self.on_image, 1)
+            self.get_logger().info('Waiting for the camera and odometry.')
+
+        def on_odom(self, message):
+            pose = message.pose.pose
+            yaw = 2.0 * math.atan2(pose.orientation.z, pose.orientation.w)
+            self.pose = (pose.position.x, pose.position.y, wrap_angle(yaw))
+
+        def on_image(self, message):
+            if self.pose is None:
+                return
+            x, y, yaw = self.pose
+            frame = self.bridge.imgmsg_to_cv2(message, desired_encoding='bgr8')
+            sightings = find_boxes(frame)
+            for sighting in sightings:
+                point = self.camera.floor_point(sighting.column, sighting.row)
+                if point is not None:
+                    self.navigator.observe_box(sighting.color, point[0], point[1], x, y, yaw)
+            finish_row = find_finish_row(frame)
+            # At the very bottom of the frame the near edge has gone out of view, so
+            # the row no longer marks the line: keep the last estimate.
+            if finish_row is not None and finish_row < frame.shape[0] - 3:
+                point = self.camera.floor_point(frame.shape[1] / 2, finish_row)
+                if point is not None:
+                    self.navigator.observe_finish(point[0], x, yaw)
+
+            speed, turn, state = self.navigator.command(x, y, yaw)
+            twist = Twist()
+            twist.linear.x = speed
+            twist.angular.z = turn
+            self.cmd_pub.publish(twist)
+            self.report(state, x, y)
+            if self.debug_pub.get_subscription_count() > 0:
+                self.publish_debug(frame, sightings, finish_row, state, message.header)
+
+        def report(self, state, x, y):
+            if state == self.state:
+                return
+            self.state = state
+            self.state_pub.publish(String(data=state))
+            self.get_logger().info(f'{state} at x={x:.2f} y={y:+.2f}, '
+                                   f'{len(self.navigator.boxes)} boxes seen')
+
+        def publish_debug(self, frame, sightings, finish_row, state, header):
+            shown = frame.copy()
+            for sighting in sightings:
+                color = (0, 0, 255) if sighting.color == RED else (0, 255, 0)
+                cv2.circle(shown, (int(sighting.column), int(sighting.row)), 6, color, 2)
+            if finish_row is not None:
+                cv2.line(shown, (0, finish_row), (shown.shape[1], finish_row), (255, 0, 255), 2)
+            cv2.putText(shown, state, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
+            debug = self.bridge.cv2_to_imgmsg(shown, encoding='bgr8')
+            debug.header = header
+            self.debug_pub.publish(debug)
+
+    rclpy.init(args=args)
+    node = SmartNavigation()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if rclpy.ok():
+            node.cmd_pub.publish(Twist())
+            node.destroy_node()
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

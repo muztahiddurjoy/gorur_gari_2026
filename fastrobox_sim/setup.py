@@ -26,6 +26,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'smart_navigation = fastrobox_sim.smart_navigation:main',
             'spawn_boxes = fastrobox_sim.spawn_boxes:main',
         ],
     },
