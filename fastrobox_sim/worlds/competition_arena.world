@@ -1,0 +1,268 @@
+<?xml version="1.0" ?>
+<!--
+  BUBT FastRobox 1.0 Smart Navigation Challenge: the arena.
+
+  The track runs along +x. x = 0 is the back of the start zone, x = 3 the end of the
+  finish zone, and y = 0 the centre line, so the inner wall faces are at x = 0, x = 3
+  and y = +-0.5. The obstacles are not here: spawn_boxes places a new random set on
+  each run.
+
+  The colours are chosen for the camera, not for looks. smart_navigation.py looks for
+  saturated, bright red and green, so nothing fixed in the arena may be either:
+    - the start zone is light green, too pale (low saturation) to pass as a box;
+    - the finish zone is dark green checks on white, too dark to pass as a box and
+      distinct enough to be detected as the finish;
+    - the walls are a blue-grey and the floor a neutral grey.
+-->
+<sdf version="1.8">
+  <world name="competition_arena">
+
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics" />
+    <!-- Serves /world/competition_arena/create, which spawn_boxes calls. -->
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands" />
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster" />
+    <!-- Renders the robot's camera. -->
+    <plugin filename="ignition-gazebo-sensors-system"
+            name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <gravity>0 0 -9.8</gravity>
+
+    <scene>
+      <ambient>0.85 0.85 0.85 1</ambient>
+      <background>0.80 0.82 0.86 1</background>
+      <shadows>false</shadows>
+    </scene>
+
+    <!-- Bright and near-vertical with shadows off, so a box's colour does not depend
+         on where it stands or which way the robot sees it from. -->
+    <light type="directional" name="sun">
+      <cast_shadows>false</cast_shadows>
+      <pose>1.5 0 8 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <direction>-0.1 0.1 -0.95</direction>
+    </light>
+
+    <!-- Everything outside the track. -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>20 20</size></plane>
+          </geometry>
+          <surface>
+            <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>20 20</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.25 0.25 0.27 1</ambient>
+            <diffuse>0.25 0.25 0.27 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- The track surface and its zones are visual only, stacked a millimetre apart
+         to avoid z-fighting. The robot drives on the ground plane's collision. -->
+    <model name="track_surface">
+      <static>true</static>
+      <link name="link">
+        <visual name="floor">
+          <pose>1.5 0 0.0005 0 0 0</pose>
+          <geometry><box><size>3.0 1.0 0.001</size></box></geometry>
+          <material>
+            <ambient>0.62 0.62 0.62 1</ambient>
+            <diffuse>0.62 0.62 0.62 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <!-- Start: the first 0.2 m, light green. -->
+        <visual name="start_zone">
+          <pose>0.1 0 0.0015 0 0 0</pose>
+          <geometry><box><size>0.2 1.0 0.001</size></box></geometry>
+          <material>
+            <ambient>0.70 0.95 0.70 1</ambient>
+            <diffuse>0.70 0.95 0.70 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <!-- Finish: the last 0.2 m, white under dark green 0.1 m checks. -->
+        <visual name="finish_zone">
+          <pose>2.9 0 0.001 0 0 0</pose>
+          <geometry><box><size>0.2 1.0 0.001</size></box></geometry>
+          <material>
+            <ambient>0.95 0.95 0.95 1</ambient>
+            <diffuse>0.95 0.95 0.95 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_0">
+          <pose>2.85 -0.45 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_1">
+          <pose>2.85 -0.25 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_2">
+          <pose>2.85 -0.05 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_3">
+          <pose>2.85 0.15 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_4">
+          <pose>2.85 0.35 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_5">
+          <pose>2.95 -0.35 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_6">
+          <pose>2.95 -0.15 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_7">
+          <pose>2.95 0.05 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_8">
+          <pose>2.95 0.25 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+        <visual name="check_9">
+          <pose>2.95 0.45 0.0015 0 0 0</pose>
+          <geometry><box><size>0.1 0.1 0.001</size></box></geometry>
+          <material>
+            <ambient>0.02 0.28 0.10 1</ambient>
+            <diffuse>0.02 0.28 0.10 1</diffuse>
+            <specular>0 0 0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Walls 0.2 m high, 0.02 m thick, outside the 3.0 x 1.0 m track. -->
+    <model name="walls">
+      <static>true</static>
+      <link name="link">
+        <collision name="wall_start_collision">
+          <pose>-0.01 0 0.1 0 0 0</pose>
+          <geometry><box><size>0.02 1.04 0.2</size></box></geometry>
+        </collision>
+        <visual name="wall_start_visual">
+          <pose>-0.01 0 0.1 0 0 0</pose>
+          <geometry><box><size>0.02 1.04 0.2</size></box></geometry>
+          <material>
+            <ambient>0.55 0.60 0.72 1</ambient>
+            <diffuse>0.55 0.60 0.72 1</diffuse>
+            <specular>0.02 0.02 0.02 1</specular>
+          </material>
+        </visual>
+        <collision name="wall_finish_collision">
+          <pose>3.01 0 0.1 0 0 0</pose>
+          <geometry><box><size>0.02 1.04 0.2</size></box></geometry>
+        </collision>
+        <visual name="wall_finish_visual">
+          <pose>3.01 0 0.1 0 0 0</pose>
+          <geometry><box><size>0.02 1.04 0.2</size></box></geometry>
+          <material>
+            <ambient>0.55 0.60 0.72 1</ambient>
+            <diffuse>0.55 0.60 0.72 1</diffuse>
+            <specular>0.02 0.02 0.02 1</specular>
+          </material>
+        </visual>
+        <collision name="wall_left_collision">
+          <pose>1.5 0.51 0.1 0 0 0</pose>
+          <geometry><box><size>3.0 0.02 0.2</size></box></geometry>
+        </collision>
+        <visual name="wall_left_visual">
+          <pose>1.5 0.51 0.1 0 0 0</pose>
+          <geometry><box><size>3.0 0.02 0.2</size></box></geometry>
+          <material>
+            <ambient>0.55 0.60 0.72 1</ambient>
+            <diffuse>0.55 0.60 0.72 1</diffuse>
+            <specular>0.02 0.02 0.02 1</specular>
+          </material>
+        </visual>
+        <collision name="wall_right_collision">
+          <pose>1.5 -0.51 0.1 0 0 0</pose>
+          <geometry><box><size>3.0 0.02 0.2</size></box></geometry>
+        </collision>
+        <visual name="wall_right_visual">
+          <pose>1.5 -0.51 0.1 0 0 0</pose>
+          <geometry><box><size>3.0 0.02 0.2</size></box></geometry>
+          <material>
+            <ambient>0.55 0.60 0.72 1</ambient>
+            <diffuse>0.55 0.60 0.72 1</diffuse>
+            <specular>0.02 0.02 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
