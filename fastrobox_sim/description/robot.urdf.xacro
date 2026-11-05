@@ -1,0 +1,203 @@
+<?xml version="1.0"?>
+<!--
+  FastRobox robot: four-wheel skid-steer with a forward camera on a mast.
+
+  Overall 0.19 m long x 0.15 m wide. The rules ask for about 0.2 m, and the start and
+  finish zones are exactly 0.2 m long, so a robot of exactly 0.2 m could only stand in
+  one by touching the end wall. base_link is on the ground, midway between the axles.
+
+  The camera constants are repeated as defaults in smart_navigation.py, which needs
+  them to turn pixels into floor positions. test_description.py keeps the two equal.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fastrobox">
+
+    <xacro:property name="chassis_length" value="0.19" />
+    <xacro:property name="chassis_width" value="0.104" />
+    <xacro:property name="chassis_height" value="0.05" />
+    <xacro:property name="chassis_bottom" value="0.02" />
+    <xacro:property name="chassis_mass" value="0.8" />
+
+    <xacro:property name="wheel_radius" value="0.033" />
+    <xacro:property name="wheel_width" value="0.02" />
+    <xacro:property name="wheel_mass" value="0.05" />
+    <xacro:property name="wheel_x" value="0.06" />
+    <!-- Wheel centres. The outer tyre faces come to +-0.075. -->
+    <xacro:property name="wheel_y" value="0.065" />
+    <!-- What the DiffDrive plugin divides by. A skid-steer's wheels must slip sideways
+         to turn, so it yaws slower than its geometric track says. This is the measured
+         effective value (see the README), so /odom and commanded rates hold true. -->
+    <xacro:property name="effective_track" value="0.13" />
+
+    <xacro:property name="camera_x" value="0.08" />
+    <xacro:property name="camera_z" value="0.16" />
+    <xacro:property name="camera_pitch" value="0.35" />
+    <xacro:property name="camera_hfov" value="1.3963" />
+    <xacro:property name="camera_width" value="640" />
+    <xacro:property name="camera_height" value="480" />
+
+    <xacro:macro name="box_inertia" params="m x y z">
+        <inertial>
+            <mass value="${m}" />
+            <inertia ixx="${m*(y*y+z*z)/12}" ixy="0" ixz="0"
+                     iyy="${m*(x*x+z*z)/12}" iyz="0"
+                     izz="${m*(x*x+y*y)/12}" />
+        </inertial>
+    </xacro:macro>
+
+    <material name="chassis_blue"><color rgba="0.10 0.20 0.55 1" /></material>
+    <material name="tyre_black"><color rgba="0.05 0.05 0.05 1" /></material>
+    <material name="camera_dark"><color rgba="0.15 0.15 0.15 1" /></material>
+
+    <link name="base_link" />
+
+    <joint name="chassis_joint" type="fixed">
+        <parent link="base_link" />
+        <child link="chassis" />
+        <origin xyz="0 0 ${chassis_bottom + chassis_height/2}" />
+    </joint>
+
+    <link name="chassis">
+        <visual>
+            <geometry><box size="${chassis_length} ${chassis_width} ${chassis_height}" /></geometry>
+            <material name="chassis_blue" />
+        </visual>
+        <collision>
+            <geometry><box size="${chassis_length} ${chassis_width} ${chassis_height}" /></geometry>
+        </collision>
+        <xacro:box_inertia m="${chassis_mass}" x="${chassis_length}"
+                           y="${chassis_width}" z="${chassis_height}" />
+    </link>
+
+    <xacro:macro name="wheel" params="name x y">
+        <joint name="${name}_joint" type="continuous">
+            <parent link="base_link" />
+            <child link="${name}" />
+            <origin xyz="${x} ${y} ${wheel_radius}" rpy="${-pi/2} 0 0" />
+            <axis xyz="0 0 1" />
+        </joint>
+        <link name="${name}">
+            <visual>
+                <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}" /></geometry>
+                <material name="tyre_black" />
+            </visual>
+            <collision>
+                <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}" /></geometry>
+            </collision>
+            <inertial>
+                <mass value="${wheel_mass}" />
+                <inertia ixx="${wheel_mass*(3*wheel_radius*wheel_radius+wheel_width*wheel_width)/12}"
+                         ixy="0" ixz="0"
+                         iyy="${wheel_mass*(3*wheel_radius*wheel_radius+wheel_width*wheel_width)/12}"
+                         iyz="0" izz="${wheel_mass*wheel_radius*wheel_radius/2}" />
+            </inertial>
+        </link>
+        <gazebo reference="${name}">
+            <mu1>1.0</mu1>
+            <mu2>1.0</mu2>
+            <minDepth>0.0002</minDepth>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:wheel name="front_left_wheel" x="${wheel_x}" y="${wheel_y}" />
+    <xacro:wheel name="front_right_wheel" x="${wheel_x}" y="${-wheel_y}" />
+    <xacro:wheel name="rear_left_wheel" x="${-wheel_x}" y="${wheel_y}" />
+    <xacro:wheel name="rear_right_wheel" x="${-wheel_x}" y="${-wheel_y}" />
+
+    <gazebo reference="chassis">
+        <mu1>0.1</mu1>
+        <mu2>0.1</mu2>
+    </gazebo>
+
+    <!-- Mast from the chassis deck up to the camera. -->
+    <joint name="mast_joint" type="fixed">
+        <parent link="chassis" />
+        <child link="mast" />
+        <origin xyz="${camera_x} 0 ${(camera_z + chassis_bottom + chassis_height)/2 - (chassis_bottom + chassis_height/2)}" />
+    </joint>
+
+    <link name="mast">
+        <visual>
+            <geometry>
+                <box size="0.012 0.012 ${camera_z - chassis_bottom - chassis_height}" />
+            </geometry>
+            <material name="camera_dark" />
+        </visual>
+        <xacro:box_inertia m="0.02" x="0.012" y="0.012"
+                           z="${camera_z - chassis_bottom - chassis_height}" />
+    </link>
+
+    <!-- 0.16 m up and tilted 20 degrees down, so the bottom of the frame meets the floor
+         about 0.11 m ahead of the nose and the top of the frame still shows the far end
+         of the track. -->
+    <joint name="camera_joint" type="fixed">
+        <parent link="base_link" />
+        <child link="camera_link" />
+        <origin xyz="${camera_x} 0 ${camera_z}" rpy="0 ${camera_pitch} 0" />
+    </joint>
+
+    <link name="camera_link">
+        <visual>
+            <origin xyz="-0.01 0 0" />
+            <geometry><box size="0.02 0.05 0.02" /></geometry>
+            <material name="camera_dark" />
+        </visual>
+        <xacro:box_inertia m="0.03" x="0.02" y="0.05" z="0.02" />
+    </link>
+
+    <gazebo reference="camera_link">
+        <sensor name="camera" type="camera">
+            <topic>camera/image_raw</topic>
+            <ignition_frame_id>camera_link</ignition_frame_id>
+            <update_rate>30</update_rate>
+            <always_on>1</always_on>
+            <visualize>false</visualize>
+            <camera>
+                <horizontal_fov>${camera_hfov}</horizontal_fov>
+                <image>
+                    <width>${camera_width}</width>
+                    <height>${camera_height}</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.02</near>
+                    <far>10.0</far>
+                </clip>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.005</stddev>
+                </noise>
+            </camera>
+        </sensor>
+    </gazebo>
+
+    <gazebo>
+        <!-- /cmd_vel in, /odom out. All four wheels are driven, two to a side. -->
+        <plugin filename="ignition-gazebo-diff-drive-system"
+                name="ignition::gazebo::systems::DiffDrive">
+            <left_joint>front_left_wheel_joint</left_joint>
+            <left_joint>rear_left_wheel_joint</left_joint>
+            <right_joint>front_right_wheel_joint</right_joint>
+            <right_joint>rear_right_wheel_joint</right_joint>
+            <wheel_separation>${effective_track}</wheel_separation>
+            <wheel_radius>${wheel_radius}</wheel_radius>
+            <odom_publish_frequency>50</odom_publish_frequency>
+            <topic>/cmd_vel</topic>
+            <odom_topic>/odom</odom_topic>
+            <frame_id>odom</frame_id>
+            <child_frame_id>base_link</child_frame_id>
+        </plugin>
+        <plugin filename="ignition-gazebo-joint-state-publisher-system"
+                name="ignition::gazebo::systems::JointStatePublisher">
+            <topic>/joint_states</topic>
+        </plugin>
+        <!-- True pose in the world, for the referee only. The robot does not use it. -->
+        <plugin filename="ignition-gazebo-odometry-publisher-system"
+                name="ignition::gazebo::systems::OdometryPublisher">
+            <odom_frame>world</odom_frame>
+            <robot_base_frame>base_link</robot_base_frame>
+            <odom_topic>/ground_truth</odom_topic>
+            <odom_publish_frequency>50</odom_publish_frequency>
+        </plugin>
+    </gazebo>
+</robot>
