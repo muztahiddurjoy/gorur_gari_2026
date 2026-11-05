@@ -2,7 +2,8 @@ import math
 
 from fastrobox_sim import box_layout
 from fastrobox_sim.smart_navigation import (
-    DeadReckoner, FINISHED, FORWARD, GREEN, LANE_LIMIT, MAX_SIGHTING_RANGE, Navigator, PASS_CLEARANCE, RED,
+    DeadReckoner, FINISHED, FORWARD, GREEN, LANE_LIMIT, MAX_SIGHTING_RANGE, Navigator,
+    PASS_CLEARANCE, RED,
     STOP_PAST_LINE, TURN_LEFT, TURN_RIGHT,
 )
 import pytest
