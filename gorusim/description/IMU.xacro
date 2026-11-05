@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!--
+  Bosch BNO055, on the GY-BNO055 breakout where the CAD has it: on the perfboard
+  stack on top of the car, near the middle of the wheelbase.
+
+  The firmware samples it every 10 ms (IMU_SAMPLE_INTERVAL_MS), hence 100 Hz. On
+  the real car the chip's fused yaw reaches ROS as degrees, growing clockwise,
+  zero at power-on. sim_mcu does that conversion from this sensor's quaternion,
+  the way firmware/lib/heading does from Adafruit_BNO055.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
+
+    <joint name="base_to_imu" type="fixed">
+        <parent link="base_link" />
+        <child link="imu_link" />
+        <origin xyz="${imu_link_xyz}" />
+    </joint>
+
+    <link name="imu_link">
+        <xacro:imu_link_cad />
+    </link>
+
+    <gazebo reference="imu_link">
+        <disableFixedJointLumping>true</disableFixedJointLumping>
+
+        <sensor name="imu" type="imu">
+            <topic>imu</topic>
+            <ignition_frame_id>imu_link</ignition_frame_id>
+            <update_rate>100</update_rate>
+            <always_on>1</always_on>
+            <visualize>false</visualize>
+            <imu>
+                <!-- Small on purpose: the BNO055 runs Bosch's own fusion and reports
+                     a stable yaw. -->
+                <angular_velocity>
+                    <x><noise type="gaussian"><mean>0.0</mean><stddev>0.001</stddev></noise></x>
+                    <y><noise type="gaussian"><mean>0.0</mean><stddev>0.001</stddev></noise></y>
+                    <z><noise type="gaussian"><mean>0.0</mean><stddev>0.001</stddev></noise></z>
+                </angular_velocity>
+                <linear_acceleration>
+                    <x><noise type="gaussian"><mean>0.0</mean><stddev>0.01</stddev></noise></x>
+                    <y><noise type="gaussian"><mean>0.0</mean><stddev>0.01</stddev></noise></y>
+                    <z><noise type="gaussian"><mean>0.0</mean><stddev>0.01</stddev></noise></z>
+                </linear_acceleration>
+            </imu>
+        </sensor>
+    </gazebo>
+</robot>

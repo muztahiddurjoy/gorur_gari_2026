@@ -1,0 +1,126 @@
+<?xml version="1.0"?>
+<!--
+  Actuation, joint feedback and ground truth.
+
+    /gorubot/motor_target   rad/s   rear axle, the speed the motor heads for
+    /gorubot/steer_left     rad     front left kingpin, + is LEFT
+    /gorubot/steer_right    rad     front right kingpin, + is LEFT
+
+  sim_mcu owns all three, the way the ESP32 and the linkage do on the car.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
+
+    <!-- ══ Drive motor: JGA25-370 through the TB6612FNG ══════════════
+         A brushed DC motor's torque falls in a straight line with speed:
+
+             torque = stall_torque * (duty - speed / no_load_speed)
+
+         which is a proportional controller on speed, with gain
+         stall_torque / no_load_speed and target duty * no_load_speed. So the
+         controller below is the motor equation, evaluated at the physics rate
+         rather than a tuning: nothing here chases a setpoint harder than the
+         motor could, and the wheels really do slow under load. It also covers
+         firmware brake(), which shorts the windings: duty 0, target 0.
+
+         THE MOTOR'S NUMBERS ARE TYPICAL, NOT MEASURED. The engineering journal
+         lists stall torque and no-load speed as [NEEDS DATA]. Worked from what
+         the repo does record:
+           ratio    ~6.9:1   303 ticks per wheel rev (sim_hardware.yaml) / 44 edges
+           no load  98 rad/s  7000 rpm 370 motor at 11.1 V (3S, the pack in the
+                              CAD), through that ratio and the 1:1 spur gears.
+                              That is 2.6 m/s at full duty, or 1.0 m/s at wire
+                              throttle 100, which agrees with the team reading
+                              linear.x as about m/s.
+           stall    0.20 N m  12 V / 628 rad/s = 0.019 N m/A at 2 A, through the
+                              same ratio at 85% efficiency
+           friction 0.015 N m  Gearbox and bearings, rolling: wire 19. The repo pins it
+                              from both sides: bot_config runs linear.x 0.40 as a rolling
+                              creep speed, so rolling friction sits well under wire 40,
+                              while the journal has standing starts "sometimes just
+                              hummed in place" at 0.25-0.45 until mcu_bridge doubled them.
+                              Static friction is the higher of the two, so a joint with one
+                              friction value cannot show both: sim_mcu holds a stopped axle
+                              below motor_breakaway_duty (sim_hardware.yaml), wire 38.
+         Run the bench test the journal asks for and replace these. -->
+    <xacro:property name="motor_stall_torque" value="0.20" />
+    <xacro:property name="motor_no_load_speed" value="98.3" />
+    <xacro:property name="axle_friction" value="0.015" />
+    <xacro:property name="axle_damping" value="0.00002" />
+
+    <gazebo>
+        <plugin filename="ignition-gazebo-joint-controller-system"
+                name="ignition::gazebo::systems::JointController">
+            <joint_name>rear_axle_joint</joint_name>
+            <topic>/gorubot/motor_target</topic>
+            <use_force_commands>true</use_force_commands>
+            <p_gain>${motor_stall_torque / motor_no_load_speed}</p_gain>
+            <i_gain>0.0</i_gain>
+            <d_gain>0.0</d_gain>
+            <cmd_max>${motor_stall_torque}</cmd_max>
+            <cmd_min>${-motor_stall_torque}</cmd_min>
+        </plugin>
+    </gazebo>
+
+    <!-- ══ Steering ══════════════════════════════════════════════════
+         The MG996R and the linkage are modelled upstream in sim_mcu (slew rate,
+         horn travel, tie bar geometry), so these two only have to hold each knuckle
+         on the angle the linkage produced, however the tyre is loaded. cmd_max is the
+         servo's 10 kg cm stall torque. The knuckle and wheel are only about 2e-5 kg m2
+         about the kingpin, so the gains stay well under what a 1 ms step can integrate:
+         high ones ring against the tyre contact and leave the wheel short of target.
+
+         Do NOT set use_velocity_commands. In Fortress that mode feeds the position
+         error back with the wrong sign, and the kingpins run away to their stops
+         while the command topic still reads correct. -->
+    <xacro:macro name="steer_controller" params="joint topic">
+        <gazebo>
+            <plugin filename="ignition-gazebo-joint-position-controller-system"
+                    name="ignition::gazebo::systems::JointPositionController">
+                <joint_name>${joint}</joint_name>
+                <topic>${topic}</topic>
+                <p_gain>6.0</p_gain>
+                <i_gain>3.0</i_gain>
+                <d_gain>0.02</d_gain>
+                <i_max>0.5</i_max>
+                <i_min>-0.5</i_min>
+                <cmd_max>1.0</cmd_max>
+                <cmd_min>-1.0</cmd_min>
+            </plugin>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:steer_controller joint="front_left_kingpin" topic="/gorubot/steer_left" />
+    <xacro:steer_controller joint="front_right_kingpin" topic="/gorubot/steer_right" />
+
+    <!-- ══ Joint feedback ════════════════════════════════════════════
+         sim_mcu integrates the axle into encoder ticks, and hands robot_state_publisher
+         a rate-limited copy so the wheels and knuckles move in RViz. -->
+    <gazebo>
+        <plugin filename="ignition-gazebo-joint-state-publisher-system"
+                name="ignition::gazebo::systems::JointStatePublisher">
+            <topic>/gorubot/joint_states</topic>
+            <joint_name>rear_axle_joint</joint_name>
+            <joint_name>front_left_kingpin</joint_name>
+            <joint_name>front_right_kingpin</joint_name>
+            <joint_name>front_left_wheel_joint</joint_name>
+            <joint_name>front_right_wheel_joint</joint_name>
+        </plugin>
+    </gazebo>
+
+    <!-- ══ Ground truth ══════════════════════════════════════════════
+         For scoring how far vector_odom has drifted. tf_topic is parked on a topic
+         nobody bridges: odom -> base_link belongs to vector_odom, and a perfect one
+         from the simulator would hide the very drift the sim exists to expose. -->
+    <gazebo>
+        <plugin filename="ignition-gazebo-odometry-publisher-system"
+                name="ignition::gazebo::systems::OdometryPublisher">
+            <odom_frame>odom</odom_frame>
+            <robot_base_frame>base_link</robot_base_frame>
+            <odom_topic>/gorubot/ground_truth</odom_topic>
+            <tf_topic>/gorubot/ground_truth_tf</tf_topic>
+            <odom_publish_frequency>50</odom_publish_frequency>
+            <dimensions>2</dimensions>
+        </plugin>
+    </gazebo>
+
+</robot>

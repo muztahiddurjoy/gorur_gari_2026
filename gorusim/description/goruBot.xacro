@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!--
+  ════════════════════════════════════════════════════════════════════
+  goruBot — the Gorur Gari 2026 car, as built.
+
+  Dimensions, masses, inertias and the visual meshes all come from
+  CAD/WRO_Bot_v2.step through tools/extract_cad.py, which writes
+  cad_generated.xacro (included below) and config/cad_geometry.yaml.
+  Nothing geometric is typed in here: to change the car, change the CAD
+  and re-run the tool.
+
+  base_link is the CAD origin: on the ground, midway between the axles,
+  on the centreline. REP-103: +X forward, +Y left, +Z up.
+
+  Target simulator: Ignition Gazebo Fortress (6.x), driven through
+  ros_gz_sim / ros_gz_bridge, with Ignition's own controller plugins
+  (control.xacro).
+  ════════════════════════════════════════════════════════════════════
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
+
+    <xacro:include filename="cad_generated.xacro" />
+
+    <!-- Where the tyres touch the chassis: tools/steering_lock.py.
+         The servo and linkage stop before these on the outer wheel, the
+         joint limits are here so nothing can bend the model further. -->
+    <xacro:property name="steer_stop_inner" value="${radians(39.0)}" />
+    <xacro:property name="steer_stop_outer" value="${radians(31.0)}" />
+
+    <!-- Lens height and attitude are on the CAD: the glass disc's axis
+         runs exactly along the car, so there is no tilt on the model.
+         The README mentions "a slight downward tilt" and the C920's clip
+         can be set that way; change this if the real one is tilted. -->
+    <xacro:property name="camera_pitch" value="0.0" />
+
+    <!-- control.xacro first: it holds the motor's friction, which the axle joint uses. -->
+    <xacro:include filename="control.xacro" />
+    <xacro:include filename="goruBotCore.xacro" />
+    <xacro:include filename="lidar.xacro" />
+    <xacro:include filename="IMU.xacro" />
+    <xacro:include filename="camera.xacro" />
+    <xacro:include filename="gazebo.xacro" />
+
+</robot>

@@ -1,0 +1,13 @@
+# Open Round layout: the bare mat, no pillars and no parking bay. See track.yaml
+# for what the fields mean and where the walls are.
+objects: false
+
+start:
+    nose_offset_m: 0.1205
+    pos:
+        x: 0.0
+        y: 0.0
+    angle: 0
+
+parking:
+    enabled: false

@@ -1,4 +1,6 @@
-Ran command: `source ros2_ws/install/setup.bash && timeout 90 ros2 launch lazysim open_round_sim.launch.py gui:=false rviz:=false > sim_test.log 2>&1 || true`
+> **Historical.** Written against the old `lazysim`, before `gorusim` was rebuilt from the CAD and firmware. The tick jump, the teleport on start and the towers in the open round described here no longer apply.
+
+Ran command: `source ros2_ws/install/setup.bash && timeout 90 ros2 launch gorusim open_round_sim.launch.py gui:=false rviz:=false > sim_test.log 2>&1 || true`
 Used tool: schedule
 
 I am running a 90-second headless simulation of the **open round** in the background right now. Once it finishes, I'll analyze the logs to break down its lap times, cornering efficiency, homing accuracy, and what we can tune to improve it!
@@ -6,8 +8,8 @@ I am running a 90-second headless simulation of the **open round** in the backgr
 Used tool: manage_task
 Viewed sim_test.log:1-200
 Used tool: manage_task
-Ran command: `pkill -f "ros2 launch lazysim"; pkill -f "ign gazebo"`
-Ran command: `source ros2_ws/install/setup.bash && timeout 70 ros2 launch lazysim open_round_sim.launch.py gui:=false rviz:=false > sim_test3.log 2>&1 || true`
+Ran command: `pkill -f "ros2 launch gorusim"; pkill -f "ign gazebo"`
+Ran command: `source ros2_ws/install/setup.bash && timeout 70 ros2 launch gorusim open_round_sim.launch.py gui:=false rviz:=false > sim_test3.log 2>&1 || true`
 Used tool: schedule
 Viewed sim_test3.log:1-100
 Used tool: manage_task
@@ -24,7 +26,7 @@ Searched for "lap_counter"
 Searched for "=== LAP"
 Ran command: `tail -n 20 sim_test3.log`
 
-I ran a headless open round test (`ros2 launch lazysim open_round_sim.launch.py`) for ~70 seconds and captured the entire telemetry stream. 
+I ran a headless open round test (`ros2 launch gorusim open_round_sim.launch.py`) for ~70 seconds and captured the entire telemetry stream. 
 
 Here is a detailed breakdown of the car's behavior and the issues that occurred:
 

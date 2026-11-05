@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!--
+  Surface properties.
+
+  Rubber tyres on the WRO mat. The rear axle drives through this grip, the front
+  tyres corner on it, and a solid axle has to break it to get round a corner at all.
+  1.0 is typical for soft rubber on a printed mat; not measured.
+
+  The chassis slides, so scraping a wall does not stop the car dead. laser_retro on
+  every visual is what makes the car's own standoffs and connectors return an
+  intensity in the scan: Ignition reports zero for a surface without it, and
+  open_round_run drops rays at or below 0.05. The real scanner has no such blind spot.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
+
+    <xacro:macro name="tyre_surface" params="link">
+        <gazebo reference="${link}">
+            <mu1>1.0</mu1>
+            <mu2>1.0</mu2>
+            <minDepth>0.0002</minDepth>
+            <maxVel>1.0</maxVel>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:tyre_surface link="rear_axle" />
+    <xacro:tyre_surface link="front_left_wheel" />
+    <xacro:tyre_surface link="front_right_wheel" />
+
+    <gazebo reference="base_link">
+        <mu1>0.1</mu1>
+        <mu2>0.1</mu2>
+        <laserRetro>200</laserRetro>
+    </gazebo>
+    <gazebo reference="camera_link"><mu1>0.1</mu1><mu2>0.1</mu2><laserRetro>200</laserRetro></gazebo>
+    <gazebo reference="laser"><mu1>0.1</mu1><mu2>0.1</mu2></gazebo>
+
+</robot>

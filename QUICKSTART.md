@@ -191,27 +191,27 @@ ros2 run autonomy custom_disparity_extender --ros-args \
 
 ## 6. Running it in simulation (testing only)
 
-`lazysim` runs the whole stack against a simulated car, which is handy when the real one isn't on the bench. It is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and is **for testing and development purposes only** — it never takes part in a competition run.
+`gorusim` runs the whole stack against a simulated car, built from the CAD and firmware, which is handy when the real one isn't on the bench. Its track tooling is adapted from **Team LazyGo**'s simulator ([`LazyGo_WRO2025`](https://github.com/A-N-M-Noor/LazyGo_WRO2025/)) and it is **for testing and development purposes only** — it never takes part in a competition run.
 
 ```bash
 cd ~/Documents/GitHub/gorur_gari_2026
-colcon build --base-paths lazysim ros2_ws \
+colcon build --base-paths gorusim ros2_ws \
              --build-base ros2_ws/build --install-base ros2_ws/install \
              --symlink-install
 source ros2_ws/install/setup.bash
 
-ros2 launch lazysim open_round_sim.launch.py        # three laps, then home
-ros2 launch lazysim obstacle_round_sim.launch.py    # with traffic pillars
-ros2 launch lazysim sim.launch.py                   # simulator only, drive it yourself
+ros2 launch gorusim open_round_sim.launch.py        # three laps, then home
+ros2 launch gorusim obstacle_round_sim.launch.py    # with traffic pillars
+ros2 launch gorusim sim.launch.py                   # simulator only, drive it yourself
 ```
 
 There is no physical start button in sim, so trigger it over a service call:
 
 ```bash
-ros2 service call /lazybot/press_start std_srvs/srv/Trigger
+ros2 service call /gorusim/press_start std_srvs/srv/Trigger
 ```
 
-Full details, launch arguments, and the list of what is and isn't modeled are in [`lazysim/README.md`](./lazysim/README.md).
+Full details, launch arguments, and the list of what is and isn't modeled are in [`gorusim/README.md`](./gorusim/README.md).
 
 ---
 

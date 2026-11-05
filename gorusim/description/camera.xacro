@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!--
+  Logitech C920 on its fixed arm, frame origin on the lens as the CAD has it:
+  120 mm ahead of base_link, 127 mm off the ground. There is no pan servo on the
+  car (the arm is rigid and the firmware has no second servo), so nothing here moves.
+
+  HFOV comes from the code, not the datasheet: vision_node turns pixel columns into
+  bearings with camera_hfov_deg (config/vision_params.yaml), and 60 deg is also about
+  what the C920's 78 deg diagonal comes to after the 4:3 crop of 640x480.
+
+  camera_link_optical is the REP-103 optical frame (z forward, x right, y down) that
+  cv_bridge and vision_node assume. It is a pure TF frame.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
+
+    <joint name="camera_joint" type="fixed">
+        <parent link="base_link" />
+        <child link="camera_link" />
+        <origin xyz="${camera_link_xyz}" rpy="0 ${camera_pitch} 0" />
+    </joint>
+
+    <link name="camera_link">
+        <xacro:camera_link_cad />
+        <collision>
+            <origin xyz="${camera_box_xyz}" />
+            <geometry>
+                <box size="${camera_box_size}" />
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="camera_optical_joint" type="fixed">
+        <parent link="camera_link" />
+        <child link="camera_link_optical" />
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
+    </joint>
+
+    <link name="camera_link_optical" />
+
+    <gazebo reference="camera_link">
+        <disableFixedJointLumping>true</disableFixedJointLumping>
+
+        <sensor name="camera" type="camera">
+            <!-- Sits just ahead of the glass so the housing is not in frame. -->
+            <pose>0.002 0 0 0 0 0</pose>
+            <topic>camera/image_raw</topic>
+            <ignition_frame_id>camera_link_optical</ignition_frame_id>
+            <update_rate>30</update_rate>
+            <always_on>1</always_on>
+            <visualize>false</visualize>
+            <camera>
+                <horizontal_fov>${radians(60.0)}</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.02</near>
+                    <far>10.0</far>
+                </clip>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.005</stddev>
+                </noise>
+            </camera>
+        </sensor>
+    </gazebo>
+</robot>

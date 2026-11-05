@@ -178,7 +178,6 @@ def generate_launch_description():
         }],
     )
 
-<<<<<<< HEAD
     # # RPLidar C1 Node using rplidar_ros
     # rplidar_c1 = Node(
     #     package='rplidar_ros',
@@ -195,24 +194,6 @@ def generate_launch_description():
     #         'angle_compensate': True,
     #     }],
     # )
-=======
-    # RPLidar C1 Node using rplidar_ros
-    rplidar_c1 = Node(
-        package='rplidar_ros',
-        executable='rplidar_node',
-        name='rplidar_node',
-        output='screen',
-        emulate_tty=True,
-        parameters=[{
-            'channel_type': 'serial',
-            'serial_port': LaunchConfiguration('lidar_serial_port'),
-            'serial_baudrate': 460800,  # Specific baudrate required for RPLidar C1
-            'frame_id': LaunchConfiguration('lidar_frame_id'),
-            'inverted': typed('lidar_inverted', bool),
-            'angle_compensate': True,
-        }],
-    )
->>>>>>> 5e203c7 (Update LiDAR parameters and configurations for improved sensor handling and performance)
 
     open_round_run = Node(
         package='autonomy',

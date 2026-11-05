@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<!--
+  Chassis and running gear, from the CAD.
+
+       +X (forward)
+        ▲
+   ◎════╪════◎   front axle, x = +70 mm. Kingpins at y = ±29.75 mm, wheel
+        │        planes at y = ±53.5 mm: a 23.75 mm kingpin offset, so a
+        │        steered wheel swings round on an arc rather than pivoting
+        ●        on the spot.     ● = base_link, on the ground
+        │
+   ◎════╪════◎   rear axle, x = -70 mm, one solid shaft with both wheels fixed
+        │        to it and a single joint. WRO rules require the driven wheels
+                 to be coupled, so they cannot turn at different speeds and the
+                 axle scrubs through corners exactly as the real one does.
+
+  Link frames stay parallel to base_link so every sign reads the same way:
+  a positive kingpin angle steers LEFT, positive wheel rotation about +Y rolls
+  the car FORWARD.
+
+  Visuals are the full CAD meshes. Collisions are the simple solids in
+  CAD/gorusim_collision.step, dimensions off the same plates: a physics engine
+  wants convex shapes, and the mat only ever touches the tyres and the outline.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="goruBot">
+
+    <xacro:macro name="box_collision" params="xmin xmax half_y zmin zmax">
+        <collision>
+            <origin xyz="${(xmin + xmax) / 2.0} 0 ${(zmin + zmax) / 2.0}" />
+            <geometry>
+                <box size="${xmax - xmin} ${2.0 * half_y} ${zmax - zmin}" />
+            </geometry>
+        </collision>
+    </xacro:macro>
+
+    <xacro:macro name="tyre_collision" params="y length">
+        <collision>
+            <origin xyz="0 ${y} 0" rpy="${-pi / 2.0} 0 0" />
+            <geometry>
+                <cylinder radius="${wheel_radius}" length="${length}" />
+            </geometry>
+        </collision>
+    </xacro:macro>
+
+    <!-- ══ Chassis ══════════════════════════════════════════════════ -->
+    <link name="base_link">
+        <xacro:base_link_cad />
+
+        <!-- Base plate, z 6.5..11.5 mm. Waisted around the front wheels and
+             narrower behind the rear ones, in three convex pieces. -->
+        <xacro:box_collision xmin="-0.110" xmax="-0.038" half_y="0.044" zmin="0.0065" zmax="0.0115" />
+        <xacro:box_collision xmin="-0.038" xmax="0.029" half_y="0.055" zmin="0.0065" zmax="0.0115" />
+        <xacro:box_collision xmin="0.029" xmax="0.100" half_y="0.038" zmin="0.0065" zmax="0.0115" />
+        <!-- Team-name bumper, the lowest thing at the very front. -->
+        <xacro:box_collision xmin="0.096" xmax="0.103" half_y="0.0331" zmin="0.0065" zmax="0.0525" />
+        <!-- LiPo, wider than the plate's rear section and sitting proud of it. -->
+        <xacro:box_collision xmin="-0.031" xmax="-0.008" half_y="0.055" zmin="0.0115" zmax="0.0445" />
+        <!-- Second deck, z 56.5..60 mm. -->
+        <xacro:box_collision xmin="-0.110" xmax="-0.038" half_y="0.044" zmin="0.0565" zmax="0.060" />
+        <xacro:box_collision xmin="-0.038" xmax="0.029" half_y="0.055" zmin="0.0565" zmax="0.060" />
+        <!-- Third deck, z 95..98 mm, pointed at the nose. -->
+        <xacro:box_collision xmin="-0.110" xmax="-0.035" half_y="0.0485" zmin="0.095" zmax="0.098" />
+        <xacro:box_collision xmin="-0.035" xmax="0.070" half_y="0.055" zmin="0.095" zmax="0.098" />
+        <xacro:box_collision xmin="0.070" xmax="0.109" half_y="0.035" zmin="0.095" zmax="0.098" />
+    </link>
+
+    <!-- ══ Rear axle (driven, solid) ═════════════════════════════════
+         Damping and friction come from control.xacro's motor block. -->
+    <joint name="rear_axle_joint" type="continuous">
+        <parent link="base_link" />
+        <child link="rear_axle" />
+        <origin xyz="${rear_axle_xyz}" />
+        <axis xyz="0 1 0" />
+        <dynamics damping="${axle_damping}" friction="${axle_friction}" />
+    </joint>
+    <link name="rear_axle">
+        <xacro:rear_axle_cad />
+        <xacro:tyre_collision y="${rear_wheel_offset}" length="${rear_tread}" />
+        <xacro:tyre_collision y="${-rear_wheel_offset}" length="${rear_tread}" />
+    </link>
+
+    <!-- ══ Front axle (steered, free rolling on 624ZZ bearings) ═════ -->
+    <xacro:macro name="front_corner" params="side lower upper knuckle_xyz wheel_xyz">
+        <joint name="front_${side}_kingpin" type="revolute">
+            <parent link="base_link" />
+            <child link="front_${side}_knuckle" />
+            <origin xyz="${knuckle_xyz}" />
+            <axis xyz="0 0 1" />
+            <limit lower="${lower}" upper="${upper}" effort="10" velocity="12" />
+            <dynamics damping="0.002" friction="0.002" />
+        </joint>
+        <link name="front_${side}_knuckle">
+            <xacro:call macro="front_${side}_knuckle_cad" />
+        </link>
+        <joint name="front_${side}_wheel_joint" type="continuous">
+            <parent link="front_${side}_knuckle" />
+            <child link="front_${side}_wheel" />
+            <origin xyz="${wheel_xyz}" />
+            <axis xyz="0 1 0" />
+            <dynamics damping="0.00002" friction="0.0002" />
+        </joint>
+        <link name="front_${side}_wheel">
+            <xacro:call macro="front_${side}_wheel_cad" />
+            <xacro:tyre_collision y="0" length="${front_tread}" />
+        </link>
+    </xacro:macro>
+
+    <!-- The inner wheel of a turn is the one that gets furthest. -->
+    <xacro:front_corner side="left" lower="${-steer_stop_outer}" upper="${steer_stop_inner}"
+                        knuckle_xyz="${front_left_knuckle_xyz}"
+                        wheel_xyz="${front_left_wheel_joint_xyz}" />
+    <xacro:front_corner side="right" lower="${-steer_stop_inner}" upper="${steer_stop_outer}"
+                        knuckle_xyz="${front_right_knuckle_xyz}"
+                        wheel_xyz="${front_right_wheel_joint_xyz}" />
+
+</robot>
