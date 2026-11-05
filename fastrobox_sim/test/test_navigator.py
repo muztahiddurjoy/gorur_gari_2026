@@ -1,6 +1,8 @@
+import math
+
 from fastrobox_sim import box_layout
 from fastrobox_sim.smart_navigation import (
-    FINISHED, FORWARD, GREEN, LANE_LIMIT, MAX_SIGHTING_RANGE, Navigator, PASS_CLEARANCE, RED,
+    DeadReckoner, FINISHED, FORWARD, GREEN, LANE_LIMIT, MAX_SIGHTING_RANGE, Navigator, PASS_CLEARANCE, RED,
     STOP_PAST_LINE, TURN_LEFT, TURN_RIGHT,
 )
 import pytest
@@ -129,3 +131,23 @@ def test_layout_clearance_leaves_the_controller_margin():
     assert box_layout.PASS_CLEARANCE >= PASS_CLEARANCE
     limit = box_layout.TRACK_HALF_WIDTH - box_layout.ROBOT_WALL_CLEARANCE
     assert limit <= LANE_LIMIT
+
+
+def test_dead_reckoner_turns_on_the_gyro_and_moves_on_the_wheels():
+    reckoner = DeadReckoner()
+    assert not reckoner.ready
+    reckoner.update_gyro(0.0, 0.0)
+    reckoner.update_speed(0.0, 0.0)
+    assert reckoner.ready
+    reckoner.update_gyro(math.pi / 2, 1.0)
+    assert reckoner.yaw == pytest.approx(math.pi / 2)
+    reckoner.update_speed(0.2, 2.0)
+    assert reckoner.x == pytest.approx(0.0, abs=1e-9)
+    assert reckoner.y == pytest.approx(0.4)
+
+
+def test_dead_reckoner_ignores_time_going_backwards():
+    reckoner = DeadReckoner()
+    reckoner.update_gyro(1.0, 5.0)
+    reckoner.update_gyro(1.0, 4.0)
+    assert reckoner.yaw == 0.0

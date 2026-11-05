@@ -3,7 +3,7 @@
 Drive to the finish, avoiding boxes by colour: red turns left, green turns right.
 
     /camera/image_raw --> find boxes and the finish --> where they are on the floor
-    /odom ------------------------------------------> where the robot is
+    /imu (heading), /odom (speed) --------------------> where the robot is
                                                             |
                                   which lane the boxes allow, steer for it --> /cmd_vel
 
@@ -12,14 +12,16 @@ right of it (TURN_RIGHT); once it holds a lane that clears the box it straighten
 and goes on along the track. The node stops in FINISHED when the base is in the finish
 zone.
 
-/odom is not in the original brief, but the camera cannot do this alone. Turning away
-from a box and "resuming forward" on the new heading runs into a side wall; heading
-back to the track's direction needs a measure of the turn. A box also leaves the frame
-while the robot is still alongside it, so its position must be remembered.
+The IMU and /odom are not in the original brief, but the camera cannot do this alone.
+Turning away from a box and "resuming forward" on the new heading runs into a side wall;
+heading back to the track's direction needs a measure of the turn. A box also leaves the
+frame while the robot is still alongside it, so its position must be remembered. The
+heading must come from the gyro because a skid-steer turns by slipping its wheels, and
+wheel encoders cannot see that: on their own they ended one run 18 degrees and 50 cm off.
 
 Vision and control are plain classes with no ROS in them, so they can be tested without
 a simulator. Robot frame: x forward, y left. The robot must start facing along the
-track, on its centre line, since the odom frame then doubles as the track's frame.
+track, on its centre line, since its starting pose defines the frame it navigates in.
 """
 from dataclasses import dataclass
 import math
@@ -174,17 +176,46 @@ ON_LANE_TOLERANCE = 0.015
 MIN_SPEED_SCALE = 0.5
 
 
+def wrap_angle(angle: float) -> float:
+    return math.atan2(math.sin(angle), math.cos(angle))
+
+
+class DeadReckoner:
+    """Estimates the pose from starting pose, gyro rate and wheel speed."""
+
+    def __init__(self):
+        self.x = 0.0
+        self.y = 0.0
+        self.yaw = 0.0
+        self.speed = 0.0
+        self._gyro_time = None
+        self._speed_time = None
+
+    def update_gyro(self, rate: float, stamp: float) -> None:
+        if self._gyro_time is not None and stamp > self._gyro_time:
+            self.yaw = wrap_angle(self.yaw + rate * (stamp - self._gyro_time))
+        self._gyro_time = stamp
+
+    def update_speed(self, speed: float, stamp: float) -> None:
+        if self._speed_time is not None and stamp > self._speed_time:
+            step = speed * (stamp - self._speed_time)
+            self.x += step * math.cos(self.yaw)
+            self.y += step * math.sin(self.yaw)
+        self._speed_time = stamp
+        self.speed = speed
+
+    @property
+    def ready(self) -> bool:
+        return self._gyro_time is not None and self._speed_time is not None
+
+
 @dataclass
 class TrackedBox:
-    """A box remembered in the odom frame."""
+    """A box remembered in the robot's starting frame."""
 
     color: str
     x: float
     y: float
-
-
-def wrap_angle(angle: float) -> float:
-    return math.atan2(math.sin(angle), math.cos(angle))
 
 
 class Navigator:
@@ -272,7 +303,7 @@ def main(args=None):
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile
-    from sensor_msgs.msg import Image
+    from sensor_msgs.msg import Image, Imu
     from std_msgs.msg import String
 
     class SmartNavigation(Node):
@@ -283,7 +314,7 @@ def main(args=None):
             self.navigator = Navigator(self.get_parameter('linear_speed').value)
             self.camera = CameraModel()
             self.bridge = CvBridge()
-            self.pose = None
+            self.reckoner = DeadReckoner()
             self.state = None
             self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
             self.debug_pub = self.create_publisher(Image, '/nav/debug_image', 1)
@@ -291,19 +322,25 @@ def main(args=None):
             self.state_pub = self.create_publisher(
                 String, '/nav/state',
                 QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            self.create_subscription(Imu, '/imu', self.on_imu, 50)
             self.create_subscription(Odometry, '/odom', self.on_odom, 20)
             self.create_subscription(Image, '/camera/image_raw', self.on_image, 1)
-            self.get_logger().info('Waiting for the camera and odometry.')
+            self.get_logger().info('Waiting for the camera, IMU and odometry.')
+
+        @staticmethod
+        def seconds(header):
+            return header.stamp.sec + header.stamp.nanosec * 1e-9
+
+        def on_imu(self, message):
+            self.reckoner.update_gyro(message.angular_velocity.z, self.seconds(message.header))
 
         def on_odom(self, message):
-            pose = message.pose.pose
-            yaw = 2.0 * math.atan2(pose.orientation.z, pose.orientation.w)
-            self.pose = (pose.position.x, pose.position.y, wrap_angle(yaw))
+            self.reckoner.update_speed(message.twist.twist.linear.x, self.seconds(message.header))
 
         def on_image(self, message):
-            if self.pose is None:
+            if not self.reckoner.ready:
                 return
-            x, y, yaw = self.pose
+            x, y, yaw = self.reckoner.x, self.reckoner.y, self.reckoner.yaw
             frame = self.bridge.imgmsg_to_cv2(message, desired_encoding='bgr8')
             sightings = find_boxes(frame)
             for sighting in sightings:

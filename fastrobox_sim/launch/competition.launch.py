@@ -110,6 +110,7 @@ def generate_launch_description():
             '/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
             '/camera/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
             '/camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
+            '/imu@sensor_msgs/msg/Imu[ignition.msgs.IMU',
             '/odom@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
             '/ground_truth@nav_msgs/msg/Odometry[ignition.msgs.Odometry',
             '/joint_states@sensor_msgs/msg/JointState[ignition.msgs.Model',

@@ -25,8 +25,8 @@
     <xacro:property name="wheel_y" value="0.065" />
     <!-- What the DiffDrive plugin divides by. A skid-steer's wheels must slip sideways
          to turn, so it yaws slower than its 0.13 m geometric track says: 0.62x as fast,
-         as measured against ground truth. This effective value makes /odom and
-         commanded rates hold true; re-measure it after changing the wheels or friction. -->
+         as measured against ground truth. This effective value makes
+         commanded turn rates hold true on average; re-measure it after changing the wheels or friction. -->
     <xacro:property name="effective_track" value="0.22" />
 
     <xacro:property name="camera_x" value="0.08" />
@@ -172,6 +172,28 @@
                     <stddev>0.005</stddev>
                 </noise>
             </camera>
+        </sensor>
+    </gazebo>
+
+    <!-- Heading comes from this gyro, not from wheel odometry: a skid-steer turns by
+         slipping its wheels, which encoders cannot see. Measured in a run, /odom ended
+         18 degrees and 50 cm from the truth. -->
+    <gazebo reference="chassis">
+        <sensor name="imu" type="imu">
+            <topic>imu</topic>
+            <ignition_frame_id>base_link</ignition_frame_id>
+            <update_rate>100</update_rate>
+            <always_on>1</always_on>
+            <imu>
+                <angular_velocity>
+                    <z>
+                        <noise type="gaussian">
+                            <mean>0.0</mean>
+                            <stddev>0.002</stddev>
+                        </noise>
+                    </z>
+                </angular_velocity>
+            </imu>
         </sensor>
     </gazebo>
 
