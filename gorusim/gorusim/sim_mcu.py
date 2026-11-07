@@ -22,10 +22,19 @@ What each firmware piece became:
     Heading            BNO055 Euler x: 0..360 degrees, clockwise, zero at power-on.
     Sonars             All disabled in config.h, so they read 255, "no echo".
     Button             Latched into exactly one 50 ms telemetry frame, like a tap.
+    StatusLed          Same state machine: set() from the connect frame, and the start
+                       countdown blink (START_BLINK_COUNT x START_BLINK_INTERVAL_MS) on
+                       a button press. Shown as a light above the car in RViz
+                       (/gorusim/status_led_marker) and as a Bool on /gorusim/status_led.
 
 Press the button with:
 
     ros2 service call /gorusim/press_start std_srvs/srv/Trigger
+
+Drive the status LED the way any node on the car would, through mcu_bridge:
+
+    ros2 topic pub --once /status_led std_msgs/msg/Bool '{data: false}'
+    ros2 topic pub --once /status_led/blink std_msgs/msg/Float32 '{data: 2.0}'
 """
 import fcntl
 import math
@@ -39,8 +48,10 @@ import yaml
 from controls import mcu_to_ros2, ros2_to_mcu
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, JointState
-from std_msgs.msg import Float64
+from rclpy.qos import DurabilityPolicy, QoSProfile
+from std_msgs.msg import Bool, Float64
 from std_srvs.srv import Trigger
+from visualization_msgs.msg import Marker
 
 from gorusim.linkage import LinkageGeometry, SteeringLinkage, interpolate
 
@@ -52,6 +63,8 @@ ENCODER_COUNTS_PER_REV = 1320
 ENCODER_SAMPLE_INTERVAL_S = 0.050
 SENSOR_TX_INTERVAL_S = 0.050
 SONAR_NO_READING_CM = 255
+START_BLINK_COUNT = 3
+START_BLINK_INTERVAL_S = 1.000      # START_BLINK_INTERVAL_MS
 
 # firmware/src/main.cpp
 MCU_SYSTEM_ID = 1
@@ -63,6 +76,14 @@ HORN_CENTRE_SERVO_DEG = STEERING_CENTER_ANGLE - SERVO_CORRECTION_DEG
 
 REAR_AXLE_JOINT = 'rear_axle_joint'
 AXLE_STOPPED_RAD_S = 0.05
+
+# The LED in RViz: a bead above the lidar, where it cannot hide behind the CAD.
+STATUS_LED_MARKER_XYZ = (-0.06, 0.0, 0.16)
+STATUS_LED_MARKER_DIAMETER_M = 0.03
+STATUS_LED_LIT_RGBA = (0.1, 1.0, 0.1, 1.0)
+STATUS_LED_DARK_RGBA = (0.15, 0.15, 0.15, 0.6)
+STATUS_LED_STEP_S = 0.005           # loop() rate is far above this; fine enough to see
+STATUS_LED_MARKER_PERIOD_S = 0.1    # resent so an RViz opened later still shows it
 
 
 def clamp(value, low, high):
@@ -103,6 +124,58 @@ def heading_from_yaw(yaw_rad, yaw_zero_rad):
 
 def quaternion_yaw(x, y, z, w):
     return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+
+
+class StatusLedModel:
+    """firmware/lib/status_led StatusLed, with the time passed in rather than millis().
+
+    Kept line for line with status_led.cpp, including its two quirks: set() during a
+    blink only records where to land afterwards, and a blink restarted mid sequence
+    keeps the level from before the first one.
+    """
+
+    def __init__(self):
+        self.state = False          # begin(): off until the bridge says hello
+        self.pulses_left = 0
+        self.period = 0.0
+        self.phase_start = 0.0
+        self.restore_state = False
+
+    def is_blinking(self):
+        return self.pulses_left > 0
+
+    def set(self, lit):
+        if self.is_blinking():
+            self.restore_state = bool(lit)
+            return
+        self.state = bool(lit)
+
+    def blink(self, times, period, now):
+        if times <= 0 or period <= 0.0:
+            return
+        if not self.is_blinking():
+            self.restore_state = self.state
+        self.pulses_left = int(times)
+        self.period = float(period)
+        self.phase_start = now
+        self.state = True           # every cycle starts lit
+
+    def update(self, now):
+        if not self.is_blinking():
+            return
+        elapsed = now - self.phase_start
+        if self.state:
+            if elapsed >= self.period / 2.0:
+                self.state = False
+            return
+        if elapsed < self.period:
+            return
+        self.pulses_left -= 1
+        if self.pulses_left == 0:
+            self.state = self.restore_state
+            return
+        self.phase_start += self.period
+        self.state = True
 
 
 class PtySerial:
@@ -187,6 +260,9 @@ class SimMcu(Node):
         self.heading_deg = 0.0
         self.button_latch = False
 
+        self.status_led = StatusLedModel()
+        self.status_led_published = None
+
         # ---- the serial port ----
         self.serial = PtySerial(str(param('port_link')))
         self.rx = ros2_to_mcu.MAVLink(self.serial, srcSystem=MCU_SYSTEM_ID,
@@ -203,6 +279,10 @@ class SimMcu(Node):
         self.create_subscription(JointState, '/gorubot/joint_states', self.on_joints, 10)
         self.create_subscription(Imu, '/imu', self.on_imu, 10)
         self.create_service(Trigger, '/gorusim/press_start', self.press_start)
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.status_led_pub = self.create_publisher(Bool, '/gorusim/status_led', latched)
+        self.status_led_marker_pub = self.create_publisher(
+            Marker, '/gorusim/status_led_marker', 10)
 
         # The serial link is real time: mcu_bridge's writes arrive whenever they do.
         # Everything else is simulated hardware, so it runs on the physics clock.
@@ -211,6 +291,8 @@ class SimMcu(Node):
         self.create_timer(ENCODER_SAMPLE_INTERVAL_S, self.sample_encoder)
         self.create_timer(SENSOR_TX_INTERVAL_S, self.send_telemetry)
         self.create_timer(0.02, self.publish_joints)
+        self.create_timer(STATUS_LED_STEP_S, self.step_status_led)
+        self.create_timer(STATUS_LED_MARKER_PERIOD_S, self.publish_status_led_marker)
         if self.auto_start_sec > 0.0:
             self.auto_start_timer = self.create_timer(self.auto_start_sec, self.auto_start)
 
@@ -252,8 +334,13 @@ class SimMcu(Node):
                 self.throttle = int(message.throttle)
                 self.steering_wire = int(message.steering)
             elif kind == 'GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG':
-                self.connected = bool(message.connected)
-                self.get_logger().info('ROS2 bridge connected (status LED green).')
+                connected = bool(message.connected)
+                # the firmware prints every one, but a /status_led/blink sends
+                # several a second; only a first hello is worth a line here
+                if connected and not self.connected:
+                    self.get_logger().info('ROS2 bridge connected (status LED on).')
+                self.connected = connected
+                self.status_led.set(connected)
 
     # ---- motor and servo -----------------------------------------------------
 
@@ -331,6 +418,36 @@ class SimMcu(Node):
             sonar_4=SONAR_NO_READING_CM,
             button=button)
 
+    # ---- status LED --------------------------------------------------------
+
+    def now_s(self):
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def step_status_led(self):
+        """status_led.update() from loop(); a change goes out on /gorusim/status_led."""
+        self.status_led.update(self.now_s())
+        if self.status_led.state != self.status_led_published:
+            self.status_led_published = self.status_led.state
+            self.status_led_pub.publish(Bool(data=self.status_led.state))
+            self.publish_status_led_marker()
+
+    def publish_status_led_marker(self):
+        marker = Marker()
+        marker.header.frame_id = 'base_link'
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'status_led'
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.frame_locked = True
+        marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = \
+            STATUS_LED_MARKER_XYZ
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = marker.scale.y = marker.scale.z = STATUS_LED_MARKER_DIAMETER_M
+        rgba = STATUS_LED_LIT_RGBA if self.status_led.state else STATUS_LED_DARK_RGBA
+        marker.color.r, marker.color.g, marker.color.b, marker.color.a = rgba
+        self.status_led_marker_pub.publish(marker)
+
     def publish_joints(self):
         # Ignition publishes joint state every physics step. Pass robot_state_publisher
         # 50 Hz rather than flooding TF with a thousand identical transforms a second.
@@ -341,6 +458,7 @@ class SimMcu(Node):
 
     def press_start(self, request, response):
         self.button_latch = True
+        self.status_led.blink(START_BLINK_COUNT, START_BLINK_INTERVAL_S, self.now_s())
         self.get_logger().info('Start button pressed.')
         response.success = True
         response.message = 'start button pressed'
@@ -349,6 +467,7 @@ class SimMcu(Node):
     def auto_start(self):
         self.auto_start_timer.cancel()
         self.button_latch = True
+        self.status_led.blink(START_BLINK_COUNT, START_BLINK_INTERVAL_S, self.now_s())
         self.get_logger().info(f'Start button auto-pressed after {self.auto_start_sec:.0f} s.')
 
     def destroy_node(self):
