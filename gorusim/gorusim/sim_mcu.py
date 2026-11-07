@@ -127,7 +127,8 @@ def quaternion_yaw(x, y, z, w):
 
 
 class StatusLedModel:
-    """firmware/lib/status_led StatusLed, with the time passed in rather than millis().
+    """
+    Port of firmware/lib/status_led StatusLed, with the time passed in, not millis().
 
     Kept line for line with status_led.cpp, including its two quirks: set() during a
     blink only records where to land afterwards, and a blink restarted mid sequence
