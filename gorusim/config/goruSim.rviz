@@ -127,6 +127,16 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /disparity/target_marker
       Namespaces: {}
+    - Class: rviz_default_plugins/Marker
+      Name: StatusLed
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /gorusim/status_led_marker
+      Namespaces: {}
     - Class: rviz_default_plugins/Image
       Name: Camera
       Enabled: false
