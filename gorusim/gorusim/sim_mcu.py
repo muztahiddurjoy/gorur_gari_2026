@@ -336,11 +336,11 @@ class SimMcu(Node):
                 self.steering_wire = int(message.steering)
             elif kind == 'GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG':
                 connected = bool(message.connected)
-                # the firmware prints every one, but a /status_led/blink sends
-                # several a second; only a first hello is worth a line here
-                if connected and not self.connected:
-                    self.get_logger().info('ROS2 bridge connected (status LED on).')
-                self.connected = connected
+                # the firmware prints every one, but /status_led/blink sends this
+                # frame several times a second; only the first hello gets a line
+                if not self.connected:
+                    self.get_logger().info('ROS2 bridge connected.')
+                self.connected = True
                 self.status_led.set(connected)
 
     # ---- motor and servo -----------------------------------------------------
