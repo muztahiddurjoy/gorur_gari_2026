@@ -60,6 +60,26 @@ Press the start button with:
 ros2 service call /gorusim/press_start std_srvs/srv/Trigger
 ```
 
+That also starts the 3 × 1 s countdown blink on the status LED, as on the car.
+
+### Status LED
+
+The LED is the green bead above the car in RViz (display `StatusLed`). It is dark
+until `mcu_bridge` connects, then lit. Any node can control it through `mcu_bridge`,
+the same way it works on the real car:
+
+```bash
+ros2 topic pub --once /status_led std_msgs/msg/Bool '{data: false}'          # steady off
+ros2 topic pub --once /status_led std_msgs/msg/Bool '{data: true}'           # steady on
+ros2 topic pub --once /status_led/blink std_msgs/msg/Float32 '{data: 2.0}'   # blink at 2 Hz
+ros2 topic pub --once /status_led/blink std_msgs/msg/Float32 '{data: 0.0}'   # stop blinking
+ros2 topic echo /gorusim/status_led                                         # what the LED shows
+```
+
+There is no LED message on the wire. Both topics are sent as the connect frame, so on
+the car the RGB pixel also goes red/green with every toggle. While the start countdown
+is blinking, a command only changes the level the LED goes back to when the countdown ends.
+
 ## Where every number comes from
 
 **Measured from the STEP** by [`tools/extract_cad.py`](tools/extract_cad.py), which writes `description/cad_generated.xacro`, `config/cad_geometry.yaml` and `meshes/`:
