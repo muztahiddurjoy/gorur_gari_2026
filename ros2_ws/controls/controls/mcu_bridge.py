@@ -69,6 +69,31 @@ RUN_TIMER_STALE_S = 1.0
 RUN_TIMER_WIRE_STATE = {'IDLE': 0, 'RUNNING': 1, 'STOPPED': 2}
 RUN_TIMER_ELAPSED_MS_MAX = 0xFFFFFFFF  # uint32 wire field ceiling
 
+# status LED from any node. The firmware has no LED message of its own: the only
+# frame that touches the LED is the connect notice, and it does
+# status_led.set(connected != 0) (firmware/src/main.cpp). So steady on/off is
+# that frame with connected = 1/0, and blinking is this node toggling it on a
+# timer. The same frame also flips the RGB pixel between "connected" (green)
+# and "disconnected" (red), so the pixel blinks along - nothing else changes.
+STATUS_LED_TOPIC = '/status_led'              # std_msgs/Bool: steady on/off, stops a blink
+STATUS_LED_BLINK_TOPIC = '/status_led/blink'  # std_msgs/Float32: blink rate in Hz, <= 0 stops
+# each toggle is one 9 byte frame on a 115200 baud link, so even the cap is
+# noise next to the 50 Hz telemetry - the cap is there to keep the blink visible
+STATUS_LED_MAX_BLINK_HZ = 10.0
+
+
+def blink_half_period(rate_hz, max_rate_hz=STATUS_LED_MAX_BLINK_HZ):
+    """
+    Seconds between LED toggles for a blink rate, or None to stop blinking.
+
+    One blink is a full on+off cycle, so the toggle interval is half the
+    period. Rates above max_rate_hz are capped rather than refused, so a
+    caller asking for "fast" still gets a blink.
+    """
+    if math.isnan(rate_hz) or rate_hz <= 0.0:
+        return None
+    return 0.5 / min(rate_hz, max_rate_hz)
+
 
 def run_time_to_wire_ms(seconds):
     """
@@ -149,6 +174,17 @@ class MCUBridgeNode(Node):
         self.run_time_stamp = None
         self.run_timer_state = 'IDLE'
 
+        # status LED, see STATUS_LED_TOPIC. lit by default because the connect
+        # notice lights it; steady is where a stopped blink lands.
+        self.declare_parameter('status_led_max_blink_hz', STATUS_LED_MAX_BLINK_HZ)
+        self.status_led_max_blink_hz = float(self.get_parameter('status_led_max_blink_hz').value)
+        self.status_led_steady = True
+        self.status_led_lit = True
+        self.status_led_blink_timer = None
+        # nothing goes on the wire before the connect notice: until then the esp32
+        # may still be in its bootloader. the notice carries whatever was asked for.
+        self.mcu_announced = False
+
         try:
             self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
             self.mav_rx = mcu_to_ros2.MAVLink(self.master, srcSystem=2, srcComponent=1)
@@ -179,6 +215,10 @@ class MCUBridgeNode(Node):
             Float32, '/run_time', self.handle_run_time, 10)
         self.run_timer_state_sub = self.create_subscription(
             String, '/run_timer_state', self.handle_run_timer_state, 10)
+        self.status_led_sub = self.create_subscription(
+            Bool, STATUS_LED_TOPIC, self.handle_status_led, 10)
+        self.status_led_blink_sub = self.create_subscription(
+            Float32, STATUS_LED_BLINK_TOPIC, self.handle_status_led_blink, 10)
         # tell the MCU we are here, exactly once. it lights its status LED on this
         # and nothing else, so this is the one announcement that matters. fired off
         # a timer rather than inline because opening the port toggles DTR, which can
@@ -198,11 +238,57 @@ class MCUBridgeNode(Node):
         self.connect_notice_timer.cancel()
         if not self.mcu_connected:
             return
+        self.mcu_announced = True
+        # normally lit; off only if a node already asked for that on /status_led
+        lit = self.status_led_lit
         try:
-            self.mav_tx.gorur_gari_ros2_to_mcu_connect_msg_send(connected=1)
-            self.get_logger().info('Announced connection to MCU (status LED on).')
+            self.mav_tx.gorur_gari_ros2_to_mcu_connect_msg_send(connected=1 if lit else 0)
+            self.get_logger().info(
+                f'Announced connection to MCU (status LED {"on" if lit else "off"}).')
         except Exception as e:
             self.get_logger().error(f'Failed to announce connection to MCU: {e}')
+
+    # ---- status LED, driven through the connect frame (see STATUS_LED_TOPIC) ----
+
+    def send_status_led(self, lit):
+        """Remember the level and put it on the wire, once the MCU has been greeted."""
+        self.status_led_lit = bool(lit)
+        if not (self.mcu_connected and self.mcu_announced):
+            return  # send_connect_notice will carry it
+        try:
+            self.mav_tx.gorur_gari_ros2_to_mcu_connect_msg_send(
+                connected=1 if self.status_led_lit else 0)
+        except Exception as e:
+            self.get_logger().error(f'Failed to set status LED: {e}',
+                                    throttle_duration_sec=2.0)
+
+    def stop_status_led_blink(self):
+        if self.status_led_blink_timer is not None:
+            self.destroy_timer(self.status_led_blink_timer)
+            self.status_led_blink_timer = None
+
+    def handle_status_led(self, msg: Bool):
+        """Steady on or off. Also ends a blink."""
+        self.stop_status_led_blink()
+        self.status_led_steady = bool(msg.data)
+        self.send_status_led(self.status_led_steady)
+        self.get_logger().info(f'Status LED {"on" if self.status_led_steady else "off"}.')
+
+    def handle_status_led_blink(self, msg: Float32):
+        """Blink at msg.data Hz; zero or less goes back to the last steady level."""
+        half_period = blink_half_period(float(msg.data), self.status_led_max_blink_hz)
+        self.stop_status_led_blink()
+        if half_period is None:
+            self.send_status_led(self.status_led_steady)
+            self.get_logger().info('Status LED blink stopped.')
+            return
+        # every blink starts lit, like StatusLed::blink() on the MCU
+        self.send_status_led(True)
+        self.status_led_blink_timer = self.create_timer(half_period, self.toggle_status_led)
+        self.get_logger().info(f'Status LED blinking at {0.5 / half_period:.2f} Hz.')
+
+    def toggle_status_led(self):
+        self.send_status_led(not self.status_led_lit)
 
     def handle_run_time(self, msg: Float32):
         """Cache the run stopwatch. send_run_time is what puts it on the wire."""
