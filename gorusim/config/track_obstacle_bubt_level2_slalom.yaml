@@ -1,0 +1,36 @@
+# ════════════════════════════════════════════════════════════════════
+# Level 2: Wide Slalom (Side-Wall Proximity & Repulsion)
+#
+# Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
+# Start: x = 0.30 m, Finish: x = 2.70 m
+# Characteristics:
+#   - Large lateral displacement (+/- 0.25m to +/- 0.28m)
+#   - Forces car to choose between passing near center or threading the narrow outer wall pocket
+#   - Tests side-wall repulsion stability without wall clipping
+# ════════════════════════════════════════════════════════════════════
+
+objects: true
+
+start:
+    nose_offset_m: 0.1205
+    pos:
+        x: 0.30
+        y: 0.0
+    angle: 0
+
+parking:
+    enabled: false
+
+towers:
+    -   color: "Plain"
+        pos: { x: 0.70, y: 0.25 }
+    -   color: "Plain"
+        pos: { x: 1.05, y: -0.28 }
+    -   color: "Plain"
+        pos: { x: 1.40, y: 0.26 }
+    -   color: "Plain"
+        pos: { x: 1.75, y: -0.25 }
+    -   color: "Plain"
+        pos: { x: 2.10, y: 0.24 }
+    -   color: "Plain"
+        pos: { x: 2.40, y: -0.22 }

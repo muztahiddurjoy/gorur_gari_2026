@@ -32,7 +32,7 @@ class ObstacleRound(Node):
         self.car_radius = 0.12        # 0.06m half-width + 0.06m safety margin
         self.disparity_thresh = 0.12  # minimum jump between rays to count as an edge (m)
         self.max_range = 1.15         # 1.15m lookahead (next 2-3 pillars) for timely swerving
-        self.stop_dist = 0.28         # finish-line end-wall stop distance (m)
+        self.stop_dist = 0.40         # finish-line end-wall stop distance (m)
         self.wall_safe_dist = 0.24    # side-wall distance (m)
 
         # Drive Config 

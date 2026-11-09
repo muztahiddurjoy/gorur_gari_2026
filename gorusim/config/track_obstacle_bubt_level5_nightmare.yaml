@@ -1,0 +1,37 @@
+# ════════════════════════════════════════════════════════════════════
+# Level 5: The Gauntlet / Nightmare (Extreme Edge Cases)
+#
+# Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
+# Start: x = 0.30 m, Finish: x = 2.70 m
+# Characteristics:
+#   - Immediate obstacle right off the start line (x = 0.60m, center y = 0.0)
+#   - Near-wall pinch (y = -0.32m, only 18cm from boundary wall)
+#   - Asymmetric staggered doublets forcing S-turns through 32cm narrow windows
+#   - An obstacle placed close to the finish line (x = 2.45m)
+# ════════════════════════════════════════════════════════════════════
+
+objects: true
+
+start:
+    nose_offset_m: 0.1205
+    pos:
+        x: 0.30
+        y: 0.0
+    angle: 0
+
+parking:
+    enabled: false
+
+towers:
+    -   color: "Plain"
+        pos: { x: 0.62, y: 0.00 }   # Dead center right in front of start line
+    -   color: "Plain"
+        pos: { x: 0.95, y: -0.30 }  # Outer wall pinch
+    -   color: "Plain"
+        pos: { x: 1.30, y: 0.18 }   # Cross-corridor chicane
+    -   color: "Plain"
+        pos: { x: 1.65, y: -0.15 }  # Fast mid-corridor transition
+    -   color: "Plain"
+        pos: { x: 2.05, y: 0.28 }   # Near wall left
+    -   color: "Plain"
+        pos: { x: 2.40, y: -0.05 }  # Pre-finish gate

@@ -16,7 +16,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -31,9 +31,14 @@ def generate_launch_description():
 
     arguments = [
         DeclareLaunchArgument(
+            'track',
+            default_value='default',
+            description='Track difficulty preset: default, level1_gentle, level2_slalom, level3_chicanes, level4_bottleneck, level5_nightmare.'
+        ),
+        DeclareLaunchArgument(
             'track_config',
-            default_value=os.path.join(config, 'track_obstacle_bubt.yaml'),
-            description='Obstacle and start layout YAML for BUBT obstacle round.'
+            default_value='',
+            description='Explicit obstacle YAML path. If empty, uses track=<preset>.'
         ),
         DeclareLaunchArgument('gui', default_value='true', description='Run Ignition GUI.'),
         DeclareLaunchArgument('rviz', default_value='true', description='Open RViz.'),
@@ -44,18 +49,46 @@ def generate_launch_description():
         DeclareLaunchArgument('heading_clockwise', default_value='true'),
     ]
 
+    def resolve_track_config(context):
+        explicit = LaunchConfiguration('track_config').perform(context).strip()
+        if explicit:
+            return explicit
+        preset = LaunchConfiguration('track').perform(context).strip()
+        filename_map = {
+            'default': 'track_obstacle_bubt.yaml',
+            'level1': 'track_obstacle_bubt_level1_gentle.yaml',
+            'level1_gentle': 'track_obstacle_bubt_level1_gentle.yaml',
+            'level2': 'track_obstacle_bubt_level2_slalom.yaml',
+            'level2_slalom': 'track_obstacle_bubt_level2_slalom.yaml',
+            'level3': 'track_obstacle_bubt_level3_chicanes.yaml',
+            'level3_chicanes': 'track_obstacle_bubt_level3_chicanes.yaml',
+            'level4': 'track_obstacle_bubt_level4_bottleneck.yaml',
+            'level4_bottleneck': 'track_obstacle_bubt_level4_bottleneck.yaml',
+            'level5': 'track_obstacle_bubt_level5_nightmare.yaml',
+            'level5_nightmare': 'track_obstacle_bubt_level5_nightmare.yaml',
+        }
+        filename = filename_map.get(preset, f'track_obstacle_bubt_{preset}.yaml')
+        path = os.path.join(config, filename)
+        if not os.path.isfile(path):
+            path = os.path.join(config, 'track_obstacle_bubt.yaml')
+        return path
+
     def typed(name, value_type):
         return ParameterValue(LaunchConfiguration(name), value_type=value_type)
 
-    simulator = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(share, 'launch', 'sim.launch.py')),
-        launch_arguments={
-            'world': 'obstacle_bubt',
-            'gui': LaunchConfiguration('gui'),
-            'rviz': LaunchConfiguration('rviz'),
-            'track_config': LaunchConfiguration('track_config'),
-        }.items(),
-    )
+    def launch_sim(context):
+        resolved_config = resolve_track_config(context)
+        return [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(os.path.join(share, 'launch', 'sim.launch.py')),
+                launch_arguments={
+                    'world': 'obstacle_bubt',
+                    'gui': LaunchConfiguration('gui'),
+                    'rviz': LaunchConfiguration('rviz'),
+                    'track_config': resolved_config,
+                }.items(),
+            )
+        ]
 
     vector_odom = Node(
         package='controls',
@@ -74,6 +107,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription(arguments + [
-        simulator,
+        OpaqueFunction(function=launch_sim),
         vector_odom,
     ])

@@ -1,0 +1,36 @@
+# ════════════════════════════════════════════════════════════════════
+# Level 3: Tight S-Curve Chicanes (Fast Steering Transitions)
+#
+# Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
+# Start: x = 0.30 m, Finish: x = 2.70 m
+# Characteristics:
+#   - Paired obstacles with short longitudinal distance (dx = 0.22m to 0.25m)
+#   - Sharp direction reversals (+0.22m directly followed by -0.22m)
+#   - Tests Ackermann steering latency and rapid disparity smearing
+# ════════════════════════════════════════════════════════════════════
+
+objects: true
+
+start:
+    nose_offset_m: 0.1205
+    pos:
+        x: 0.30
+        y: 0.0
+    angle: 0
+
+parking:
+    enabled: false
+
+towers:
+    -   color: "Plain"
+        pos: { x: 0.70, y: 0.20 }
+    -   color: "Plain"
+        pos: { x: 0.95, y: -0.20 }
+    -   color: "Plain"
+        pos: { x: 1.35, y: 0.22 }
+    -   color: "Plain"
+        pos: { x: 1.60, y: -0.22 }
+    -   color: "Plain"
+        pos: { x: 2.05, y: 0.18 }
+    -   color: "Plain"
+        pos: { x: 2.30, y: -0.18 }

@@ -1,0 +1,36 @@
+# ════════════════════════════════════════════════════════════════════
+# Level 4: Asymmetric Bottlenecks (Corridor Squeeze)
+#
+# Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
+# Start: x = 0.30 m, Finish: x = 2.70 m
+# Characteristics:
+#   - Two obstacles placed at nearly the same X coordinate, creating a narrow gate
+#   - Tests whether disparity extender properly blocks unpassable gaps and
+#     steers through the single viable open passage
+# ════════════════════════════════════════════════════════════════════
+
+objects: true
+
+start:
+    nose_offset_m: 0.1205
+    pos:
+        x: 0.30
+        y: 0.0
+    angle: 0
+
+parking:
+    enabled: false
+
+towers:
+    -   color: "Plain"
+        pos: { x: 0.85, y: -0.22 }
+    -   color: "Plain"
+        pos: { x: 0.88, y: 0.12 }
+    -   color: "Plain"
+        pos: { x: 1.50, y: 0.22 }
+    -   color: "Plain"
+        pos: { x: 1.53, y: -0.12 }
+    -   color: "Plain"
+        pos: { x: 2.15, y: -0.22 }
+    -   color: "Plain"
+        pos: { x: 2.18, y: 0.12 }
