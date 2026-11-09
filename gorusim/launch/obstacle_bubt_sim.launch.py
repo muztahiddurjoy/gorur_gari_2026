@@ -77,10 +77,11 @@ def generate_launch_description():
             'level10': 'track_obstacle_bubt_level10_chaos.yaml',
             'level10_chaos': 'track_obstacle_bubt_level10_chaos.yaml',
         }
+        tracks_dir = os.path.join(config, 'tracks', 'obstacle_bubt')
         filename = filename_map.get(preset, f'track_obstacle_bubt_{preset}.yaml')
-        path = os.path.join(config, filename)
+        path = os.path.join(tracks_dir, filename)
         if not os.path.isfile(path):
-            path = os.path.join(config, 'track_obstacle_bubt.yaml')
+            path = os.path.join(tracks_dir, 'track_obstacle_bubt.yaml')
         return path
 
     def typed(name, value_type):

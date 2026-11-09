@@ -32,14 +32,14 @@ class ObstacleRound(Node):
 
         # BOT CONFIG
         self.car_radius = 0.12        # 0.06m half-width + 0.06m safety margin
-        self.disparity_thresh = 0.12  # minimum jump between rays to count as an edge (m)
-        self.max_range = 1.15         # 1.15m lookahead (next 2-3 pillars) for timely swerving
-        self.stop_dist = 0.40         # finish-line end-wall stop distance (m)
-        self.wall_safe_dist = 0.24    # side-wall distance (m)
+        self.disparity_thresh = 0.12  
+        self.max_range = 1.15         # max range for infinity replacement (m)
+        self.stop_dist = 0.40         # end wall stop distance to break velocity(m)
+        self.wall_safe_dist = 0.24    # side wall distance (m)
 
         # Drive Config 
         self.speed_straight = 1.0    # speed m/s
-        self.speed_turn = 1.25        # cornering boost m/s
+        self.speed_turn = 1.25        # cornering boosted m/s
         self.max_steer_rad = math.radians(40.0)
 
         self.create_subscription(
@@ -53,72 +53,14 @@ class ObstacleRound(Node):
         self.path_pub = self.create_publisher(Path, '/bot_path', 10)
         self.path_marker_pub = self.create_publisher(Marker, '/bot_path_marker', 10)
 
-        # Persistent path history
+        # Persistent path history for rviz2
         self.path_msg = Path()
         self.path_msg.header.frame_id = 'odom'
         self.last_path_pose = None
 
         self.create_timer(0.05, self.obstacle_control_loop)
 
-    def ground_truth_callback(self, msg: Odometry):
-        # Accumulate robot path trace
-        pos = msg.pose.pose.position
-        if self.last_path_pose is None:
-            dist = 1.0
-        else:
-            dx = pos.x - self.last_path_pose.x
-            dy = pos.y - self.last_path_pose.y
-            dist = math.hypot(dx, dy)
-
-        # Add point every 2 cm moved
-        if dist >= 0.02:
-            self.last_path_pose = pos
-            pose_stamped = PoseStamped()
-            pose_stamped.header = msg.header
-            pose_stamped.header.frame_id = 'odom'
-            pose_stamped.pose = msg.pose.pose
-            self.path_msg.header.stamp = msg.header.stamp
-            self.path_msg.poses.append(pose_stamped)
-            self.path_pub.publish(self.path_msg)
-            self.publish_path_marker()
-
-    def publish_path_marker(self):
-        marker = Marker()
-        marker.header.frame_id = 'odom'
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = 'bot_path'
-        marker.id = 0
-        marker.type = Marker.LINE_STRIP
-        marker.action = Marker.ADD
-        marker.scale.x = 0.02  # 2cm wide visible line
-        marker.color.r = 0.0
-        marker.color.g = 0.9
-        marker.color.b = 1.0   # Cyan trail
-        marker.color.a = 0.95
-        marker.points = [p.pose.position for p in self.path_msg.poses]
-        self.path_marker_pub.publish(marker)
-
-    def publish_target_marker(self, target_angle, target_dist):
-        marker = Marker()
-        marker.header.frame_id = 'laser'
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = 'obstacle_target'
-        marker.id = 1
-        marker.type = Marker.ARROW
-        marker.action = Marker.ADD
-        marker.pose.position.x = 0.0
-        marker.pose.position.y = 0.0
-        marker.pose.position.z = 0.0
-        marker.pose.orientation.z = float(math.sin(target_angle / 2.0))
-        marker.pose.orientation.w = float(math.cos(target_angle / 2.0))
-        marker.scale.x = float(max(target_dist, 0.2))
-        marker.scale.y = 0.04
-        marker.scale.z = 0.04
-        marker.color.r = 1.0
-        marker.color.g = 0.84
-        marker.color.b = 0.0   # Gold arrow
-        marker.color.a = 0.95
-        self.target_pub.publish(marker)
+    
 
     def button_callback(self, msg):
         if msg.data and self.state == 'STANDBY':
@@ -197,7 +139,6 @@ class ObstacleRound(Node):
             return 0.0, 0.0
 
         # Smooth with a 15-ray so that tiny turns are ignored
-        # and the center of the open corridor naturally is the peak
         kernel_size = min(15, len(self.scan_ranges))
         smoothed = np.convolve(
             self.scan_ranges, np.ones(kernel_size) / kernel_size, mode='same')
@@ -207,6 +148,70 @@ class ObstacleRound(Node):
         best_idx = int(candidates[len(candidates) // 2])
 
         return float(self.scan_angles[best_idx]), float(self.scan_ranges[best_idx])
+    
+
+    # NOT NECESSARY CODE ___ ONLY USED TO DRAW PATH MARKER IN RVIZ2
+    def ground_truth_callback(self, msg: Odometry):
+            # Accumulate robot path trace
+            pos = msg.pose.pose.position
+            if self.last_path_pose is None:
+                dist = 1.0
+            else:
+                dx = pos.x - self.last_path_pose.x
+                dy = pos.y - self.last_path_pose.y
+                dist = math.hypot(dx, dy)
+    
+            # Add point every 2 cm moved
+            if dist >= 0.02:
+                self.last_path_pose = pos
+                pose_stamped = PoseStamped()
+                pose_stamped.header = msg.header
+                pose_stamped.header.frame_id = 'odom'
+                pose_stamped.pose = msg.pose.pose
+                self.path_msg.header.stamp = msg.header.stamp
+                self.path_msg.poses.append(pose_stamped)
+                self.path_pub.publish(self.path_msg)
+                self.publish_path_marker()
+    
+    # NOT NECESSARY CODE ___ ONLY USED TO DRAW PATH MARKER IN RVIZ2
+    def publish_path_marker(self):
+        marker = Marker()
+        marker.header.frame_id = 'odom'
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'bot_path'
+        marker.id = 0
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.02  # 2cm wide visible line
+        marker.color.r = 0.0
+        marker.color.g = 0.9
+        marker.color.b = 1.0   # Cyan trail
+        marker.color.a = 0.95
+        marker.points = [p.pose.position for p in self.path_msg.poses]
+        self.path_marker_pub.publish(marker)
+
+    # NOT NECESSARY CODE ___ ONLY USED TO DRAW PATH MARKER IN RVIZ2
+    def publish_target_marker(self, target_angle, target_dist):
+        marker = Marker()
+        marker.header.frame_id = 'laser'
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'obstacle_target'
+        marker.id = 1
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+        marker.pose.position.x = 0.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 0.0
+        marker.pose.orientation.z = float(math.sin(target_angle / 2.0))
+        marker.pose.orientation.w = float(math.cos(target_angle / 2.0))
+        marker.scale.x = float(max(target_dist, 0.2))
+        marker.scale.y = 0.04
+        marker.scale.z = 0.04
+        marker.color.r = 1.0
+        marker.color.g = 0.84
+        marker.color.b = 0.0   # Gold arrow
+        marker.color.a = 0.95
+        self.target_pub.publish(marker)
 
     def obstacle_control_loop(self):
         if self.state in ('STANDBY', 'FINISHED'):
