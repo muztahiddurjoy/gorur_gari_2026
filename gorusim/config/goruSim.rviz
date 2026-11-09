@@ -115,7 +115,31 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /open_round/target_marker
+        Value: /obstacle_round/target_marker
+      Namespaces: {}
+    - Class: rviz_default_plugins/Path
+      Name: BotPath
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /bot_path
+      Color: 0; 230; 255
+      Alpha: 0.9
+      Buffer Length: 1
+      Line Style: Lines
+      Line Width: 0.025
+    - Class: rviz_default_plugins/Marker
+      Name: BotPathMarker
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /bot_path_marker
       Namespaces: {}
     - Class: rviz_default_plugins/Marker
       Name: DisparityTargetMarker

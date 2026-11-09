@@ -13,7 +13,7 @@ docker exec -it gorur_gari_humble bash
 
 ## Visualizer (Simulator + Gazebo GUI + RViz)
 
-You can launch the default track or any of the 5 difficulty preset tracks using `track:=<level>`:
+Launch any of the 10 difficulty tracks directly via `track:=<level>`:
 
 ```bash
 # Inside docker container (Terminal 1)
@@ -22,20 +22,32 @@ source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash
 # Run default track
 ros2 launch gorusim obstacle_bubt_sim.launch.py
 
-# OR select a difficulty level:
-ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level1
-ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level2
-ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level3
-ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level4
-ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level5
+# Tier 1: Fundamentals & Progressive Spacing
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level1   # Gentle Offset (Warmup)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level2   # Wide Slalom (Wall Repulsion)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level3   # S-Curve Chicanes (Fast Reversals)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level4   # Asymmetric Bottlenecks (Corridor Squeeze)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level5   # Nightmare Gauntlet (Nose Blocker + Pinch)
+
+# Tier 2: Advanced Stress Tests & Extreme Edge Cases
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level6   # The Funnel (Double Slit + Center Fork)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level7   # Blind Cascade (Staircase Occlusion)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level8   # Wall Squeeze (18cm Razor Margin)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level9   # Asymmetric Cluster (False Dead-End)
+ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level10  # Pinball Chaos (Ultimate Edge Cases)
 ```
 
-### Track Difficulty Presets
-- **`level1` (Gentle Offset)**: Spaced out towers ($dx \ge 35\text{ cm}$, small offset $y = \pm 0.12\text{ m}$), wide passing corridors on both sides.
-- **`level2` (Wide Slalom)**: High lateral displacement ($y = \pm 0.25\text{ m}$ to $\pm 0.28\text{ m}$). Tests side-wall repulsion and driving close to boundaries.
-- **`level3` (S-Curve Chicanes)**: Short longitudinal distances ($dx = 22\text{ cm}$ to $25\text{ cm}$) with alternating signs. Tests fast Ackermann steering transitions and latency.
-- **`level4` (Bottlenecks)**: Paired obstacles placed at nearly the same $X$ coordinate to narrow the corridor. Tests if the disparity extender properly erases unpassable gaps.
-- **`level5` (Nightmare)**: Immediate obstacle dead-center off the start line ($x = 0.62\text{ m}, y = 0.00\text{ m}$), near-wall pinch ($18\text{ cm}$ wall gap), asymmetric chicanes, and pre-finish gate ($x = 2.40\text{ m}$).
+### Track Difficulty Overview
+- **`level1` (Gentle Offset)**: $dx \ge 35\text{ cm}, y = \pm 0.12\text{ m}$. Broad lanes on both sides.
+- **`level2` (Wide Slalom)**: $y = \pm 0.25\text{ m}$ to $\pm 0.28\text{ m}$. Wall repulsion and boundary clearance.
+- **`level3` (S-Curve Chicanes)**: $dx = 22\text{ cm}$ to $25\text{ cm}$ rapid direction reversals. Servo slew rate test.
+- **`level4` (Bottlenecks)**: Twin obstacles at nearly identical $X$ closing off one side. Disparity gap rejection.
+- **`level5` (Nightmare)**: Nose blocker at launch ($x = 0.62\text{ m}$), $18\text{ cm}$ wall pinch, pre-finish gate.
+- **`level6` (The Funnel)**: Double-slit twin towers at $x = 0.80\text{ m}$ followed immediately by a dead-center fork at $x = 1.30\text{ m}$.
+- **`level7` (Blind Cascade)**: Diagonal staircase barricade from $y = -0.28\text{ m}$ to $y = +0.28\text{ m}$. Pillars occlude each other from the start line.
+- **`level8` (Wall Squeeze)**: All pillars hugging side walls at $y = \pm 0.32\text{ m}$ ($18\text{ cm}$ margin to walls). Tests whether side-wall repulsion overshoots.
+- **`level9` (Cluster / False Dead-End)**: 3-pillar cluster packed irregularly in the center zone ($x \in [1.15, 1.65\text{ m}]$), looking impenetrable from afar.
+- **`level10` (Pinball Chaos)**: Random asymmetric extremes: nose blocker at $x = 0.60\text{ m}$, alternating $18\text{ cm}$ pinches, center traps, and a late swerve right onto the finish threshold ($x = 2.45\text{ m}$).
 
 ---
 

@@ -35,9 +35,14 @@ from std_msgs.msg import Bool
 PILLAR_COLOURS = {
     'red':     ('0.35 0 0 1', '1.0 0 0 1'),
     'green':   ('0 0.35 0 1', '0 0.9 0 1'),
+    'blue':    ('0 0 0.35 1', '0.1 0.3 1.0 1'),
+    'yellow':  ('0.35 0.35 0 1', '1.0 0.9 0 1'),
+    'orange':  ('0.35 0.15 0 1', '1.0 0.5 0 1'),
+    'purple':  ('0.30 0 0.35 1', '0.7 0.1 0.9 1'),
+    'cyan':    ('0 0.35 0.35 1', '0 0.9 0.9 1'),
     'magenta': ('0.35 0 0.35 1', '0.9 0 0.9 1'),
-    'purple':  ('0.35 0 0.35 1', '0.9 0 0.9 1'),
 }
+RAINBOW_PALETTE = ['red', 'green', 'blue', 'yellow', 'orange', 'purple']
 DEFAULT_COLOUR = ('0.3 0.3 0.3 1', '0.7 0.7 0.7 1')
 
 # Pillars and barriers are 100 mm tall, so their centre sits at 50 mm.
@@ -184,7 +189,12 @@ class TrackMaker(Node):
 
         if self.settings.get('objects') and self.tower_template:
             for index, tower in enumerate(self.settings.get('towers', []), start=1):
-                ambient, diffuse = self.colours_for(tower['color'])
+                raw_color = tower.get('color', '')
+                if not raw_color or str(raw_color).strip().lower() in ('plain', 'default', 'none'):
+                    color_name = RAINBOW_PALETTE[(index - 1) % len(RAINBOW_PALETTE)]
+                else:
+                    color_name = str(raw_color).strip().lower()
+                ambient, diffuse = self.colours_for(color_name)
                 sdf = self.tower_template.format(
                     name=f'tower_{index}', ambient=ambient, diffuse=diffuse)
                 self.spawn(f'tower_{index}', sdf,

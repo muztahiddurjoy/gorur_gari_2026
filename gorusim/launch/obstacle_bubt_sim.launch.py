@@ -66,6 +66,16 @@ def generate_launch_description():
             'level4_bottleneck': 'track_obstacle_bubt_level4_bottleneck.yaml',
             'level5': 'track_obstacle_bubt_level5_nightmare.yaml',
             'level5_nightmare': 'track_obstacle_bubt_level5_nightmare.yaml',
+            'level6': 'track_obstacle_bubt_level6_funnel.yaml',
+            'level6_funnel': 'track_obstacle_bubt_level6_funnel.yaml',
+            'level7': 'track_obstacle_bubt_level7_blind_cascade.yaml',
+            'level7_blind_cascade': 'track_obstacle_bubt_level7_blind_cascade.yaml',
+            'level8': 'track_obstacle_bubt_level8_wall_squeeze.yaml',
+            'level8_wall_squeeze': 'track_obstacle_bubt_level8_wall_squeeze.yaml',
+            'level9': 'track_obstacle_bubt_level9_cluster.yaml',
+            'level9_cluster': 'track_obstacle_bubt_level9_cluster.yaml',
+            'level10': 'track_obstacle_bubt_level10_chaos.yaml',
+            'level10_chaos': 'track_obstacle_bubt_level10_chaos.yaml',
         }
         filename = filename_map.get(preset, f'track_obstacle_bubt_{preset}.yaml')
         path = os.path.join(config, filename)

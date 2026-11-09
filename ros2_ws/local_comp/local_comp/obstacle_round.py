@@ -2,11 +2,13 @@ import math
 import time
 import numpy as np
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Point, PoseStamped, Twist
+from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
+from visualization_msgs.msg import Marker
 
 
 class ObstacleRound(Node):
@@ -43,8 +45,80 @@ class ObstacleRound(Node):
         self.create_subscription(
             LaserScan, '/scan', self.scan_callback, qos_profile_sensor_data)
         self.create_subscription(Bool, '/button_status', self.button_callback, 10)
+        self.create_subscription(
+            Odometry, '/gorubot/ground_truth', self.ground_truth_callback, 10)
+
         self.pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.target_pub = self.create_publisher(Marker, '/obstacle_round/target_marker', 10)
+        self.path_pub = self.create_publisher(Path, '/bot_path', 10)
+        self.path_marker_pub = self.create_publisher(Marker, '/bot_path_marker', 10)
+
+        # Persistent path history
+        self.path_msg = Path()
+        self.path_msg.header.frame_id = 'odom'
+        self.last_path_pose = None
+
         self.create_timer(0.05, self.obstacle_control_loop)
+
+    def ground_truth_callback(self, msg: Odometry):
+        # Accumulate robot path trace
+        pos = msg.pose.pose.position
+        if self.last_path_pose is None:
+            dist = 1.0
+        else:
+            dx = pos.x - self.last_path_pose.x
+            dy = pos.y - self.last_path_pose.y
+            dist = math.hypot(dx, dy)
+
+        # Add point every 2 cm moved
+        if dist >= 0.02:
+            self.last_path_pose = pos
+            pose_stamped = PoseStamped()
+            pose_stamped.header = msg.header
+            pose_stamped.header.frame_id = 'odom'
+            pose_stamped.pose = msg.pose.pose
+            self.path_msg.header.stamp = msg.header.stamp
+            self.path_msg.poses.append(pose_stamped)
+            self.path_pub.publish(self.path_msg)
+            self.publish_path_marker()
+
+    def publish_path_marker(self):
+        marker = Marker()
+        marker.header.frame_id = 'odom'
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'bot_path'
+        marker.id = 0
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.02  # 2cm wide visible line
+        marker.color.r = 0.0
+        marker.color.g = 0.9
+        marker.color.b = 1.0   # Cyan trail
+        marker.color.a = 0.95
+        marker.points = [p.pose.position for p in self.path_msg.poses]
+        self.path_marker_pub.publish(marker)
+
+    def publish_target_marker(self, target_angle, target_dist):
+        marker = Marker()
+        marker.header.frame_id = 'laser'
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'obstacle_target'
+        marker.id = 1
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+        marker.pose.position.x = 0.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 0.0
+        marker.pose.orientation.z = float(math.sin(target_angle / 2.0))
+        marker.pose.orientation.w = float(math.cos(target_angle / 2.0))
+        marker.scale.x = float(max(target_dist, 0.2))
+        marker.scale.y = 0.04
+        marker.scale.z = 0.04
+        marker.color.r = 1.0
+        marker.color.g = 0.84
+        marker.color.b = 0.0   # Gold arrow
+        marker.color.a = 0.95
+        self.target_pub.publish(marker)
 
     def button_callback(self, msg):
         if msg.data and self.state == 'STANDBY':
@@ -173,6 +247,7 @@ class ObstacleRound(Node):
 
             # Pick target angle at the center of the largest open path
             target_angle, target_dist = self.pick_target()
+            self.publish_target_marker(target_angle, target_dist)
 
             # Side-wall repulsion
             right_mask = (self.scan_angles >= math.radians(-70.0)) & (self.scan_angles <= math.radians(-25.0))
