@@ -185,31 +185,7 @@ class MCUBridgeNode(Node):
         # may still be in its bootloader. the notice carries whatever was asked for.
         self.mcu_announced = False
 
-        try:
-            self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
-            self.mav_rx = mcu_to_ros2.MAVLink(self.master, srcSystem=2, srcComponent=1)
-            # mavutil sets this on the parser it builds itself, but we replace that
-            # parser with the mcu_to_ros2 dialect and the default is False. Without
-            # it any non-MAVLink byte (the esp32 boot banner it prints when we open
-            # the port) raises instead of resyncing, killing the whole read loop.
-            self.mav_rx.robust_parsing = True
-            self.master.mav = self.mav_rx
-            # pymavlink defaults this connection to wire protocol 1.0, so the first
-            # 0xFD (MAVLink2 magic) byte makes mavutil "auto upgrade" by throwing our
-            # dialect away and installing stock ardupilotmega, which has never heard
-            # of msgid 50001 - every frame then decodes as BAD_DATA. Declare 2.0 up
-            # front and mark the stream as already sniffed so that never fires.
-            self.master.WIRE_PROTOCOL_VERSION = '2.0'
-            self.master.first_byte = False
-
-            self.mav_tx = ros2_to_mcu.MAVLink(self.master, srcSystem=2, srcComponent=1);
-            self.get_logger().info('Successfully connected to MCU.')
-            self.mcu_connected = True
-
-        except Exception as e:
-            self.get_logger().error(f'Failed to connect to MCU: {e}')
-            # rclpy.shutdown()
-            # return
+        self.connect_mcu()
         self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
         self.run_time_sub = self.create_subscription(
             Float32, '/run_time', self.handle_run_time, 10)
@@ -231,6 +207,21 @@ class MCUBridgeNode(Node):
         self.run_timer_tx_timer = self.create_timer(
             RUN_TIMER_TX_INTERVAL_S, self.send_run_time)
         # self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
+
+    def connect_mcu(self):
+        try:
+            self.master = mavutil.mavlink_connection(self.port, baud=self.baudrate)
+            self.mav_rx = mcu_to_ros2.MAVLink(self.master, srcSystem=2, srcComponent=1)
+            self.mav_rx.robust_parsing = True
+            self.master.mav = self.mav_rx
+            self.master.WIRE_PROTOCOL_VERSION = '2.0'
+            self.master.first_byte = False
+            self.mav_tx = ros2_to_mcu.MAVLink(self.master, srcSystem=2, srcComponent=1)
+            self.get_logger().info('Successfully connected to MCU.')
+            self.mcu_connected = True
+        except Exception as e:
+            self.get_logger().error(f'Failed to connect to MCU: {e}', throttle_duration_sec=2.0)
+            self.mcu_connected = False
 
 
     def send_connect_notice(self):
@@ -390,6 +381,9 @@ class MCUBridgeNode(Node):
 
     def poll_mcu(self):
         if not self.mcu_connected:
+            self.connect_mcu()
+            if self.mcu_connected:
+                self.send_connect_notice()
             return
         try:
             while True:
@@ -404,6 +398,7 @@ class MCUBridgeNode(Node):
                     self.get_logger().debug(f'Skipping non-MAVLink bytes: {msg.reason}')
         except Exception as e:
             self.get_logger().error(f'Error polling MCU: {e}')
+            self.mcu_connected = False
 
     def handle_mcu_sensor_msg(self, msg):
         now = self.get_clock().now().to_msg()

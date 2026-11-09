@@ -43,3 +43,5 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 *.log
+AGENTS.md
+BUBT_26_rulebook.md

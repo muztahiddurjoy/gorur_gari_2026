@@ -90,6 +90,10 @@ def generate_launch_description():
                                           'false leaves a bare mat.'),
     ]
 
+    # Bind Ignition transport to loopback so discovery works even when the host
+    # network interface or firewall blocks UDP multicast.
+    ign_ip = SetEnvironmentVariable(name='IGN_IP', value='127.0.0.1')
+
     # Meshes resolve as model://gorusim/meshes/..., against this path.
     resource_path = SetEnvironmentVariable(
         name='IGN_GAZEBO_RESOURCE_PATH',
@@ -177,7 +181,7 @@ def generate_launch_description():
     )
     bridge_after_mcu = RegisterEventHandler(OnProcessStart(
         target_action=sim_mcu,
-        on_start=[TimerAction(period=1.5, actions=[mcu_bridge])],
+        on_start=[TimerAction(period=3.0, actions=[mcu_bridge])],
     ))
 
     track_maker = Node(
@@ -207,6 +211,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription(arguments + [
+        ign_ip,
         resource_path,
         gazebo_gui,
         gazebo_headless,

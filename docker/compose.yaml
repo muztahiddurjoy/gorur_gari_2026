@@ -1,0 +1,26 @@
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        USERNAME: dev
+        USER_UID: 1000
+        USER_GID: 1000
+    container_name: gorur_gari_humble
+    privileged: true
+    network_mode: host
+    ipc: host
+    stdin_open: true
+    tty: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - IGN_IP=127.0.0.1
+    volumes:
+      # Mount repo root into container workspace
+      - ..:/workspace:rw
+      # GUI forwarding
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Hardware devices (LiDAR, USB camera, microcontroller, GPU)
+      - /dev:/dev

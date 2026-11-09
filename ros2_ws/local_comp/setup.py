@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'open_round = local_comp.open_round:main',
+            'obstacle_round = local_comp.obstacle_round:main',
         ],
     },
 )
