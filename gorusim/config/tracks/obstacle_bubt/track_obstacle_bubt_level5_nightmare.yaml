@@ -1,22 +1,13 @@
 # ════════════════════════════════════════════════════════════════════
-# Level 5: The Gauntlet / Nightmare (Extreme Edge Cases)
-#
+# Level 5: The Gauntlet / Nightmare - 8 Obstacles
 # Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
-# Start: x = 0.30 m, Finish: x = 2.70 m
-# Characteristics:
-#   - Immediate obstacle right off the start line (x = 0.60m, center y = 0.0)
-#   - Near-wall pinch (y = -0.32m, only 18cm from boundary wall)
-#   - Asymmetric staggered doublets forcing S-turns through 32cm narrow windows
-#   - An obstacle placed close to the finish line (x = 2.45m)
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
 
 start:
     nose_offset_m: 0.1205
-    pos:
-        x: 0.30
-        y: 0.0
+    pos: { x: 0.30, y: 0.0 }
     angle: 0
 
 parking:
@@ -24,14 +15,18 @@ parking:
 
 towers:
     -   color: "Plain"
-        pos: { x: 0.62, y: 0.00 }   # Dead center right in front of start line
+        pos: { x: 0.60, y: 0.00 }   # Immediate dead-center blocker
     -   color: "Plain"
-        pos: { x: 0.95, y: -0.30 }  # Outer wall pinch
+        pos: { x: 0.85, y: -0.28 }  # Wall pinch right
     -   color: "Plain"
-        pos: { x: 1.30, y: 0.18 }   # Cross-corridor chicane
+        pos: { x: 1.15, y: 0.20 }   # Cross-corridor chicane
     -   color: "Plain"
-        pos: { x: 1.65, y: -0.15 }  # Fast mid-corridor transition
+        pos: { x: 1.40, y: -0.18 }  # Rapid switch
     -   color: "Plain"
-        pos: { x: 2.05, y: 0.28 }   # Near wall left
+        pos: { x: 1.68, y: 0.25 }   # Left wall pinch
     -   color: "Plain"
-        pos: { x: 2.40, y: -0.05 }  # Pre-finish gate
+        pos: { x: 1.95, y: -0.15 }  # Mid-lane trap
+    -   color: "Plain"
+        pos: { x: 2.20, y: 0.22 }   # High angle chicane
+    -   color: "Plain"
+        pos: { x: 2.45, y: -0.10 }  # Pre-finish gate

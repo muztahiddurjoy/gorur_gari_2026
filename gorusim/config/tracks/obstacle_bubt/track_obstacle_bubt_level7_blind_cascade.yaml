@@ -1,23 +1,13 @@
 # ════════════════════════════════════════════════════════════════════
-# Level 7: Blind Corner / Diagonal Cascade
-#
+# Level 7: Blind Cascade / Occlusion Staircase - 8 Obstacles
 # Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
-# Start: x = 0.30 m, Finish: x = 2.70 m
-# Characteristics:
-#   - Stepped staircase / diagonal barricade from x = 0.70 to x = 1.30 m
-#     running from y = -0.30 to y = +0.10 m.
-#   - From the start line, the cascading blocks occlude each other, creating
-#     a "blind corner" that looks like a solid wall until the car turns.
-#   - Sudden reverse chicane at x = 1.80 m (y = -0.22) and x = 2.25 m (y = +0.22).
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
 
 start:
     nose_offset_m: 0.1205
-    pos:
-        x: 0.30
-        y: 0.0
+    pos: { x: 0.30, y: 0.0 }
     angle: 0
 
 parking:
@@ -25,14 +15,18 @@ parking:
 
 towers:
     -   color: "Plain"
-        pos: { x: 0.70, y: -0.28 }  # Cascade step 1
+        pos: { x: 0.68, y: -0.28 }  # Cascade 1
     -   color: "Plain"
-        pos: { x: 0.95, y: -0.10 }  # Cascade step 2 (blocks view forward)
+        pos: { x: 0.90, y: -0.10 }  # Cascade 2 (occludes view)
     -   color: "Plain"
-        pos: { x: 1.25, y: 0.08 }   # Cascade step 3
+        pos: { x: 1.15, y: 0.10 }   # Cascade 3
     -   color: "Plain"
-        pos: { x: 1.55, y: 0.28 }   # Forces car to dive back right
+        pos: { x: 1.40, y: 0.28 }   # Cascade 4 (forces right dive)
     -   color: "Plain"
-        pos: { x: 1.95, y: -0.24 }  # Sharp switchback
+        pos: { x: 1.68, y: -0.25 }  # Reverse cascade 1
     -   color: "Plain"
-        pos: { x: 2.35, y: 0.20 }   # Final left gate
+        pos: { x: 1.92, y: -0.05 }  # Reverse cascade 2
+    -   color: "Plain"
+        pos: { x: 2.18, y: 0.15 }   # Reverse cascade 3
+    -   color: "Plain"
+        pos: { x: 2.42, y: -0.18 }  # Final gate

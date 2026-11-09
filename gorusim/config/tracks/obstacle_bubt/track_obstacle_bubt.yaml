@@ -1,10 +1,10 @@
 # ════════════════════════════════════════════════════════════════════
-# BUBT FastRobox 2026 - Obstacle Avoidance Round
+# BUBT FastRobox 2026 - Obstacle Avoidance Round (Default Track)
 #
 # Corridor: 3.0 m long x 1.0 m wide straight corridor (x in [0, 3], y in [-0.5, 0.5])
 # Start: x = 0.30 m, facing +X (angle = 0)
 # Finish line: x = 2.70 m (30 cm before end wall at x = 3.0 m)
-# Obstacles: 6 plain 5x5x10 cm blocks
+# Obstacles: 8 plain 5x5x10 cm blocks (official fixed count)
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
@@ -20,29 +20,21 @@ start:
 parking:
     enabled: false
 
-# 6 plain (uncoloured) 5x5x10 cm blocks along the corridor.
+# 8 plain 5x5x10 cm blocks along the corridor
 towers:
     -   color: "Plain"
-        pos:
-            x: 0.75
-            y: 0.15
+        pos: { x: 0.65, y: 0.15 }
     -   color: "Plain"
-        pos:
-            x: 1.05
-            y: -0.20
+        pos: { x: 0.90, y: -0.18 }
     -   color: "Plain"
-        pos:
-            x: 1.40
-            y: 0.10
+        pos: { x: 1.15, y: 0.14 }
     -   color: "Plain"
-        pos:
-            x: 1.70
-            y: -0.15
+        pos: { x: 1.40, y: -0.16 }
     -   color: "Plain"
-        pos:
-            x: 2.05
-            y: 0.20
+        pos: { x: 1.65, y: 0.18 }
     -   color: "Plain"
-        pos:
-            x: 2.35
-            y: -0.10
+        pos: { x: 1.90, y: -0.15 }
+    -   color: "Plain"
+        pos: { x: 2.15, y: 0.16 }
+    -   color: "Plain"
+        pos: { x: 2.40, y: -0.12 }

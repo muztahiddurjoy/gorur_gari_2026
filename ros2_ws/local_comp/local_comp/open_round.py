@@ -16,21 +16,30 @@ class OpenRound(Node):
         self.get_logger().info('OpenRound node has been started.')
         self.scan = None
 
-        # FOV -100 to +100 deg
-        self.fov_min_deg = -100.0
-        self.fov_max_deg = 100.0
-        self.max_range = 2.50             # for infinity replacement
+        # ── Parameter Declarations with Defaults ──
+        self.declare_parameter('fov_min_deg', -100.0)
+        self.declare_parameter('fov_max_deg', 100.0)
+        self.declare_parameter('max_range', 2.50)
+        self.declare_parameter('car_radius', 0.18)
+        self.declare_parameter('disparity_thresh', 0.12)
+        self.declare_parameter('wall_safe_dist', 0.35)
+        self.declare_parameter('speed_straight', 1.2)
+        self.declare_parameter('speed_turn', 1.5)
+        self.declare_parameter('max_steer_deg', 30.0)
+        self.declare_parameter('target_laps_yaw', 1055.0)
 
-        self.car_radius = 0.18            # cm corner 
-        self.disparity_thresh = 0.12      # (m)
-
-        ## STEERING CONFIGURATION
-        self.wall_safe_dist = 0.35        # Side wall buffer (m)
-        self.speed_straight = 1.2        # Straight path speed
-        self.speed_turn = 1.5            # Cornering speed (ms^-1)
-        self.max_steer_rad = math.radians(30.0)
-        self.target_laps_yaw = 1055.0     # 12 corners -> 1080 deg - 25 deg safety reduction = 1055
-        self.start_front_dist = None      # distance of front wall logged at start
+        # ── Read Parameters ──
+        self.fov_min_deg = float(self.get_parameter('fov_min_deg').value)
+        self.fov_max_deg = float(self.get_parameter('fov_max_deg').value)
+        self.max_range = float(self.get_parameter('max_range').value)
+        self.car_radius = float(self.get_parameter('car_radius').value)
+        self.disparity_thresh = float(self.get_parameter('disparity_thresh').value)
+        self.wall_safe_dist = float(self.get_parameter('wall_safe_dist').value)
+        self.speed_straight = float(self.get_parameter('speed_straight').value)
+        self.speed_turn = float(self.get_parameter('speed_turn').value)
+        self.max_steer_rad = math.radians(float(self.get_parameter('max_steer_deg').value))
+        self.target_laps_yaw = float(self.get_parameter('target_laps_yaw').value)
+        self.start_front_dist = None
 
         self.scan_angles = np.array([])   # radians, sorted -100 to +100
         self.raw_ranges = np.array([])    # metres

@@ -19,8 +19,30 @@ class ObstacleRound(Node):
 
         self.scan = None
 
-        self.fov_min_deg = -70.0
-        self.fov_max_deg = 70.0
+        # ── Parameter Declarations with Defaults ──
+        self.declare_parameter('fov_min_deg', -70.0)
+        self.declare_parameter('fov_max_deg', 70.0)
+        self.declare_parameter('car_radius', 0.12)
+        self.declare_parameter('disparity_thresh', 0.12)
+        self.declare_parameter('max_range', 1.15)
+        self.declare_parameter('stop_dist', 0.40)
+        self.declare_parameter('wall_safe_dist', 0.24)
+        self.declare_parameter('speed_straight', 1.0)
+        self.declare_parameter('speed_turn', 1.25)
+        self.declare_parameter('max_steer_deg', 40.0)
+
+        # ── Read Parameters ──
+        self.fov_min_deg = float(self.get_parameter('fov_min_deg').value)
+        self.fov_max_deg = float(self.get_parameter('fov_max_deg').value)
+        self.car_radius = float(self.get_parameter('car_radius').value)
+        self.disparity_thresh = float(self.get_parameter('disparity_thresh').value)
+        self.max_range = float(self.get_parameter('max_range').value)
+        self.stop_dist = float(self.get_parameter('stop_dist').value)
+        self.wall_safe_dist = float(self.get_parameter('wall_safe_dist').value)
+        self.speed_straight = float(self.get_parameter('speed_straight').value)
+        self.speed_turn = float(self.get_parameter('speed_turn').value)
+        self.max_steer_rad = math.radians(float(self.get_parameter('max_steer_deg').value))
+
         self.scan_angles = np.array([])   # radians; sorted -70 to left +70
         self.raw_ranges = np.array([])    # metres
         self.scan_ranges = np.array([])   # metres
@@ -29,18 +51,6 @@ class ObstacleRound(Node):
         self.countdown_start = None
         self.lidar_last_timestamp = None
         self.vel = Twist()
-
-        # BOT CONFIG
-        self.car_radius = 0.12        # 0.06m half-width + 0.06m safety margin
-        self.disparity_thresh = 0.12  
-        self.max_range = 1.15         # max range for infinity replacement (m)
-        self.stop_dist = 0.40         # end wall stop distance to break velocity(m)
-        self.wall_safe_dist = 0.24    # side wall distance (m)
-
-        # Drive Config 
-        self.speed_straight = 1.0    # speed m/s
-        self.speed_turn = 1.25        # cornering boosted m/s
-        self.max_steer_rad = math.radians(40.0)
 
         self.create_subscription(
             LaserScan, '/scan', self.scan_callback, qos_profile_sensor_data)

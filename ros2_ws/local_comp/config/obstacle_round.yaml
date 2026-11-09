@@ -1,0 +1,21 @@
+# ════════════════════════════════════════════════════════════════════
+# Obstacle Round Configuration (local_comp)
+# ════════════════════════════════════════════════════════════════════
+
+obstacle_round:
+  ros__parameters:
+    # ── Field of View (degrees) ──
+    fov_min_deg: -70.0
+    fov_max_deg: 70.0
+
+    # ── Disparity Extender & Robot Geometry (metres) ──
+    car_radius: 0.12            # 0.06m half-width + 0.06m safety margin
+    disparity_thresh: 0.12      # Minimum jump between adjacent rays to trigger disparity smearing
+    max_range: 1.15             # Capped lookahead horizon (m)
+    stop_dist: 0.40             # End-wall distance to trigger finish line stop
+    wall_safe_dist: 0.24        # Side-wall repulsion margin (m)
+
+    # ── Drive Configuration (Ackermann dynamics) ──
+    speed_straight: 1.0         # Cruising speed (m/s)
+    speed_turn: 1.25            # Boosted cornering speed to overcome tyre scrub (m/s)
+    max_steer_deg: 40.0         # Maximum steering lock in degrees

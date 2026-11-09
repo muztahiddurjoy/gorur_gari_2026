@@ -53,11 +53,19 @@ ros2 launch gorusim obstacle_bubt_sim.launch.py track:=level10  # Pinball Chaos 
 
 ## Obstacle Round Node
 
+Run standalone (using default parameters):
 ```bash
 # Inside docker container (Terminal 2)
 source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash
 ros2 run local_comp obstacle_round
 ```
+
+OR run with the dedicated YAML configuration file:
+```bash
+ros2 run local_comp obstacle_round --ros-args --params-file /workspace/ros2_ws/local_comp/config/obstacle_round.yaml
+```
+
+*(For Open Round, use: `ros2 run local_comp open_round --ros-args --params-file /workspace/ros2_ws/local_comp/config/open_round.yaml`)*
 
 ---
 

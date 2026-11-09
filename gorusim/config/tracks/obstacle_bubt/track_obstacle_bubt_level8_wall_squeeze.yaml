@@ -1,24 +1,13 @@
 # ════════════════════════════════════════════════════════════════════
-# Level 8: Wall Squeeze / Razor Margin
-#
+# Level 8: Wall Squeeze / Razor Margin - 8 Obstacles
 # Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
-# Start: x = 0.30 m, Finish: x = 2.70 m
-# Characteristics:
-#   - Pushes pillars aggressively close to the side walls (y = +/- 0.32m,
-#     leaving only 18 cm clearance to the outer wall).
-#   - Passing on the outside of these pillars tests exact chassis width (12cm)
-#     with minimal margin (3cm per side), while passing on the inside requires
-#     steep swerving around large gaps.
-#   - Tests if wall repulsion over-reacts and throws the car into the pillar.
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
 
 start:
     nose_offset_m: 0.1205
-    pos:
-        x: 0.30
-        y: 0.0
+    pos: { x: 0.30, y: 0.0 }
     angle: 0
 
 parking:
@@ -26,14 +15,18 @@ parking:
 
 towers:
     -   color: "Plain"
-        pos: { x: 0.75, y: -0.32 }  # 18 cm off right wall
+        pos: { x: 0.65, y: -0.32 }  # 18 cm off right wall
     -   color: "Plain"
-        pos: { x: 1.10, y: 0.32 }   # 18 cm off left wall
+        pos: { x: 0.90, y: 0.32 }   # 18 cm off left wall
     -   color: "Plain"
-        pos: { x: 1.45, y: -0.30 }  # 20 cm off right wall
+        pos: { x: 1.15, y: -0.30 }  # 20 cm off right wall
     -   color: "Plain"
-        pos: { x: 1.75, y: 0.30 }   # 20 cm off left wall
+        pos: { x: 1.40, y: 0.30 }   # 20 cm off left wall
     -   color: "Plain"
-        pos: { x: 2.10, y: -0.32 }  # 18 cm off right wall
+        pos: { x: 1.68, y: -0.32 }  # 18 cm off right wall
     -   color: "Plain"
-        pos: { x: 2.42, y: 0.31 }   # 19 cm off left wall near finish
+        pos: { x: 1.95, y: 0.32 }   # 18 cm off left wall
+    -   color: "Plain"
+        pos: { x: 2.20, y: -0.30 }  # 20 cm off right wall
+    -   color: "Plain"
+        pos: { x: 2.45, y: 0.31 }   # 19 cm off left wall

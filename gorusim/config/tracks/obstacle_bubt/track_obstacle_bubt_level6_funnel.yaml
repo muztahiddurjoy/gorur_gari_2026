@@ -1,23 +1,13 @@
 # ════════════════════════════════════════════════════════════════════
-# Level 6: The Funnel & Double Slit
-#
+# Level 6: The Funnel & Double Slits - 8 Obstacles
 # Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
-# Start: x = 0.30 m, Finish: x = 2.70 m
-# Characteristics:
-#   - Twin obstacles at x = 0.80 m (y = -0.18, +0.18):
-#     Creates a central corridor (36 cm) vs two wall slits (32 cm).
-#   - An obstacle in the middle of the corridor at x = 1.35 m (y = 0.0)
-#     forcing an immediate fork decision.
-#   - Staggered pinch at the exit (x = 2.00, 2.35).
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
 
 start:
     nose_offset_m: 0.1205
-    pos:
-        x: 0.30
-        y: 0.0
+    pos: { x: 0.30, y: 0.0 }
     angle: 0
 
 parking:
@@ -25,14 +15,18 @@ parking:
 
 towers:
     -   color: "Plain"
-        pos: { x: 0.80, y: -0.18 }  # Double slit left
+        pos: { x: 0.75, y: -0.18 }  # Double slit 1 left
     -   color: "Plain"
-        pos: { x: 0.80, y: 0.18 }   # Double slit right
+        pos: { x: 0.75, y: 0.18 }   # Double slit 1 right
     -   color: "Plain"
-        pos: { x: 1.30, y: 0.00 }   # Fork block right after the slit
+        pos: { x: 1.15, y: 0.00 }   # Center fork block
     -   color: "Plain"
-        pos: { x: 1.70, y: -0.26 }  # Wall pinch right
+        pos: { x: 1.50, y: -0.22 }  # Right wall pinch
     -   color: "Plain"
-        pos: { x: 2.05, y: 0.24 }   # Wall pinch left
+        pos: { x: 1.75, y: 0.18 }   # Double slit 2 left
     -   color: "Plain"
-        pos: { x: 2.38, y: -0.15 }  # Pre-finish offset
+        pos: { x: 1.75, y: -0.18 }  # Double slit 2 right
+    -   color: "Plain"
+        pos: { x: 2.12, y: 0.00 }   # Second center fork block
+    -   color: "Plain"
+        pos: { x: 2.40, y: -0.15 }  # Pre-finish gate

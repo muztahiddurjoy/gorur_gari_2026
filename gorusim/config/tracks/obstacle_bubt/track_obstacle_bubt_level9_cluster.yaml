@@ -1,23 +1,13 @@
 # ════════════════════════════════════════════════════════════════════
-# Level 9: Asymmetric Cluster / False Dead-End
-#
+# Level 9: Asymmetric Double Clusters - 8 Obstacles
 # Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
-# Start: x = 0.30 m, Finish: x = 2.70 m
-# Characteristics:
-#   - Heavy 3-pillar cluster in the middle section (x in [1.15, 1.65]):
-#     Three pillars packed irregularly (x=1.20 y=-0.12, x=1.35 y=0.18, x=1.58 y=-0.18).
-#   - Creates an optical illusion of a dead end from afar until the disparity
-#     extender gets within 1 m and discovers the serpentine opening.
-#   - Tests recovery from high steering angles without side-wall spinout.
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
 
 start:
     nose_offset_m: 0.1205
-    pos:
-        x: 0.30
-        y: 0.0
+    pos: { x: 0.30, y: 0.0 }
     angle: 0
 
 parking:
@@ -25,14 +15,20 @@ parking:
 
 towers:
     -   color: "Plain"
-        pos: { x: 0.75, y: 0.15 }   # Intro obstacle
+        pos: { x: 0.65, y: 0.15 }   # Intro obstacle
+    # First 3-pillar cluster
     -   color: "Plain"
-        pos: { x: 1.15, y: -0.15 }  # Cluster pillar 1
+        pos: { x: 1.00, y: -0.16 }  # Cluster 1A
     -   color: "Plain"
-        pos: { x: 1.35, y: 0.18 }   # Cluster pillar 2
+        pos: { x: 1.18, y: 0.18 }   # Cluster 1B
     -   color: "Plain"
-        pos: { x: 1.62, y: -0.18 }  # Cluster pillar 3
+        pos: { x: 1.38, y: -0.16 }  # Cluster 1C
     -   color: "Plain"
-        pos: { x: 2.05, y: 0.10 }   # Center-skewed exit
+        pos: { x: 1.70, y: 0.12 }   # Mid transition
+    # Second cluster
     -   color: "Plain"
-        pos: { x: 2.38, y: -0.22 }  # Final offset gate
+        pos: { x: 1.95, y: -0.22 }  # Cluster 2A
+    -   color: "Plain"
+        pos: { x: 2.18, y: 0.18 }   # Cluster 2B
+    -   color: "Plain"
+        pos: { x: 2.42, y: -0.15 }  # Exit gate

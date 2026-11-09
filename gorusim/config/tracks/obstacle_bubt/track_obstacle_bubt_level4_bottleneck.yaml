@@ -1,21 +1,13 @@
 # ════════════════════════════════════════════════════════════════════
-# Level 4: Asymmetric Bottlenecks (Corridor Squeeze)
-#
+# Level 4: Asymmetric Bottlenecks (Corridor Squeeze) - 8 Obstacles
 # Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
-# Start: x = 0.30 m, Finish: x = 2.70 m
-# Characteristics:
-#   - Two obstacles placed at nearly the same X coordinate, creating a narrow gate
-#   - Tests whether disparity extender properly blocks unpassable gaps and
-#     steers through the single viable open passage
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
 
 start:
     nose_offset_m: 0.1205
-    pos:
-        x: 0.30
-        y: 0.0
+    pos: { x: 0.30, y: 0.0 }
     angle: 0
 
 parking:
@@ -23,14 +15,18 @@ parking:
 
 towers:
     -   color: "Plain"
-        pos: { x: 0.85, y: -0.22 }
+        pos: { x: 0.72, y: -0.22 }
     -   color: "Plain"
-        pos: { x: 0.88, y: 0.12 }
+        pos: { x: 0.75, y: 0.12 }
     -   color: "Plain"
-        pos: { x: 1.50, y: 0.22 }
+        pos: { x: 1.25, y: 0.22 }
     -   color: "Plain"
-        pos: { x: 1.53, y: -0.12 }
+        pos: { x: 1.28, y: -0.12 }
     -   color: "Plain"
-        pos: { x: 2.15, y: -0.22 }
+        pos: { x: 1.80, y: -0.22 }
     -   color: "Plain"
-        pos: { x: 2.18, y: 0.12 }
+        pos: { x: 1.83, y: 0.12 }
+    -   color: "Plain"
+        pos: { x: 2.30, y: 0.22 }
+    -   color: "Plain"
+        pos: { x: 2.33, y: -0.12 }

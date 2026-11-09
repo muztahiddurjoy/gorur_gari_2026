@@ -1,27 +1,13 @@
 # ════════════════════════════════════════════════════════════════════
-# Level 10: The Pinball Maze / Chaos (Ultimate Challenge)
-#
+# Level 10: Pinball Chaos / The 8-Block Gauntlet
 # Corridor: 3.0 m x 1.0 m (x: [0, 3], y: [-0.5, 0.5])
-# Start: x = 0.30 m, Finish: x = 2.70 m
-# Characteristics:
-#   - Highly irregular spacing and alternating lateral extremes:
-#     1. Dead-center nose blocker right after start (x = 0.60, y = 0.0)
-#     2. Extremely tight right pinch (x = 0.88, y = -0.28)
-#     3. Opposite hard left offset (x = 1.25, y = 0.26)
-#     4. Center trap (x = 1.60, y = -0.05)
-#     5. High-deflection chicane (x = 1.98, y = 0.28)
-#     6. Late obstacle right on the finish threshold (x = 2.45, y = -0.18)
-#   - Pushes dynamic disparity expansion, tyre friction, and finish line
-#     wall latching to the absolute physical limits.
 # ════════════════════════════════════════════════════════════════════
 
 objects: true
 
 start:
     nose_offset_m: 0.1205
-    pos:
-        x: 0.30
-        y: 0.0
+    pos: { x: 0.30, y: 0.0 }
     angle: 0
 
 parking:
@@ -29,14 +15,18 @@ parking:
 
 towers:
     -   color: "Plain"
-        pos: { x: 0.60, y: 0.00 }   # Launch blocker
+        pos: { x: 0.58, y: 0.00 }   # Launch blocker (dead center)
     -   color: "Plain"
-        pos: { x: 0.90, y: -0.28 }  # Rapid dive right
+        pos: { x: 0.85, y: -0.28 }  # Rapid dive right
     -   color: "Plain"
-        pos: { x: 1.25, y: 0.26 }   # Hard swing left
+        pos: { x: 1.12, y: 0.26 }   # Hard swing left
     -   color: "Plain"
-        pos: { x: 1.62, y: -0.06 }  # Central trap
+        pos: { x: 1.38, y: -0.06 }  # Center trap
     -   color: "Plain"
-        pos: { x: 2.02, y: 0.27 }   # Wall squeeze left
+        pos: { x: 1.65, y: 0.28 }   # Wall squeeze left
     -   color: "Plain"
-        pos: { x: 2.45, y: -0.18 }  # Last-second swerve into finish line
+        pos: { x: 1.92, y: -0.25 }  # Wall squeeze right
+    -   color: "Plain"
+        pos: { x: 2.20, y: 0.20 }   # Fast switchback
+    -   color: "Plain"
+        pos: { x: 2.45, y: -0.16 }  # Last-second swerve into finish line
