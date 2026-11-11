@@ -44,7 +44,9 @@ def spawn_on_start_pose(context):
     """Spawn the car where track.yaml says, rather than teleporting it there later."""
     with open(LaunchConfiguration('track_config').perform(context), 'r') as handle:
         start = (yaml.safe_load(handle) or {}).get('start') or {}
-    yaw = math.radians(float(start.get('angle', 0.0)))
+    override = LaunchConfiguration('start_angle_deg').perform(context).strip()
+    angle_deg = float(override) if override else float(start.get('angle', 0.0))
+    yaw = math.radians(angle_deg)
     offset = float(start.get('nose_offset_m', 0.1205))
     position = start.get('pos', {'x': 0.0, 'y': 0.0})
     return [Node(
@@ -88,6 +90,9 @@ def generate_launch_description():
         DeclareLaunchArgument('build_track', default_value='true',
                               description='Spawn what track_config describes. '
                                           'false leaves a bare mat.'),
+        DeclareLaunchArgument('start_angle_deg', default_value='',
+                              description='Optional override for start.angle in degrees '
+                                          '(e.g. 0.0 for CCW, 180.0 for CW).'),
     ]
 
     # Bind Ignition transport to loopback so discovery works even when the host

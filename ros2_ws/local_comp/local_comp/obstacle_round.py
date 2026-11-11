@@ -73,9 +73,10 @@ class ObstacleRound(Node):
     
 
     def button_callback(self, msg):
-        if msg.data and self.state == 'STANDBY':
+        if msg.data and self.state in ('STANDBY', 'FINISHED'):
             self.state = 'COUNTDOWN'
             self.countdown_start = time.time()
+            self.prev_steer = 0.0
             self.get_logger().info('Button pressed! Starting Obstacle Round in 5s :::::')
 
     def scan_callback(self, msg):

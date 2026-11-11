@@ -4,18 +4,26 @@
 
 open_round:
   ros__parameters:
-    # ── Field of View (degrees) ──
+    # ── Field of View & Range (degrees & metres) ──
     fov_min_deg: -100.0
     fov_max_deg: 100.0
-    max_range: 2.50             # Replacement ceiling for out-of-range rays (m)
+    max_range: 2.0             # Replacement for out-of-range/inf rays (m)
 
-    # ── Disparity Extender & Robot Geometry (metres) ──
-    car_radius: 0.18            # Vehicle clearance radius (m)
-    disparity_thresh: 0.12      # Minimum ray disparity threshold (m)
+    # ── Robot Geometry & Corner Clearance (metres) ──
+    car_radius: 0.30            # Vehicle clearance radius for disparity smearing (m)
+    disparity_thresh: 0.10      # Minimum ray disparity jump threshold (m)
+    wall_safe_dist: 0.35        # Side wall emergency buffer (m)
 
-    # ── Steering & Drive Configuration ──
-    wall_safe_dist: 0.35        # Side wall buffer (m)
-    speed_straight: 1.2         # Straight path speed (m/s)
-    speed_turn: 1.5             # Cornering speed (m/s)
-    max_steer_deg: 30.0         # Maximum steering lock in degrees
-    target_laps_yaw: 1055.0     # Accumulated yaw threshold for 3 laps (12 corners x 90° - safety reduction)
+    # ── Lap & Direction Configuration ──
+    direction_latch_deg: 35.0   # turn threshold to lock CW or CCW (deg)
+    target_laps_yaw: 1060.0     # Yaw threshold for 3 full laps (12 corners x 90°)
+
+    # ── Speed & Throttle Profile (m/s) ──
+    speed_straight: 1.20        # Straight speed (m/s)
+    speed_turn: 1.00            # Cornering speed (m/s) - 
+
+    # ── Steering & Control Tuning ──
+    max_steer_deg: 30.0         # Maximum steering lock in degrees (softened for wide arc)
+    steer_alpha: 0.45           # Steering EMA filter factor (0.0 = frozen, 1.0 = original)
+    turn_entry_dist: 0.30       # Distance to front wall before triggering corner turn (m)
+    center_kp: 1.8              # Proportional gain for straight-line corridor centering
