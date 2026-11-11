@@ -1,65 +1,126 @@
 #include "heading.h"
-#include <Wire.h>
 #include "debug_serial.h"
 
-// register 0x00 holds the chip id, which is always 0xA0 on a BNO055
-static const uint8_t BNO055_CHIP_ID_REG = 0x00;
-static const uint8_t BNO055_CHIP_ID = 0xA0;
-
-Heading::Heading(): bno(nullptr), heading(0.0f), ready(false){}
-
-Heading::~Heading() {
-    delete bno;
-}
-
-bool Heading::begin() {
-    ready = false;
-    // Adafruit_BNO055 news an Adafruit_I2CDevice in its constructor and has no
-    // destructor to free it, so build the sensor object exactly once and let
-    // retries re-run begin() on it - recreating it every attempt would leak a
-    // little heap on every retry. begin() itself allocates nothing.
-    if (!bno) {
-        bno = new Adafruit_BNO055(55, BNO055_ADDRESS);
+const char *imuStatusName(ImuStatus status) {
+    switch (status) {
+        case ImuStatus::NotFound:     return "NOT FOUND";
+        case ImuStatus::Calibrating:  return "CALIBRATING";
+        case ImuStatus::Ready:        return "READY";
+        case ImuStatus::Uncalibrated: return "UNCALIBRATED";
+        case ImuStatus::Fault:        return "FAULT";
     }
-    if (!bno->begin()) {
-        DEBUG_SERIAL.println("BNO055 NOT FOUND!");
-        return false;
+    return "?";
+}
+
+Heading::Heading(TwoWire &wire_bus, const HeadingConfig &cfg)
+    : wire(wire_bus), config(cfg), gyro(wire_bus, cfg.i2cAddress),
+      yaw(cfg.yawSign, cfg.maxIntegrationGapS), started(false), attempted(false),
+      calibratedOnce(false), lastBeginAttemptMs(0), lastStatus(ImuStatus::NotFound),
+      faults(0), presentButFailed(0) {
+    // all of these only store a value; BOTGyro applies them in begin()
+    gyro.setI2CClock(config.i2cClockHz);
+    gyro.setODR(config.odrHz);
+    gyro.setFullScale(config.gyroFullScaleDps);
+    gyro.setAccelFullScale(config.accelFullScaleG);
+    gyro.setCalibrationSamples(config.calibrationSamples);
+    gyro.setFilterEnabled(true);
+    gyro.enableAttitude(true);
+    gyro.setAttitudeFilter(config.attitudeAlpha);
+    yaw.reset(0.0f);
+}
+
+bool Heading::addressAcks() {
+    wire.beginTransmission(config.i2cAddress);
+    return wire.endTransmission() == 0;
+}
+
+void Heading::tryBegin(unsigned long nowMs) {
+    attempted = true;
+    lastBeginAttemptMs = nowMs;
+    // BOTGyro::begin() calls Wire.begin() (a no-op, the bus is already up on
+    // our pins) and Wire.setClock(), checks WHO_AM_I, then resets and
+    // configures the sensor, blocking ~120 ms. It leaves it streaming
+    // uncalibrated; service() starts the calibration.
+    if (gyro.begin()) {
+        started = true;
+        yaw.reset(0.0f);
+        DBG_PRINTF("[imu] BOTGyro found at 0x%02X, I2C %lu Hz\n",
+                            config.i2cAddress, (unsigned long)config.i2cClockHz);
+        return;
     }
-    delay(1000);
-    // bno->setExtCrystalUse(true);
-    DEBUG_SERIAL.println("BNO055 Ready");
-    ready = true;
-    return true;
+    if (addressAcks()) {
+        presentButFailed++;
+        DBG_PRINTF("[imu] something answers at 0x%02X but BOTGyro begin() failed, retrying in %lu ms\n",
+                            config.i2cAddress, (unsigned long)config.beginRetryMs);
+    } else {
+        DBG_PRINTF("[imu] BOTGyro not found at 0x%02X, retrying in %lu ms\n",
+                            config.i2cAddress, (unsigned long)config.beginRetryMs);
+    }
 }
 
-bool Heading::isResponding() {
-    Wire.beginTransmission(BNO055_ADDRESS);
-    Wire.write(BNO055_CHIP_ID_REG);
-    if (Wire.endTransmission() != 0) return false;
-    if (Wire.requestFrom((uint8_t)BNO055_ADDRESS, (uint8_t)1) != 1) return false;
-    return Wire.read() == BNO055_CHIP_ID;
+void Heading::service(bool calibrationAllowed) {
+    unsigned long now = millis();
+
+    if (!started) {
+        // not found yet (unplugged, still in its own power-on reset, or a
+        // brownout at boot): keep trying, never give up
+        if (!attempted || now - lastBeginAttemptMs >= config.beginRetryMs) {
+            tryBegin(now);
+        }
+        if (!started) return;
+    }
+
+    // BOTGyro's state machine: one sample per call when data is ready, the
+    // non-blocking calibration, and its own re-init attempt once a second
+    // while in Fault
+    bool fresh = gyro.update();
+
+    if (fresh && gyro.isCalibrated()) {
+        yaw.addSample(gyro.getZ(), micros());
+    }
+    // calibrating, faulted or uncalibrated: no integration, and the next good
+    // sample starts a fresh interval instead of spanning the gap
+    if (!gyro.isRunning() || !gyro.isCalibrated()) {
+        yaw.restart();
+    }
+
+    // streaming but not calibrated, and the car is meant to be still:
+    // (re)start the zero-rate calibration. BOTGyro gives up after five
+    // disturbed attempts and goes back to streaming uncalibrated, which lands
+    // here again - so it keeps trying for as long as the car stands still.
+    if (gyro.isRunning() && !gyro.isCalibrated() && calibrationAllowed) {
+        gyro.startCalibration();
+    }
+
+    if (gyro.isCalibrated()) calibratedOnce = true;
+
+    ImuStatus now_status = status();
+    if (now_status != lastStatus) {
+        if (now_status == ImuStatus::Fault) faults++;
+        logTransition(lastStatus, now_status);
+        lastStatus = now_status;
+    }
 }
 
-void Heading::markLost() {
-    ready = false;
+ImuStatus Heading::status() const {
+    if (!started) return ImuStatus::NotFound;
+    switch (gyro.getState()) {
+        case BOTGyro::State::Calibrating: return ImuStatus::Calibrating;
+        case BOTGyro::State::Fault:       return ImuStatus::Fault;
+        case BOTGyro::State::Running:
+            return gyro.isCalibrated() ? ImuStatus::Ready : ImuStatus::Uncalibrated;
+        case BOTGyro::State::Idle:
+        default:                          return ImuStatus::NotFound;
+    }
 }
 
-bool Heading::update() {
-   if(!ready || !bno) return false;
-   sensors_event_t event;
-    bno->getEvent(&event);
-    heading = event.orientation.x;
-    return true;
-}
-
-void Heading::setHeading(float new_heading) {
-    heading = new_heading;
-}
-
-void Heading::resetHeading() {
-    heading = 0.0f;
-}
-
-float Heading::getHeading() {
-    return heading;
+void Heading::logTransition(ImuStatus from, ImuStatus to) {
+    if (to == ImuStatus::Ready && from == ImuStatus::Calibrating) {
+        DBG_PRINTF("[imu] calibrated: bias z %.3f dps, noise z %.3f dps\n",
+                            gyro.getBiasZ(), gyro.getNoiseZ());
+    } else if (to == ImuStatus::Uncalibrated && from == ImuStatus::Calibrating) {
+        DBG_PRINTLN("[imu] calibration disturbed (car moved?), yaw held until it succeeds");
+    } else {
+        DBG_PRINTF("[imu] %s -> %s\n", imuStatusName(from), imuStatusName(to));
+    }
 }

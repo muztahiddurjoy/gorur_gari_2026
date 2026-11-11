@@ -1,0 +1,17 @@
+# Gorur Gari 2026: stable names for the two USB serial devices on the Pi.
+#
+#   /dev/gorur_mcu  ESP32-S3-DevKitC-1, plugged in by its "USB" port (the
+#                   chip's own USB-Serial/JTAG controller, Espressif VID 303a)
+#   /dev/rplidar    RPLIDAR C1 (CP2102 bridge, 10c4:ea60)
+#
+# The ESP32 is deliberately NOT on the devkit's "UART"/"COM" port: that one is
+# behind a USB-UART bridge chip too, which is what made the two devices
+# trade /dev/ttyUSB* names before.
+#
+# Install (once per Pi), then re-plug both devices or reboot:
+#   sudo cp ros2_ws/config/99-gorur.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#   ls -l /dev/gorur_mcu /dev/rplidar
+
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", SYMLINK+="gorur_mcu", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="rplidar", MODE="0666"

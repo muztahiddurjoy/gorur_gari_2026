@@ -115,6 +115,11 @@ void RgbStatusLed::write(uint8_t red, uint8_t green, uint8_t blue) {
     lastBlue = blue;
     everWritten = true;
     // from the arduino core (esp32-hal-rgb-led), bit banged over RMT. it takes
-    // the RGB_BUILTIN pseudo pin as well as a plain gpio number.
+    // the RGB_BUILTIN pseudo pin as well as a plain gpio number. core 3.x
+    // renamed it and marks the old name deprecated.
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+    rgbLedWrite(ledPin, red, green, blue);
+#else
     neopixelWrite(ledPin, red, green, blue);
+#endif
 }

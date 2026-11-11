@@ -4,13 +4,14 @@
 // for the pin type and for RGB_BUILTIN, which the board variant defines
 #include <Arduino.h>
 
-//servo pins
-const uint8_t STEERING_SERVO_PIN = 10;
-//motor pins
-const uint8_t PWM_THROTTLE_PIN = 4;
-const uint8_t IN_A = 5;
-const uint8_t IN_B = 6;
-const uint8_t STANDBY_PIN = 7;
+//servo pin: MG996R steering servo signal (the servo is powered from its own
+//6 V buck, only signal and ground come from the ESP32)
+const uint8_t STEERING_SERVO_PIN = 16;
+//motor pins: BTS7960 (IBT-2), each with a 10k pull-down on the board so the
+//bridge stays off from power-up until MotorController::begin()
+const uint8_t MOTOR_RPWM_PIN = 5;  // forward PWM
+const uint8_t MOTOR_LPWM_PIN = 6;  // reverse PWM
+const uint8_t MOTOR_EN_PIN = 7;    // R_EN and L_EN, tied together
 //encoder pin
 // A and B are deliberately the reverse of the silkscreen: wired the other way
 // the quadrature decoder counts DOWN when the car drives forward, which flips
@@ -21,18 +22,22 @@ const uint8_t ENCODER_B_PIN = 2;
 const uint8_t I2C_SDA = 8;
 const uint8_t I2C_SCL = 9;
 
+// The Raspberry Pi link is NOT on a GPIO: it is native USB CDC on the
+// devkit's "USB" port (USB-Serial/JTAG on GPIO19/20, which must stay free),
+// see MAV_SERIAL in config.h. GPIO40/41, the old UART link, are now unused.
 
-//button pin
-const uint8_t BUTTON_PIN = 42;
 
-// status led pin (plain LED, not the onboard WS2812 on GPIO48).
-// GPIO36 is free on the DevKitC-1 header and clashes with nothing else here:
-// it is not a strapping pin (0/3/45/46), not the native USB pair (19/20), not
-// UART0 (43/44) and not wired to the SPI flash (26-32). Note that on modules
-// with octal PSRAM (N8R8/N16R8) GPIO33-37 belong to the PSRAM die - this build
-// never enables PSRAM, but move the LED to 37 or 45 if you fit such a module
-// and see trouble.
-const uint8_t STATUS_LED_PIN = 36;
+//start button: the devkit's own BOOT button, there is no separate one.
+// GPIO0 is a strapping pin, so the firmware only ever READS it, after boot,
+// with INPUT_PULLUP (pressed = LOW), debounced in software. It is never driven
+// as an output and nothing else may be wired to it. Holding it down through a
+// reset still drops the chip into the ROM bootloader, as on any devkit.
+const uint8_t START_BUTTON_PIN = 0;
+
+// status led pin (plain LED, not the onboard WS2812). GPIO4 -> 220-470R ->
+// anode, cathode to GND. It used to be GPIO36, which belongs to the octal
+// PSRAM on the N16R8 module (GPIO35-37 must stay unused).
+const uint8_t STATUS_LED_PIN = 4;
 
 // the devkit's own WS2812, the single addressable pixel the
 // ESP32-S3-DevKitC-1 puts on GPIO48. RGB_BUILTIN is what the board variant calls it
@@ -47,14 +52,8 @@ const uint8_t RGB_STATUS_LED_PIN = RGB_BUILTIN;
 const uint8_t RGB_STATUS_LED_PIN = 48;
 #endif
 
-// sonar pins (HC-SR04 style), see firmware/pin-map.md
-const uint8_t SONAR_FRONT_TRIG_PIN = 16;
-const uint8_t SONAR_FRONT_ECHO_PIN = 17;
-const uint8_t SONAR_LEFT_TRIG_PIN = 18;
-const uint8_t SONAR_LEFT_ECHO_PIN = 21;
-const uint8_t SONAR_RIGHT_TRIG_PIN = 38;
-const uint8_t SONAR_RIGHT_ECHO_PIN = 39;
-const uint8_t SONAR_REAR_TRIG_PIN = 40;
-const uint8_t SONAR_REAR_ECHO_PIN = 41;
+// No sonars are fitted. GPIO16, one of their old pins, is now the steering
+// servo; see SONAR_WIRE_NO_READING_CM in config.h for what the telemetry still
+// reports in the four sonar fields.
 
 #endif

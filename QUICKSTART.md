@@ -43,17 +43,24 @@ The devkit's **onboard WS2812** (GPIO 48) carries the whole picture:
 
 | Colour | Meaning | If that is not what you expect |
 | --- | --- | --- |
-| Red | No ROS 2 bridge has announced itself since the ESP32 booted | `mcu_bridge` is not running, or it never got the port — check `/dev/esp32_s3` |
+| Red | No ROS 2 bridge has announced itself since the ESP32 booted | `mcu_bridge` is not running, or it never got the port — check the cable is in the devkit's **"USB"** port (not "UART"/"COM"), that `/dev/gorur_mcu` exists (udev rule, README "Getting It Running" step 2b; `lsusb` shows `303a:`), and the bridge log for `Connected to MCU on ...` |
 | Green | Bridge connected, drivetrain idle | — |
-| Flashing blue | Motor driving, steering near centre | If the car is meant to be stopped, something is still publishing `/cmd_vel` |
+| Flashing blue | Motor driving, steering near centre | If the car is meant to be stopped, something is still publishing `/cmd_vel` (the firmware brakes within 100 ms of the drive commands stopping) |
 | Flashing purple | Motor driving with the wheels turned | Same, plus the steering is off centre |
 
-The **plain LED** (GPIO 36) lights on the same connect message and blinks three times, once a second, after a start button press. Those blinks are the start delay the ROS 2 side holds the car still for, so the car starts moving the moment they stop.
+The **plain LED** (GPIO 4) lights on the same connect message and blinks three times, once a second, after a start button press (the start button is the devkit's **BOOT** button). Those blinks are the start delay the ROS 2 side holds the car still for, so the car starts moving the moment they stop. Two more patterns come from the IMU and take precedence over the connect level (the countdown still wins):
+
+| Plain LED | Meaning |
+| --- | --- |
+| Fast even blink (5 Hz) | IMU calibrating after boot: **keep the car still**. Drive commands are ignored until it finishes (at most 5 s) |
+| Short blip once a second | IMU not found, faulted, or not calibrated. The car still drives; the heading is not usable. Details on the OLED and in `mcu_bridge`'s log (`MCU: ...` lines) |
 
 Two things worth knowing before you debug the wrong end:
 
 - The connect notice is sent **once**, about a second after `mcu_bridge` opens the port. If you reset the ESP32 while `mcu_bridge` is already running, both lights stay in the disconnected state until you restart the node.
-- Nothing ever sends a *disconnect* notice, so if `mcu_bridge` dies the pixel stays green. Red means "never connected since boot", not "not connected right now".
+- Nothing ever sends a *disconnect* notice, so if `mcu_bridge` dies the pixel stays green. Red means "never connected since boot", not "not connected right now". The OLED's `Cmd:` line is the live answer: `OK` while valid drive commands arrive, `STOP (no cmd)` once they have stopped for 100 ms.
+- The ESP32's USB port is the Pi link and carries **MAVLink only**, so a serial monitor on it shows binary noise. What the firmware has to say (drive timeouts, IMU trouble, the I2C fallback) appears in `mcu_bridge`'s log as `MCU: ...` lines. For a bench test *without* the Pi, build with `PLATFORMIO_BUILD_FLAGS="-D DEBUG_PRINTS=1"` to get human-readable `[status]` / `[drive]` / `[imu]` lines instead; never run that build with the Pi attached.
+- `mcu_bridge` survives the ESP32 resetting, being re-flashed or the cable being pulled: it logs `Lost the MCU`, retries every second and logs `Connected to MCU` again. The OLED shows `Cmd: STOP (no USB)` while the cable is out.
 
 ---
 

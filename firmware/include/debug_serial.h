@@ -3,16 +3,29 @@
 
 #include <Arduino.h>
 
-// Serial (native USB CDC, the /dev/ttyACM0 mcu_bridge.py opens) carries nothing
-// but binary MAVLink frames. Any stray text there lands in the middle of a
-// packet and desyncs the ROS2 parser, so human readable logs go to UART0
-// instead, which comes out of the devkit's other (CH343) usb socket.
-#if ARDUINO_USB_CDC_ON_BOOT
-#define DEBUG_SERIAL Serial0
-#else
-#define DEBUG_SERIAL Serial
+#include "config.h"  // MAV_SERIAL
+
+// Human readable debug output, OFF by default.
+//
+// The firmware has one USB port and it carries binary MAVLink to the Pi. Any
+// text on it lands in the middle of a frame and corrupts the stream, so debug
+// text is only compiled in with  -D DEBUG_PRINTS=1  (see platformio.ini), and
+// that is ONLY for bench tests WITHOUT the Pi: a serial monitor on the USB
+// port instead of mcu_bridge. With the default 0 every DBG_* call compiles to
+// nothing (the arguments are still type checked, so nothing rots).
+//
+// Things the Pi should hear about (drive timeouts, IMU trouble, the I2C
+// fallback) go out as MAVLink STATUSTEXT instead, see statusTextf() in
+// main.cpp; mcu_bridge logs them as "MCU: ...".
+#ifndef DEBUG_PRINTS
+#define DEBUG_PRINTS 0
 #endif
 
-const unsigned long DEBUG_SERIAL_BAUD = 115200;
+// the only USB port there is - the MAVLink link
+#define DEBUG_SERIAL MAV_SERIAL
+
+#define DBG_PRINT(x)    do { if (DEBUG_PRINTS) DEBUG_SERIAL.print(x); } while (0)
+#define DBG_PRINTLN(x)  do { if (DEBUG_PRINTS) DEBUG_SERIAL.println(x); } while (0)
+#define DBG_PRINTF(...) do { if (DEBUG_PRINTS) DEBUG_SERIAL.printf(__VA_ARGS__); } while (0)
 
 #endif // DEBUG_SERIAL_H

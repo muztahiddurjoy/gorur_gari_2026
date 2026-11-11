@@ -6,9 +6,11 @@ Wiring is taken from the firmware sources — keep in sync with:
   firmware/include/config.h    (frequencies, I2C addresses, enables)
   firmware/pin-map.md          (full pin table incl. reserved slots)
   firmware/lib/rgb_status_led/ (what each WS2812 colour means)
-  ros2_ws/controls/controls/mcu_bridge.py  (/dev/esp32_s3 MAVLink link)
+  ros2_ws/controls/controls/mcu_bridge.py  (/dev/gorur_mcu MAVLink link)
 
 Usage:  python3 generate_diagrams.py   (needs matplotlib)
+        (python3 -s generate_diagrams.py if a NumPy 2 in ~/.local breaks
+        the system matplotlib)
 Outputs circuit_block_diagram.png/.svg and esp32_pin_map.png next to it.
 """
 
@@ -23,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------- palette
 C_COMPUTE = dict(fc="#dbeafe", ec="#1d4ed8")   # Pi + USB peripherals
 C_MCU     = dict(fc="#fef3c7", ec="#b45309")   # ESP32-S3
-C_SENSOR  = dict(fc="#dcfce7", ec="#15803d")   # sonar, IMU, encoder
+C_SENSOR  = dict(fc="#dcfce7", ec="#15803d")   # IMU, encoder
 C_ACT     = dict(fc="#fee2e2", ec="#b91c1c")   # driver, motor, servo
 C_HMI     = dict(fc="#f3e8ff", ec="#7e22ce")   # OLED, button, LED
 
@@ -112,26 +114,28 @@ def main_diagram():
     wire(ax, [(130, 92), (108, 92)], W_USB, arrow="<>")
     wlabel(ax, 119, 94.2, "USB", W_USB)
 
-    # Pi <-> ESP32 (native USB CDC, MAVLink)
+    # Pi <-> ESP32 (USB cable into the devkit's native "USB" port, MAVLink)
     wire(ax, [(85, 84), (85, 73)], W_USB, lw=2.4, arrow="<>")
     wlabel(ax, 86, 78.5,
-           "USB CDC (native)  ·  MAVLink 2 @ 115200\n"
-           "/dev/esp32_s3  ·  mcu_bridge.py  ·  telemetry every 50 ms",
+           "USB cable → devkit \"USB\" port (native USB CDC, VID 303a)\n"
+           "Pi /dev/gorur_mcu  ·  MAVLink 2 only  ·  mcu_bridge.py\n"
+           "drive cmds 50 Hz  ·  telemetry every 50 ms",
            W_USB, fs=7, ha="left")
 
     # ---------------- MCU ----------------------------------------------
     block(ax, 58, 42, 54, 31, "", style=C_MCU)
-    ax.text(85, 68.5, "ESP32-S3 DevKitC-1", ha="center", fontsize=13,
+    ax.text(85, 68.5, "ESP32-S3 DevKitC-1 N16R8", ha="center", fontsize=13,
             fontweight="bold", color="#111827", zorder=4)
     ax.text(85, 65,
             "firmware/ — PlatformIO · Arduino · FreeRTOS\n"
-            "core 1: loop() — motor, servo, sonar, encoder, status lights, MAVLink\n"
-            "core 0: i2cTask — BNO055 @ 10 ms, OLED @ 50 ms",
+            "core 1: loop() — motor, servo, encoder, status lights, MAVLink,\n"
+            "100 ms drive-command watchdog\n"
+            "core 0: i2cTask — BOTGyro every pass (416 Hz), OLED @ 200 ms",
             ha="center", va="top", fontsize=7.5, color="#374151", zorder=4)
 
     # ---------------- I2C bus (left) ------------------------------------
-    block(ax, 8, 58, 32, 12, "BNO055 IMU",
-          "9-DoF fusion, yaw\nI²C addr 0x29", C_SENSOR)
+    block(ax, 8, 58, 32, 12, "BOTGyro IMU",
+          "ASM330LHH gyro + accel\nI²C addr 0x6A", C_SENSOR)
     block(ax, 8, 42, 32, 12, "OLED SSD1306",
           "128×64 status display\nI²C addr 0x3C", C_HMI)
 
@@ -142,18 +146,17 @@ def main_diagram():
     wire(ax, [(trunk_x, 48), (40, 48)], W_I2C, lw=2.2, arrow=">")
     dot(ax, trunk_x, 56, W_I2C)
     dot(ax, 58, 56, W_I2C)
-    wlabel(ax, 49, 39.4, "I²C bus (3.3 V)\nSDA = GPIO8 · SCL = GPIO9", W_I2C, fs=7)
+    wlabel(ax, 49, 39.4, "I²C bus (3.3 V, 400 kHz)\nSDA = GPIO8 · SCL = GPIO9", W_I2C, fs=7)
 
     # ---------------- motor chain (right) --------------------------------
-    block(ax, 128, 55, 34, 17, "TB6612FNG",
-          "H-bridge motor driver\nch A · VM = VBAT · VCC = 3V3", C_ACT)
+    block(ax, 128, 55, 34, 17, "BTS7960 (IBT-2)",
+          "dual half-bridge driver\nB+ = VBAT · 10k pull-downs", C_ACT)
     block(ax, 128, 31, 34, 12, "JGA370 motor",
           "DC gearmotor + quadrature\nencoder (1320 cnt/rev)", C_SENSOR)
 
-    ctrl = [("GPIO4 → PWMA · 20 kHz", 69.5, W_PWM),
-            ("GPIO5  → AIN1", 66.0, W_GPIO),
-            ("GPIO6  → AIN2", 62.5, W_GPIO),
-            ("GPIO7  → STBY", 59.0, W_GPIO)]
+    ctrl = [("GPIO5 → RPWM · 20 kHz", 69.5, W_PWM),
+            ("GPIO6 → LPWM · 20 kHz", 65.0, W_PWM),
+            ("GPIO7 → R_EN + L_EN", 60.5, W_GPIO)]
     for label, yy, cc in ctrl:
         wire(ax, [(112, yy), (128, yy)], cc, arrow=">")
         wlabel(ax, 120, yy + 1.5, label, cc, fs=6.4)
@@ -161,40 +164,26 @@ def main_diagram():
     # motor phases driver -> motor
     wire(ax, [(136, 55), (136, 43)], W_PHASE, lw=3.2, arrow=">")
     wire(ax, [(141, 55), (141, 43)], W_PHASE, lw=3.2, arrow=">")
-    wlabel(ax, 149.5, 49, "AO1 / AO2\nmotor phases", W_PHASE, fs=6.8)
+    wlabel(ax, 149.5, 49, "M+ / M−\nmotor phases", W_PHASE, fs=6.8)
 
     # encoder feedback motor -> ESP32
     wire(ax, [(128, 35.5), (117, 35.5), (117, 46), (112, 46)], W_ENC, arrow=">")
     wire(ax, [(128, 33.5), (115, 33.5), (115, 43.5), (112, 43.5)], W_ENC, arrow=">")
-    wlabel(ax, 116.5, 38.8, "A → GPIO2\nB → GPIO1 *", W_ENC, fs=6.6)
+    wlabel(ax, 116.5, 38.8, "C2 → GPIO2\nC1 → GPIO1 *", W_ENC, fs=6.6)
 
     # ---------------- servo ----------------------------------------------
     block(ax, 128, 8, 34, 12, "MG996R servo",
-          "steering · 50 Hz PWM\ncenter 90° · ±35°", C_ACT)
+          "steering · 50 Hz PWM · own 6 V buck\nlimited to STEERING_MIN/MAX_US", C_ACT)
     # threaded between the button/LED column (up to y = 26.4 with its padding)
     # and the motor block above it (down to y = 30.6)
     wire(ax, [(110, 42), (110, 27.6), (155, 27.6), (155, 20.5)], W_PWM,
          lw=2.2, arrow=">")
-    wlabel(ax, 131, 29.1, "GPIO10 · PWM 50 Hz", W_PWM, fs=6.8)
-
-    # ---------------- sonars (bottom) -------------------------------------
-    sonars = [
-        ("HC-SR04  FRONT", "TRIG = GPIO16\nECHO = GPIO17 †", 8,  64.0),
-        ("HC-SR04  LEFT",  "TRIG = GPIO18\nECHO = GPIO21 †", 39, 74.0),
-        ("HC-SR04  RIGHT", "TRIG = GPIO38\nECHO = GPIO39 †", 70, 84.0),
-    ]
-    for title, sub, bx, drop_x in sonars:
-        block(ax, bx, 8, 26, 13, title, sub, C_SENSOR, tfs=8.5, sfs=6.8)
-        cx = bx + 13
-        wire(ax, [(drop_x, 42), (drop_x, 26), (cx, 26), (cx, 21)],
-             W_GPIO, arrow="<>")
-    wlabel(ax, 46, 27.8, "TRIG out / ECHO in — one sonar polled per loop()",
-           W_GPIO, fs=6.6)
+    wlabel(ax, 131, 29.1, "GPIO16 · PWM 50 Hz", W_PWM, fs=6.8)
 
     # ---------------- button + status lights -------------------------------
-    block(ax, 100, 19.5, 22, 6.5, "START button", "GPIO42 — arms run",
+    block(ax, 100, 19.5, 22, 6.5, "START = BOOT button", "GPIO0 — on the devkit",
           C_HMI, tfs=8, sfs=6.5)
-    block(ax, 100, 11.5, 22, 6.5, "Status LED", "GPIO36 + 220–470 Ω",
+    block(ax, 100, 11.5, 22, 6.5, "Status LED", "GPIO4 + 220–470 Ω",
           C_HMI, tfs=8, sfs=6.5)
     block(ax, 100, 3.5, 22, 6.5, "Onboard WS2812", "GPIO48 — on the devkit",
           C_HMI, tfs=8, sfs=6.5)
@@ -226,15 +215,15 @@ def main_diagram():
         ax.text(x0 + 1.6, ly - 2.2, name, ha="center", fontsize=6.4, color=col)
 
     ax.text(118, 82,
-            "POWER (not drawn):  VBAT → TB6612 VM  ·  5 V rail → Pi, servo, sonars  ·  "
-            "3V3 → BNO055, OLED, driver VCC",
+            "POWER (not drawn):  VBAT → BTS7960 B+  ·  6 V buck → servo  ·  "
+            "5 V rail → Pi, ESP32  ·  3V3 → BOTGyro, OLED",
             fontsize=6.8, color="#b91c1c", ha="left", va="center")
 
     # ---------------- footnotes -------------------------------------------
     ax.text(8, 1.4,
-            "*  encoder A/B intentionally swapped vs silkscreen so forward = positive count (pins.h)      "
-            "†  HC-SR04 ECHO is 5 V — divide/level-shift to the 3.3 V GPIO      "
-            "4th sonar slot reserved: REAR TRIG=GPIO40 / ECHO=GPIO41  ·  all sonars currently disabled in config.h",
+            "*  encoder phases ordered so forward = positive count (pins.h)      "
+            "GPIO35–37 belong to the N16R8's octal PSRAM and are never used      "
+            "GPIO40/41 unused (old UART link)      no sonars on this revision",
             fontsize=6.6, color="#6b7280", va="center")
 
     fig.savefig(os.path.join(HERE, "circuit_block_diagram.png"),
@@ -250,27 +239,23 @@ def pin_table():
     # the flag lives on the row so inserting one cannot shift a hand written
     # index onto the wrong line
     rows = [
-        ("Raspberry Pi 4B ↔ ESP32-S3", "USB CDC (native)", "—",
-         "MAVLink 2 @ 115200, /dev/esp32_s3 (mcu_bridge.py)", False),
-        ("BNO055 IMU", "SDA / SCL", "8 / 9", "I²C 0x29 · yaw sampled every 10 ms", False),
-        ("OLED SSD1306", "SDA / SCL", "8 / 9 (shared)", "I²C 0x3C · 50 ms refresh", False),
-        ("TB6612FNG", "PWMA", "4", "20 kHz, 8-bit duty", False),
-        ("", "AIN1 / AIN2", "5 / 6", "direction; both HIGH = brake", False),
-        ("", "STBY", "7", "HIGH = driver awake", False),
-        ("MG996R servo", "PWM", "10", "50 Hz · center 90° · ±35°", False),
-        ("JGA370 encoder", "A / B", "2 / 1",
-         "quadrature, 1320 counts/rev · swapped on purpose (pins.h)", False),
-        ("Sonar FRONT", "TRIG / ECHO", "16 / 17", "HC-SR04 · disabled in config.h", False),
-        ("Sonar LEFT", "TRIG / ECHO", "18 / 21", "HC-SR04 · disabled in config.h", False),
-        ("Sonar RIGHT", "TRIG / ECHO", "38 / 39", "HC-SR04 · disabled in config.h", False),
-        ("Sonar REAR (slot)", "TRIG / ECHO", "40 / 41", "reserved — no sensor fitted", True),
-        ("START button", "input", "42", "arms the run · 3 × 1 s LED countdown", False),
-        ("Status LED", "output", "36",
-         "lit = ROS 2 bridge connected · plain LED + resistor, not the WS2812", False),
+        ("Raspberry Pi 4B ↔ ESP32-S3", "native USB D− / D+", "19 / 20",
+         "devkit \"USB\" port · USB CDC · MAVLink only · Pi /dev/gorur_mcu", False),
+        ("BOTGyro IMU", "SDA / SCL", "8 / 9", "I²C 0x6A (0x6B if SA0 high) · 400 kHz", False),
+        ("OLED SSD1306", "SDA / SCL", "8 / 9 (shared)", "I²C 0x3C · 200 ms refresh", False),
+        ("BTS7960 (IBT-2)", "RPWM", "5", "forward · 20 kHz, 8-bit · 10k pull-down", False),
+        ("", "LPWM", "6", "reverse · 20 kHz, 8-bit · 10k pull-down", False),
+        ("", "R_EN + L_EN", "7", "tied · HIGH = bridge on · 10k pull-down", False),
+        ("MG996R servo", "PWM", "16", "50 Hz · STEERING_MIN/CENTER/MAX_US · own 6 V buck", False),
+        ("JGA370 encoder", "C1 / C2", "1 / 2", "quadrature, 3.3 V · forward counts up (pins.h)", False),
+        ("START button", "BOOT button", "0",
+         "strapping pin · INPUT_PULLUP, read after boot · 30 ms debounce", False),
+        ("Status LED", "output", "4",
+         "link level · start countdown · IMU calibrating / fault patterns", False),
         ("Onboard WS2812", "data", "48",
          "red idle / green linked / flashing blue driving / purple turning", False),
-        ("TCS3200 (reserved)", "S0–S3 / OUT", "11–14 / 15", "in pin-map.md, not in firmware", True),
-        ("Button 2 / LED 2 (reserved)", "in / out", "47 / 35", "in pin-map.md, not in firmware", True),
+        ("Old UART link", "—", "40 / 41", "unused, deliberately left free", True),
+        ("Octal PSRAM (N16R8)", "—", "35–37", "owned by the module, never used", True),
     ]
 
     fig, ax = plt.subplots(figsize=(13, 9), dpi=200)
@@ -281,7 +266,7 @@ def pin_table():
 
     ax.text(65, 96.5, "ESP32-S3 PIN MAP — GORUR GARI 2026", ha="center",
             fontsize=14, fontweight="bold", color="#111827")
-    ax.text(65, 92.8, "source: firmware/include/pins.h · firmware/pin-map.md",
+    ax.text(65, 92.8, "ESP32-S3-DevKitC-1 N16R8 · source: firmware/include/pins.h · firmware/pin-map.md",
             ha="center", fontsize=8, color="#6b7280")
 
     cols = [(4, "Device"), (40, "Signal"), (62, "GPIO"), (78, "Notes")]

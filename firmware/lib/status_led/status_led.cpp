@@ -1,12 +1,14 @@
 #include "status_led.h"
 
 StatusLed::StatusLed(uint8_t pin)
-    : ledPin(pin), state(false), pulsesLeft(0), pulsePeriodMs(0),
-      phaseStartMs(0), restoreState(false) {}
+    : ledPin(pin), state(false), baseLevel(false), pulsesLeft(0), pulsePeriodMs(0),
+      phaseStartMs(0), alertPeriodMs(0), alertOnMs(0), alertStartMs(0) {}
 
 void StatusLed::begin() {
     pinMode(ledPin, OUTPUT);
-    off();
+    baseLevel = false;
+    state = true;  // force the first write
+    write(false);
 }
 
 void StatusLed::on() {
@@ -18,59 +20,71 @@ void StatusLed::off() {
 }
 
 void StatusLed::write(bool lit) {
+    if (lit == state) return;
     state = lit;
     digitalWrite(ledPin, lit ? HIGH : LOW);
 }
 
 void StatusLed::set(bool lit) {
-    if (isBlinking()) {
-        // the countdown owns the pin; remember where to land when it ends
-        restoreState = lit;
-        return;
+    // remembered either way; shown at once only if nothing else owns the LED
+    // (a connect/disconnect message mid countdown cannot cut it short)
+    baseLevel = lit;
+    if (!isBlinking() && !hasAlert()) {
+        write(lit);
     }
-    write(lit);
 }
 
 void StatusLed::toggle() {
-    set(!state);
+    set(!baseLevel);
 }
 
 void StatusLed::blink(uint8_t times, unsigned long periodMs) {
     if (times == 0 || periodMs == 0) return;
-    // a restart mid sequence must not capture the blink's own output as the
-    // level to return to
-    if (!isBlinking()) {
-        restoreState = state;
-    }
     pulsesLeft = times;
     pulsePeriodMs = periodMs;
     phaseStartMs = millis();
     write(true);  // every cycle starts lit
 }
 
+void StatusLed::setAlert(unsigned long periodMs, unsigned long onMs) {
+    if (periodMs == alertPeriodMs && onMs == alertOnMs) return;
+    alertPeriodMs = periodMs;
+    alertOnMs = onMs;
+    alertStartMs = millis();
+}
+
 void StatusLed::update() {
-    if (!isBlinking()) return;
+    if (isBlinking()) {
+        unsigned long elapsed = millis() - phaseStartMs;
+        unsigned long halfPeriod = pulsePeriodMs / 2;
 
-    unsigned long elapsed = millis() - phaseStartMs;
-    unsigned long halfPeriod = pulsePeriodMs / 2;
-
-    if (state) {
-        // lit half over -> go dark for the rest of this cycle
-        if (elapsed >= halfPeriod) {
-            write(false);
+        if (state) {
+            // lit half over -> go dark for the rest of this cycle
+            if (elapsed >= halfPeriod) {
+                write(false);
+            }
+            return;
         }
+
+        // dark half still running
+        if (elapsed < pulsePeriodMs) return;
+
+        // cycle done
+        pulsesLeft--;
+        if (pulsesLeft > 0) {
+            phaseStartMs += pulsePeriodMs;  // no drift across cycles
+            write(true);
+            return;
+        }
+        // countdown over: fall through to whoever owns the LED next
+    }
+
+    if (hasAlert()) {
+        // phase from elapsed time, so a slow pass never leaves it stuck
+        unsigned long phase = (millis() - alertStartMs) % alertPeriodMs;
+        write(phase < alertOnMs);
         return;
     }
 
-    // dark half still running
-    if (elapsed < pulsePeriodMs) return;
-
-    // cycle done
-    pulsesLeft--;
-    if (pulsesLeft == 0) {
-        write(restoreState);
-        return;
-    }
-    phaseStartMs += pulsePeriodMs;  // no drift across cycles
-    write(true);
+    write(baseLevel);
 }
