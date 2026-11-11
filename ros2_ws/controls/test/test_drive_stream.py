@@ -22,8 +22,9 @@ import pytest
 
 from controls import mcu_to_ros2, ros2_to_mcu
 from controls.mcu_bridge import (
-    CMD_VEL_STALE_S, DRIVE_TX_INTERVAL_S, FIRMWARE_CMD_TIMEOUT_S, MCU_PORT,
-    STATUSTEXT_MSG_ID, decode_mcu_statustext, drive_command_is_fresh)
+    CMD_VEL_STALE_S, DRIVE_TX_INTERVAL_S, FIRMWARE_CMD_TIMEOUT_S, MCU_FALLBACK_PORT, MCU_PORT,
+    MCU_RECONNECT_INTERVAL_S, STATUSTEXT_MSG_ID, decode_mcu_statustext, drive_command_is_fresh,
+    open_mcu_port)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))))
@@ -31,6 +32,7 @@ FIRMWARE_CONFIG = os.path.join(REPO_ROOT, 'firmware', 'include', 'config.h')
 FIRMWARE_INCLUDE = os.path.join(REPO_ROOT, 'firmware', 'include')
 FIRMWARE_MAV_MSGS = os.path.join(REPO_ROOT, 'firmware', 'lib', 'mav_msgs')
 BOT_CONFIG = os.path.join(REPO_ROOT, 'ros2_ws', 'config', 'bot_config.yaml')
+UDEV_RULES = os.path.join(REPO_ROOT, 'ros2_ws', 'config', '99-gorur.rules')
 
 
 def read_text(path):
@@ -62,18 +64,71 @@ def test_50hz_rides_through_four_lost_frames():
     assert 5 * DRIVE_TX_INTERVAL_S * 1000 <= timeout_ms
 
 
-def test_uart_baud_matches():
+def test_baud_matches():
     from controls.mcu_bridge import MCU_BAUDRATE
-    assert firmware_const('PI_UART_BAUD') == MCU_BAUDRATE
+    assert firmware_const('MAV_SERIAL_BAUD') == MCU_BAUDRATE
 
 
-def test_port_is_the_gpio_uart_everywhere():
-    assert MCU_PORT == '/dev/ttyAMA0'
+def bridge_param(name):
     match = re.search(r'^mcu_bridge:\s*\n\s*ros__parameters:(.*?)^\S',
                       read_text(BOT_CONFIG), re.S | re.M)
     assert match, 'mcu_bridge section not found in bot_config.yaml'
-    port = re.search(r'^\s*port:\s*(\S+)', match.group(1), re.M)
-    assert port and port.group(1) == '/dev/ttyAMA0'
+    value = re.search(rf'^\s*{name}:\s*(\S+)', match.group(1), re.M)
+    assert value, f'{name} not set in the mcu_bridge section'
+    return value.group(1)
+
+
+def test_port_is_the_stable_usb_name_everywhere():
+    assert MCU_PORT == '/dev/gorur_mcu'
+    assert MCU_FALLBACK_PORT == '/dev/ttyACM0'
+    assert bridge_param('port') == '/dev/gorur_mcu'
+    assert bridge_param('fallback_port') == '/dev/ttyACM0'
+
+
+def test_udev_rules_name_the_mcu_and_the_lidar():
+    rules = [line for line in read_text(UDEV_RULES).splitlines()
+             if line.strip() and not line.lstrip().startswith('#')]
+    mcu = [r for r in rules if 'SYMLINK+="gorur_mcu"' in r]
+    lidar = [r for r in rules if 'SYMLINK+="rplidar"' in r]
+    assert len(mcu) == 1 and 'ATTRS{idVendor}=="303a"' in mcu[0]
+    assert len(lidar) == 1
+    assert 'ATTRS{idVendor}=="10c4"' in lidar[0] and 'ATTRS{idProduct}=="ea60"' in lidar[0]
+    for rule in rules:
+        assert 'SUBSYSTEM=="tty"' in rule and 'MODE="0666"' in rule
+
+
+class RecordingSerial:
+    """Stands in for serial.Serial and records the order things happen in."""
+
+    events = []
+
+    def __init__(self):
+        object.__setattr__(self, 'is_open', False)
+
+    def __setattr__(self, name, value):
+        RecordingSerial.events.append((name, value, self.is_open))
+        object.__setattr__(self, name, value)
+
+    def open(self):
+        RecordingSerial.events.append(('open', None, False))
+        object.__setattr__(self, 'is_open', True)
+
+
+def test_open_mcu_port_cannot_reset_the_esp32():
+    RecordingSerial.events = []
+    port = open_mcu_port('/dev/gorur_mcu', 115200, serial_class=RecordingSerial)
+    names = [e[0] for e in RecordingSerial.events]
+    settings = {e[0]: e[1] for e in RecordingSerial.events}
+    # no hardware flow control to drive the modem lines on its own
+    assert settings['dsrdtr'] is False and settings['rtscts'] is False
+    assert settings['timeout'] == 0
+    # both lines dropped after opening, RTS before DTR: the other order passes
+    # through RTS high / DTR low, which resets the ESP32-S3
+    opened = names.index('open')
+    rts = max(i for i, n in enumerate(names) if n == 'rts')
+    dtr = max(i for i, n in enumerate(names) if n == 'dtr')
+    assert opened < rts < dtr
+    assert port.rts is False and port.dtr is False
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -172,7 +227,8 @@ def test_node_streams_at_50hz_while_fresh_and_stops_when_stale():
 
     master, slave = os.openpty()
     os.set_blocking(master, False)
-    rclpy.init(args=['--ros-args', '-p', f'port:={os.ttyname(slave)}'])
+    rclpy.init(args=['--ros-args', '-p', f'port:={os.ttyname(slave)}',
+                     '-p', "fallback_port:=''"])
     try:
         bridge = MCUBridgeNode()
         pub_node = rclpy.create_node('drive_stream_test_publisher')
@@ -235,3 +291,92 @@ def test_node_streams_at_50hz_while_fresh_and_stops_when_stale():
         rclpy.shutdown()
         os.close(master)
         os.close(slave)
+
+
+def test_node_reconnects_when_the_port_comes_back():
+    """
+    Survive the port vanishing and coming back.
+
+    The port goes away (ESP32 reset, cable pulled) and returns: no crash, a
+    retry every MCU_RECONNECT_INTERVAL_S, and the drive stream picks up again
+    on the new port, announced with a fresh connect notice.
+    """
+    rclpy = pytest.importorskip('rclpy')
+    from geometry_msgs.msg import Twist
+    from rclpy.executors import SingleThreadedExecutor
+
+    from controls.mcu_bridge import MCUBridgeNode
+
+    tmp = tempfile.mkdtemp()
+    link = os.path.join(tmp, 'gorur_mcu')   # like the udev symlink
+    master, slave = os.openpty()
+    os.set_blocking(master, False)
+    os.symlink(os.ttyname(slave), link)
+    rclpy.init(args=['--ros-args', '-p', f'port:={link}', '-p', "fallback_port:=''"])
+    try:
+        bridge = MCUBridgeNode()
+        pub_node = rclpy.create_node('drive_reconnect_test_publisher')
+        pub = pub_node.create_publisher(Twist, '/cmd_vel', 10)
+        executor = SingleThreadedExecutor()
+        executor.add_node(bridge)
+        executor.add_node(pub_node)
+        twist = Twist()
+        twist.linear.x = 0.2
+
+        def pump(seconds, fd):
+            types = []
+            parser = ros2_to_mcu.MAVLink(None)
+            parser.robust_parsing = True
+            end = time.monotonic() + seconds
+            next_pub = time.monotonic()
+            while time.monotonic() < end:
+                if time.monotonic() >= next_pub:
+                    pub.publish(twist)
+                    next_pub += 0.05
+                executor.spin_once(timeout_sec=0.002)
+                if fd is None:
+                    continue
+                try:
+                    chunk = os.read(fd, 4096)
+                except (BlockingIOError, OSError):
+                    chunk = b''
+                types += [m.get_type() for m in (parser.parse_buffer(chunk) or [])]
+            return types
+
+        before = pump(1.5, master)
+        assert before.count('GORUR_GARI_ROS2_TO_MCU_MSG') > 40
+        assert 'GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG' in before
+
+        # the port goes away: the other end closes and the device node vanishes
+        os.close(master)
+        os.close(slave)
+        os.remove(link)
+        pump(0.3, None)
+        assert not bridge.mcu_connected, 'the bridge did not notice the port going away'
+
+        # stays away for a while: retried, never crashes
+        pump(1.5, None)
+        assert not bridge.mcu_connected
+
+        # and comes back as a new tty under the same name
+        master, slave = os.openpty()
+        os.set_blocking(master, False)
+        os.symlink(os.ttyname(slave), link)
+        after = pump(MCU_RECONNECT_INTERVAL_S + 1.5, master)
+        assert bridge.mcu_connected
+        assert after.count('GORUR_GARI_ROS2_TO_MCU_MSG') > 20
+        # announced again, so the MCU's status LED comes back on
+        assert 'GORUR_GARI_ROS2_TO_MCU_CONNECT_MSG' in after
+
+        executor.remove_node(bridge)
+        executor.remove_node(pub_node)
+        bridge.destroy_node()
+        pub_node.destroy_node()
+    finally:
+        rclpy.shutdown()
+        for fd in (master, slave):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        shutil.rmtree(tmp, ignore_errors=True)

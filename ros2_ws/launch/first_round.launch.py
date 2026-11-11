@@ -93,8 +93,9 @@ def generate_launch_description():
                         
         # LiDAR Arguments
         DeclareLaunchArgument(
-            'lidar_serial_port', default_value='/dev/ttyUSB0',
-            description='Serial port for the RPLidar C1.'),
+            'lidar_serial_port', default_value='/dev/rplidar',
+            description='Serial port for the RPLidar C1 (/dev/rplidar comes from '
+                        'config/99-gorur.rules; /dev/ttyUSB0 without it).'),
         DeclareLaunchArgument(
             'lidar_frame_id', default_value='laser',
             description='Frame ID for the LiDAR scans.'),
