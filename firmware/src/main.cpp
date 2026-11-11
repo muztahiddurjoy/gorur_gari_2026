@@ -455,7 +455,7 @@ static const char *driveStateName() {
 // One line a second on USB, and the longest gap between two loop() passes
 // since the previous line: the drive timeout check runs once per pass, so
 // that gap is how late it can be.
-static void debugStatusLine(uint32_t nowMs, uint32_t maxLoopGapUs) {
+static void debugStatusLine(uint32_t maxLoopGapUs) {
     DEBUG_SERIAL.printf("[status] drive=%s mot=%+d%% str=%u | imu=%s %uHz yaw=%+.1f pitch=%+.1f roll=%+.1f | loop gap max %lu us\n",
                         driveStateName(), motor.outputPercent(), (unsigned)steer.getAngle(),
                         imuStatusName(imu.status), (unsigned)imu.sampleRateHz,
@@ -563,7 +563,10 @@ void loop(){
         if (encoder.direction() > 0) encoderDirectionField = 1;      // forward
         else if (encoder.direction() < 0) encoderDirectionField = 2; // reverse
 
-        // raw heading, the same value the OLED prints (unwrapped degrees)
+        // yaw in degrees, (-180, 180], clockwise positive, the same value the
+        // OLED prints. Relative to the heading at boot and slowly drifting
+        // (integrated gyro, no magnetometer); the ROS nodes only ever use
+        // wrapped differences of it, so the BNO055's 0..360 range is not needed.
         float headingField = headingDeg;
 
         // held down right now, or tapped since the last frame went out
@@ -647,7 +650,7 @@ void loop(){
     uint32_t statusNowMs = millis();
     if (DEBUG_STATUS_INTERVAL_MS > 0 && statusNowMs - lastStatusMs >= DEBUG_STATUS_INTERVAL_MS) {
         lastStatusMs = statusNowMs;
-        debugStatusLine(statusNowMs, maxLoopGapUs);
+        debugStatusLine(maxLoopGapUs);
         maxLoopGapUs = 0;
     }
 }
