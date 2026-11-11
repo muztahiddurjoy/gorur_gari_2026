@@ -5,6 +5,7 @@ import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
 from pymavlink import mavutil
+from pymavlink.dialects.v20 import common as mavlink_common
 from controls import mcu_to_ros2
 from controls import ros2_to_mcu
 from geometry_msgs.msg import Twist
@@ -40,8 +41,34 @@ STEERING_GAIN_DEG = 60.0  # wire angle = center + angular.z * this
 STEERING_MIN_DEG = 0      # servo clamp, full left
 STEERING_MAX_DEG = 180    # servo clamp, full right
 
-MCU_PORT = '/dev/esp32_s3'  # udev alias for the ESP32-S3 native USB CDC port
-MCU_BAUDRATE = 115200
+# The ESP32-S3 is on the Pi's GPIO UART (GPIO14 TXD / GPIO15 RXD), through
+# 6N137 optocouplers to the ESP32's UART1 (GPIO40 TX / GPIO41 RX). Not USB any
+# more: the ESP32's USB port only carries debug text. On a Pi 4 /dev/ttyAMA0 is
+# only the GPIO UART with dtoverlay=disable-bt, and the serial console must be
+# off (see README / QUICKSTART).
+MCU_PORT = '/dev/ttyAMA0'
+MCU_BAUDRATE = 115200  # must match PI_UART_BAUD in firmware/include/config.h
+
+# Drive command stream. The firmware moves the car only while valid drive
+# commands keep arriving: it brakes and centres the steering when none has
+# arrived for CMD_TIMEOUT_MS (100 ms, firmware/include/config.h). So instead of
+# forwarding /cmd_vel as it comes, this node re-sends the latest command at a
+# fixed 50 Hz for as long as /cmd_vel is fresh, which rides through four lost
+# frames in a row. Do NOT lower the rate without raising the firmware timeout.
+DRIVE_TX_INTERVAL_S = 0.02
+# /cmd_vel older than this is stale: the node stops sending drive commands and
+# the firmware brakes on its own 100 ms timeout. 0.3 s comfortably covers the
+# slowest driving node (10 Hz), so a live node never trips it.
+CMD_VEL_STALE_S = 0.3
+# mirror of the firmware's CMD_TIMEOUT_MS, for the logs and the tests
+FIRMWARE_CMD_TIMEOUT_S = 0.1
+
+# STATUSTEXT (#253, common dialect): how the firmware reports trouble, e.g. the
+# IMU missing or faulted. mcu_to_ros2 does not define it, so the parser hands
+# it over undecoded (UNKNOWN_253, raw frame attached) and decode_mcu_statustext
+# decodes it with pymavlink's common dialect.
+STATUSTEXT_MSG_ID = 253
+_COMMON_DECODER = mavlink_common.MAVLink(None)
 
 # the drivetrain does not make enough torque at cruise throttle to break static
 # friction, so the command that starts a move from a standstill gets scaled up
@@ -52,7 +79,8 @@ LAUNCH_BOOST_DURATION_S = 1.0  # 0.0 -> boost only the single command that start
 LAUNCH_IDLE_TIMEOUT_S = 0.5  # no cmd_vel for this long counts as stopped, so the boost re-arms
 
 # how long to wait after opening the port before announcing ourselves to the MCU.
-# long enough for the esp32 to clear its bootloader if opening the port reset it.
+# Opening the GPIO UART cannot reset the ESP32 the way USB DTR could, but the
+# delay is harmless and still covers an ESP32 that is booting at the same time.
 MCU_CONNECT_NOTICE_DELAY_S = 1.0
 
 # run stopwatch -> OLED. the autonomy/run_timer node publishes /run_time and
@@ -93,6 +121,34 @@ def blink_half_period(rate_hz, max_rate_hz=STATUS_LED_MAX_BLINK_HZ):
     if math.isnan(rate_hz) or rate_hz <= 0.0:
         return None
     return 0.5 / min(rate_hz, max_rate_hz)
+
+
+def drive_command_is_fresh(age_s, stale_s=CMD_VEL_STALE_S):
+    """
+    Whether a /cmd_vel that arrived age_s seconds ago may still be sent.
+
+    None (nothing received yet) and anything at or past stale_s is stale.
+    """
+    return age_s is not None and 0.0 <= age_s < stale_s
+
+
+def decode_mcu_statustext(raw_frame):
+    """
+    Decode a STATUSTEXT frame from the MCU into (severity, text), or None.
+
+    The frame is checked (CRC, length) against the common dialect, so a frame
+    that merely carries id 253 but is not a valid STATUSTEXT returns None.
+    """
+    try:
+        msg = _COMMON_DECODER.decode(bytearray(raw_frame))
+    except Exception:
+        return None
+    if msg is None or msg.get_type() != 'STATUSTEXT':
+        return None
+    text = msg.text
+    if isinstance(text, (bytes, bytearray)):
+        text = text.decode('utf-8', errors='replace')
+    return int(msg.severity), str(text).rstrip('\x00')
 
 
 def run_time_to_wire_ms(seconds):
@@ -185,6 +241,12 @@ class MCUBridgeNode(Node):
         # may still be in its bootloader. the notice carries whatever was asked for.
         self.mcu_announced = False
 
+        # the latest drive command worked out from /cmd_vel, and when that
+        # /cmd_vel arrived. send_drive_command re-sends it at 50 Hz while fresh.
+        self.drive_cmd = None
+        self.drive_cmd_time = None
+        self.drive_streaming = False  # for the start/stop log lines only
+
         self.connect_mcu()
         self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
         self.run_time_sub = self.create_subscription(
@@ -203,6 +265,8 @@ class MCUBridgeNode(Node):
             MCU_CONNECT_NOTICE_DELAY_S, self.send_connect_notice)
         # drain incoming sensor telemetry at 50 Hz
         self.mcu_poll_timer = self.create_timer(0.02, self.poll_mcu)
+        # the drive command stream, see DRIVE_TX_INTERVAL_S
+        self.drive_tx_timer = self.create_timer(DRIVE_TX_INTERVAL_S, self.send_drive_command)
         # push the run stopwatch out to the OLED at 10 Hz
         self.run_timer_tx_timer = self.create_timer(
             RUN_TIMER_TX_INTERVAL_S, self.send_run_time)
@@ -368,16 +432,52 @@ class MCUBridgeNode(Node):
                            min(self.steering_max_deg,
                                int(self.steering_center_deg + msg.angular.z * self.steering_gain_deg)))
             self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
-            if self.mcu_connected:
-                self.mav_tx.gorur_gari_ros2_to_mcu_msg_send(
-                    throttle=throttle,
-                    steering=steering
-                )
-            else:
-                self.get_logger().error("MCU is not connected. cannot send command.")
+            # not sent from here: send_drive_command puts it on the wire at a
+            # steady 50 Hz for as long as it stays fresh
+            self.drive_cmd = (throttle, steering)
+            self.drive_cmd_time = self.get_clock().now()
         except Exception as e:
             self.get_logger().error(f'Error in handle_cmd_vel: {e}')
             return
+
+    def send_drive_command(self):
+        """
+        50 Hz: re-send the latest drive command while /cmd_vel is fresh.
+
+        Once /cmd_vel is older than CMD_VEL_STALE_S nothing is sent at all, and
+        the firmware brakes and centres the steering on its own timeout
+        (FIRMWARE_CMD_TIMEOUT_S) - the same path as the bridge dying or the
+        UART being unplugged, so it is exercised every time a driving node
+        stops.
+        """
+        age_s = None
+        if self.drive_cmd_time is not None:
+            age_s = (self.get_clock().now() - self.drive_cmd_time).nanoseconds * 1e-9
+
+        if not drive_command_is_fresh(age_s):
+            if self.drive_streaming:
+                self.drive_streaming = False
+                self.get_logger().warn(
+                    f'/cmd_vel stale ({age_s:.2f} s old): stopped sending drive commands, '
+                    f'the MCU brakes within {FIRMWARE_CMD_TIMEOUT_S * 1000:.0f} ms.')
+            return
+
+        if not self.drive_streaming:
+            self.drive_streaming = True
+            self.get_logger().info(
+                f'Fresh /cmd_vel: sending drive commands to the MCU at '
+                f'{1.0 / DRIVE_TX_INTERVAL_S:.0f} Hz.')
+
+        if not self.mcu_connected:
+            self.get_logger().error('MCU is not connected. cannot send command.',
+                                    throttle_duration_sec=2.0)
+            return
+        throttle, steering = self.drive_cmd
+        try:
+            self.mav_tx.gorur_gari_ros2_to_mcu_msg_send(throttle=throttle, steering=steering)
+        except Exception as e:
+            self.get_logger().error(f'Failed to send drive command to MCU: {e}',
+                                    throttle_duration_sec=2.0)
 
     def poll_mcu(self):
         if not self.mcu_connected:
@@ -393,12 +493,32 @@ class MCUBridgeNode(Node):
                 msg_type = msg.get_type()
                 if msg_type == 'GORUR_GARI_MCU_TO_ROS2_MSG':
                     self.handle_mcu_sensor_msg(msg)
+                elif msg_type in (f'UNKNOWN_{STATUSTEXT_MSG_ID}', 'STATUSTEXT'):
+                    self.handle_mcu_statustext(msg)
                 elif msg_type == 'BAD_DATA':
                     # resync noise (boot banner, or we opened mid packet), not fatal
                     self.get_logger().debug(f'Skipping non-MAVLink bytes: {msg.reason}')
         except Exception as e:
             self.get_logger().error(f'Error polling MCU: {e}')
             self.mcu_connected = False
+
+    def handle_mcu_statustext(self, msg):
+        """Log a STATUSTEXT from the MCU at the matching level."""
+        if msg.get_type() == 'STATUSTEXT':  # already decoded by a full dialect
+            decoded = (int(msg.severity), str(msg.text))
+        else:
+            decoded = decode_mcu_statustext(msg.get_msgbuf())
+        if decoded is None:
+            self.get_logger().debug('Undecodable STATUSTEXT from the MCU, skipped')
+            return
+        severity, text = decoded
+        line = f'MCU: {text}'
+        if severity <= mavlink_common.MAV_SEVERITY_ERROR:
+            self.get_logger().error(line)
+        elif severity == mavlink_common.MAV_SEVERITY_WARNING:
+            self.get_logger().warn(line)
+        else:
+            self.get_logger().info(line)
 
     def handle_mcu_sensor_msg(self, msg):
         now = self.get_clock().now().to_msg()
