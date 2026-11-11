@@ -17,12 +17,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#include "ros2_to_mcu/mavlink.h"
-// both dialects generate a header guarded by the same MAVLINK_H macro, since
-// each one is a self-contained mavlink.h. undef it so the second include
-// isn't skipped and gorur_gari_mcu_to_ros2_msg actually gets declared.
-#undef MAVLINK_H
-#include "mcu_to_ros2/mavlink.h"
+// both MAVLink dialects (and STATUSTEXT), see the include order notes there
+#include "mavlink_link.h"
 
 
 
