@@ -2,7 +2,6 @@
 #include "steering_control.h"
 #include "motor_control.h"
 #include "encoder_reader.h"
-#include "sonar_reader.h"
 #include "Wire.h"
 #include "display_control.h"
 #include "heading.h"
@@ -30,10 +29,6 @@
 SteeringController steer(STEERING_SERVO_PIN);
 MotorController motor(PWM_THROTTLE_PIN, IN_A, IN_B, STANDBY_PIN);
 EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_COUNTS_PER_REV);
-SonarReader sonarFront(SONAR_FRONT_TRIG_PIN, SONAR_FRONT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_FRONT_ENABLED);
-SonarReader sonarLeft(SONAR_LEFT_TRIG_PIN, SONAR_LEFT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_LEFT_ENABLED);
-SonarReader sonarRight(SONAR_RIGHT_TRIG_PIN, SONAR_RIGHT_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_RIGHT_ENABLED);
-SonarReader sonarRear(SONAR_REAR_TRIG_PIN, SONAR_REAR_ECHO_PIN, SONAR_ECHO_TIMEOUT_US, SONAR_REAR_ENABLED);
 ButtonHandler button(BUTTON_PIN);
 StatusLed status_led(STATUS_LED_PIN);
 RgbStatusLed rgb_led(RGB_STATUS_LED_PIN);
@@ -172,11 +167,6 @@ void setup(){
     
     sharedMutex = xSemaphoreCreateMutex();
 
-    sonarFront.begin();
-    sonarLeft.begin();
-    sonarRight.begin();
-    sonarRear.begin();
-
     xTaskCreatePinnedToCore(i2cTask,"I2C Task", 8192, NULL, 1, &i2cTaskHandle, 0);
 }
 
@@ -194,21 +184,6 @@ void loop(){
         xSemaphoreGive(sharedMutex);
     }
 
-
-    // --- Sonars: one sensor per loop() call so a pulseIn timeout never blocks
-    // the loop for more than SONAR_ECHO_TIMEOUT_US at a time. readCm() returns
-    // straight away for a sonar disabled in config.h, so unplugged sensors cost
-    // nothing and simply keep reporting SONAR_NO_READING_CM ---
-    static uint8_t sonarCm[4] = {SONAR_NO_READING_CM, SONAR_NO_READING_CM,
-                                 SONAR_NO_READING_CM, SONAR_NO_READING_CM};
-    static uint8_t sonarIndex = 0;
-    switch (sonarIndex) {
-        case 0: sonarCm[0] = sonarFront.readCm(); break; // sonar_1
-        case 1: sonarCm[1] = sonarLeft.readCm();  break; // sonar_2
-        case 2: sonarCm[2] = sonarRight.readCm(); break; // sonar_3
-        case 3: sonarCm[3] = sonarRear.readCm();  break; // sonar_4
-    }
-    sonarIndex = (sonarIndex + 1) % 4;
 
     // --- Button: poll every loop, but telemetry only goes out every
     // SENSOR_TX_INTERVAL_MS. Latch the press edge so a tap shorter than that
@@ -232,7 +207,7 @@ void loop(){
     rgb_led.setDrive(motor.speed(), steer.getAngle());
     rgb_led.update();
 
-    // --- Send encoder/steering/heading/sonar/button telemetry to ROS2 ---
+    // --- Send encoder/steering/heading/button telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
     unsigned long nowMs = millis();
     if (nowMs - lastSensorTxMs >= SENSOR_TX_INTERVAL_MS) {
@@ -260,7 +235,11 @@ void loop(){
         uint8_t txBuf[MAVLINK_MAX_PACKET_LEN];
         mavlink_msg_gorur_gari_mcu_to_ros2_msg_pack(system_id, component_id, &txMsg,
             encoderCountField, encoderSpeedField, encoderDirectionField, steer.getAngle(),
-            headingField, sonarCm[0], sonarCm[1], sonarCm[2], sonarCm[3], buttonField);
+            headingField,
+            // no sonars fitted, see config.h
+            SONAR_WIRE_NO_READING_CM, SONAR_WIRE_NO_READING_CM,
+            SONAR_WIRE_NO_READING_CM, SONAR_WIRE_NO_READING_CM,
+            buttonField);
         uint16_t txLen = mavlink_msg_to_send_buffer(txBuf, &txMsg);
         Serial.write(txBuf, txLen);
     }

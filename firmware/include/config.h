@@ -44,20 +44,11 @@ const unsigned long DISPLAY_REFRESH_INTERVAL_MS = 50;
 const unsigned long IMU_SAMPLE_INTERVAL_MS = 10;
 
 //sonar
-// flip one of these to true once that sonar is physically wired up. a disabled
-// sonar never has its pins configured and is never pulsed, so it costs nothing
-// and always reports SONAR_NO_READING_CM. keep these in step with the
-// sonar_*_enabled parameters in ros2_ws/controls/controls/mcu_bridge.py.
-const bool SONAR_FRONT_ENABLED = false;
-const bool SONAR_LEFT_ENABLED = false;
-const bool SONAR_RIGHT_ENABLED = false;
-const bool SONAR_REAR_ENABLED = false;
-
-// 255 cm is the furthest the uint8_t "cm" wire field can carry, and that round
-// trip is 255*58 = 14790 us. Waiting longer than that only buys readings we
-// would clamp to 255 anyway, while every timed out sonar stalls loop() for the
-// full duration and delays the next throttle/steering command.
-const unsigned long SONAR_ECHO_TIMEOUT_US = 15000;
+// No sonars are fitted on this hardware revision, but the mcu_to_ros2 MAVLink
+// message still has its four sonar_* fields, so they always carry the "no
+// reading" value. mcu_bridge already treats 255 as "nothing measured"
+// (SONAR_NO_READING_CM there) and publishes nothing for sonars it has disabled.
+const uint8_t SONAR_WIRE_NO_READING_CM = 255;
 
 //start button
 // Pressing the button arms the run. The ROS2 side (autonomy/disparity_extender)

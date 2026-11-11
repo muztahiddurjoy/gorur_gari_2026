@@ -47,14 +47,8 @@ const uint8_t RGB_STATUS_LED_PIN = RGB_BUILTIN;
 const uint8_t RGB_STATUS_LED_PIN = 48;
 #endif
 
-// sonar pins (HC-SR04 style), see firmware/pin-map.md
-const uint8_t SONAR_FRONT_TRIG_PIN = 16;
-const uint8_t SONAR_FRONT_ECHO_PIN = 17;
-const uint8_t SONAR_LEFT_TRIG_PIN = 18;
-const uint8_t SONAR_LEFT_ECHO_PIN = 21;
-const uint8_t SONAR_RIGHT_TRIG_PIN = 38;
-const uint8_t SONAR_RIGHT_ECHO_PIN = 39;
-const uint8_t SONAR_REAR_TRIG_PIN = 40;
-const uint8_t SONAR_REAR_ECHO_PIN = 41;
+// No sonars are fitted. Their old pins now belong to the steering servo (16)
+// and the UART link to the Pi (40/41); see SONAR_WIRE_NO_READING_CM in config.h
+// for what the telemetry still reports in the four sonar fields.
 
 #endif
