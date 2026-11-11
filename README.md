@@ -136,12 +136,12 @@ Here's a breakdown of the project folders:
     <tr>
       <td><div align="center"><img src="https://admin.techshopbd.com/uploads/product/ESP32-S3-DevKitC1-N16R8-Development-Board-Dual-USB-Type-C-best-price-in-bangladesh_2026_vAyrOmt.webp" width="160" alt="ESP32-S3 DevKitC-1"></div></td>
       <td>ESP32-S3 DevKitC-1</td>
-      <td>Real-time control: motor PWM, steering servo, encoder counting, IMU reading, start button, status LEDs, and OLED display.</td>
+      <td>Real-time control: motor PWM, steering servo, encoder counting, IMU reading, start button (the devkit's own BOOT button), status LEDs, and OLED display. N16R8 module: GPIO35-37 belong to the octal PSRAM and stay unused.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="https://cdn.roboticsbd.com/902-large_default/cp2102-usb-to-ttl-serial-converter-module-robotics-bangladesh.jpg" width="160" alt="CP2102 USB to TTL Serial Converter"></div></td>
-      <td>CP2102 USB to TTL serial converter</td>
-      <td>Dedicated hardware serial link between the Raspberry Pi and the ESP32-S3 MCU (UART1), running MAVLink 2 to isolate motor noise and prevent CDC timeouts.</td>
+      <td><div align="center"><!-- Placeholder: add a 6N137 optocoupler photo --></div></td>
+      <td>6N137 high-speed optocouplers</td>
+      <td>Galvanically isolate the serial link between the Raspberry Pi's GPIO UART (<code>/dev/ttyAMA0</code>) and the ESP32-S3's UART1 (GPIO40 TX / GPIO41 RX), which carries MAVLink 2 at 115200 baud. Motor noise on the ESP32 side cannot reach the Pi.</td>
     </tr>
     <tr>
       <td><div align="center"><img src="https://cdn.roboticsbd.com/9301-home_default/rplidar-c1-dtof-lidar-360-laser-range-scanner-12m-ip54-robotics-bangladesh.jpg" width="160" alt="RPLIDAR C1"></div></td>
@@ -149,9 +149,9 @@ Here's a breakdown of the project folders:
       <td>360-degree laser scanner. Our primary sensor for walls, gaps, and pillar detection.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRl8hqc3RqORGKjigtVTR-pmd_1zzCjm3nEzHuCgwY5yg2In2UvuRsKesiG&s=10" width="160" alt="BNO055 IMU"></div></td>
-      <td>Bosch BNO055 IMU</td>
-      <td>Absolute heading. Its onboard sensor fusion gives us a stable yaw angle without us having to filter raw gyro data ourselves.</td>
+      <td><div align="center"><!-- Placeholder: add a BOTGyro photo --></div></td>
+      <td>BOTGyro IMU (ASM330LHH, I2C 0x6A)</td>
+      <td>6-axis gyro + accelerometer, read with the <a href="https://github.com/NOXUSTIC/BOTGyro">BOTGyro</a> library. The ESP32 calibrates its zero-rate bias at boot and integrates the yaw rate into the heading; pitch and roll come from the library's complementary filter. There is no magnetometer, so the heading is relative to the start pose and drifts slowly.</td>
     </tr>
     <tr>
       <td><div align="center"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmuGcaIVi2VkMJbXZVxs6wxJe4zAWwdhm19O5gZPLafzyGYNJKei_bqgc&s=10" width="160" alt="USB camera"></div></td>
@@ -164,19 +164,19 @@ Here's a breakdown of the project folders:
       <td>Drives the rear axle. The encoder on the motor shaft is what makes our odometry possible.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="https://www.sparkfun.com/media/catalog/product/cache/f3020b7489dcfc4d1d147cf4dad07b7f/1/4/14450a-01.jpg" width="160" alt="TB6612FNG driver"></div></td>
-      <td>TB6612FNG motor driver</td>
-      <td>H-bridge between the microcontroller and the drive motor.</td>
+      <td><div align="center"><!-- Placeholder: add a BTS7960 / IBT-2 photo --></div></td>
+      <td>BTS7960 (IBT-2) motor driver</td>
+      <td>Dual half-bridge between the microcontroller and the drive motor: RPWM forward, LPWM reverse, both enables tied together.</td>
     </tr>
     <tr>
-      <td><div align="center"><img src="https://img.drz.lazcdn.com/static/bd/p/c6512076f3e40e5f02698ffe47993e2f.jpg_720x720q80.jpg" width="160" alt="Steering servo"></div></td>
-      <td>Metal-gear micro servo</td>
-      <td>Turns the front wheels through the Ackermann steering linkage.</td>
+      <td><div align="center"><!-- Placeholder: add an MG996R photo --></div></td>
+      <td>MG996R metal-gear servo</td>
+      <td>Turns the front wheels through the Ackermann steering linkage. Powered from its own 6 V buck converter.</td>
     </tr>
     <tr>
       <td><div align="center"><img src="https://cdn.roboticsbd.com/3123-large_default/096-inch-i2c-oled-display-white-robotics-bangladesh.jpg" width="160" alt="SSD1306 OLED"></div></td>
       <td>SSD1306 0.96" OLED display</td>
-      <td>Shows live status on the car itself, invaluable when there is no laptop connected: throttle, encoder count, steering angle, heading, and the run stopwatch.</td>
+      <td>Shows live status on the car itself, invaluable when there is no laptop connected: motor output, steering angle, drive-command state, encoder count, heading, pitch/roll, IMU state (including "keep still" while it calibrates), and the run stopwatch.</td>
     </tr>
     <tr>
       <td><div align="center"><img src="https://apn089-robodoc-prod.sgp1.cdn.digitaloceanspaces.com/dc82d632c9fcecb0778afbc7924494a6/201d2784d290a8d3bdf05a51b7db1f1d.jpg" width="160" alt="LiPo battery"></div></td>
@@ -200,7 +200,7 @@ flowchart LR
     subgraph Sensors
         LIDAR[RPLIDAR C1]
         ENC[Wheel Encoder]
-        IMU[BNO055 IMU]
+        IMU[BOTGyro IMU]
         CAM[USB Camera]
     end
 
@@ -239,7 +239,7 @@ flowchart LR
     NAV -->|run state| TIMER
     TIMER -->|"/run_time"| BRIDGE
     NAV --> CMDVEL --> BRIDGE
-    BRIDGE -->|MAVLink over USB| MAV
+    BRIDGE -->|"MAVLink over UART, drive commands at 50 Hz"| MAV
     MAV --> MOTOR
     MAV --> SERVO
     MAV -->|link announced| LEDS
@@ -250,16 +250,18 @@ flowchart LR
 
 ### Two brains, one car
 
-The Raspberry Pi and the ESP32-S3 talk over a native USB serial link using the **MAVLink 2** protocol, with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked fine until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
+The Raspberry Pi and the ESP32-S3 talk over a UART, the Pi's GPIO UART (`/dev/ttyAMA0`) to the ESP32's UART1 through 6N137 optocouplers, using the **MAVLink 2** protocol with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked fine until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
 
-One hard-earned lesson lives in [`platformio.ini`](./firmware/platformio.ini): the Arduino core on the ESP32 logs I2C errors to the same serial port the MAVLink frames go out on. A single stray log line in the middle of a packet was enough to desync the parser on the Pi side, so the competition build silences the core logs entirely and sends our own debug output to a separate UART.
+The ESP32's USB port carries nothing but human-readable debug output, so no log line can ever land in the middle of a MAVLink frame (a lesson from the earlier USB link, where one stray I2C error message was enough to desync the parser on the Pi).
+
+**The car moves only while drive commands keep arriving.** After boot the motor stays braked until the first valid drive command, and if no valid one (right message, good CRC) arrives for **100 ms** the firmware brakes at once and centres the steering until the next one. Heartbeats, other messages and corrupted frames never count. `mcu_bridge` re-sends the latest `/cmd_vel` at a fixed **50 Hz** while it is fresh (under 0.3 s old) and stops sending once it goes stale, so a dead bridge, an unplugged cable and a driving node that simply stops all end the same way: the car stops within 100 ms. Four lost frames in a row are tolerated.
 
 ### Odometry and returning home
 
 The rules say the car must stop where it started. Instead of guessing with timers, `vector_odom` fuses two signals:
 
 - **Distance**: from the wheel encoder
-- **Direction**: from the BNO055's absolute heading
+- **Direction**: from the IMU heading, which the ESP32 integrates from the BOTGyro's yaw rate (relative to the start pose, with a slow drift, since there is no magnetometer)
 
 Each encoder tick is turned into a small displacement vector pointing in the current heading direction, and all the vectors are summed up. At any moment the car knows its position as one straight-line vector from the start point. After the third lap, `open_round_run` simply drives that vector backwards until the car is within **5 cm** of home.
 
@@ -344,7 +346,7 @@ The car is a four-wheeled, rear-wheel-drive design with front-wheel Ackermann st
 
 ### Drive motor and gearbox
 
-A single DC gear motor drives the rear axle. We drive it through the TB6612FNG at a **20 kHz PWM frequency** (above the audible range), which got rid of the annoying motor whine at low speeds and noticeably smoothed out low-speed torque, which matters for the parking maneuver.
+A single DC gear motor drives the rear axle. We drive it through a BTS7960 (IBT-2) dual half-bridge at a **20 kHz PWM frequency** (above the audible range), which got rid of the annoying motor whine at low speeds and noticeably smoothed out low-speed torque, which matters for the parking maneuver. RPWM drives forward and LPWM reverse; the firmware always lowers one before raising the other, ramps the output (500 %/s by default) so a change of direction passes through a brake, and maps the full throttle command onto the full duty range.
 
 The quadrature encoder sits on the motor shaft, before the gearbox, so it gets multiple counts per degree of wheel rotation, plenty of resolution for odometry.
 
@@ -352,7 +354,7 @@ One detail worth confessing: the encoder's A and B channels are wired *opposite*
 
 ### Steering
 
-A metal-gear micro servo drives the front steering linkage, with a physical lock of about **60 degrees to each side**. The firmware treats 90 degrees as straight ahead. The ROS side maps the normalized steering command onto that range. Software clamps guarantee the servo can never be commanded past its mechanical limits, no matter what the navigation node asks for.
+An MG996R metal-gear servo, on its own 6 V supply, drives the front steering linkage. The firmware treats a commanded 90 degrees as straight ahead and maps the 0-180 command onto three calibrated pulse widths (`STEERING_MIN_US`, `STEERING_CENTER_US`, `STEERING_MAX_US` in [`config.h`](./firmware/include/config.h)), so the servo can never be driven into the linkage's end stops, no matter what the navigation node asks for.
 
 The drive wheel diameter is deliberately a launch parameter rather than a constant: we measure the wheels before a run, because a millimeter of error in diameter compounds into centimeters of odometry error over three laps.
 
@@ -364,12 +366,12 @@ Everything runs off a single LiPo battery, split into separate rails so the nois
 
 ```mermaid
 flowchart LR
-    BATT[LiPo Battery] --> TB6612[TB6612FNG motor driver] --> MOTOR[Drive motor]
+    BATT[LiPo Battery] --> BTS[BTS7960 motor driver] --> MOTOR[Drive motor]
     BATT --> UBEC[5V step-down converter, UBEC]
     UBEC --> PI[Raspberry Pi 4B]
     PI -->|USB| LIDAR[RPLIDAR C1]
     UBEC --> ESP[ESP32-S3 + sensors + OLED]
-    UBEC --> SERVO[Steering servo]
+    BATT --> BUCK6[6 V buck converter] --> SERVO[MG996R steering servo]
 ```
 
 The important decision here: the drive motor draws directly from the battery through its own driver, while everything digital lives behind the regulator. When the motor stalls or the servo hits its end stop, the current spike stays on the battery side of the converter.
@@ -383,20 +385,33 @@ The important decision here: the drive motor draws directly from the battery thr
 | Raspberry Pi 4B | 5V | Step-down converter (UBEC) |
 | RPLIDAR C1 | 5V | Raspberry Pi USB port |
 | ESP32-S3 | 5V | Step-down converter (UBEC) |
-| Steering servo | 5V | Step-down converter (UBEC) |
-| Drive motor | Battery voltage | TB6612FNG, direct from battery |
-| BNO055, OLED | 3.3V | ESP32-S3 board regulator |
+| Steering servo (MG996R) | 6V | Its own buck converter |
+| Drive motor | Battery voltage | BTS7960, direct from battery |
+| BOTGyro, OLED | 3.3V | ESP32-S3 board regulator |
 
 ### Sensors and where they sit
 
 - **RPLIDAR C1**: mounted centered over the chassis, high enough that the scan plane clears the walls' lip and wiring but still sees the 10 cm tall traffic pillars. It streams to the Pi over USB at 460,800 baud.
-- **BNO055 IMU**: mounted flat, near the car's center of rotation, so cornering forces do not contaminate the heading. It shares the ESP32's I2C bus with the OLED.
+- **BOTGyro IMU**: mounted flat with its Z axis up, near the car's center of rotation, so cornering forces do not contaminate the heading. It shares the ESP32's I2C bus (400 kHz) with the OLED. If it is ever mounted upside down, flip `IMU_YAW_SIGN` in `config.h`: the heading must grow when the car turns clockwise.
 - **USB camera**: front-facing with a slight downward tilt so pillars fill the frame at the distances that matter. Continuous auto-focus is turned off with `v4l2-ctl` before every run, because a lens that hunts for focus mid-corner produces exactly the blurry frame you least want.
 - **Wheel encoder**: on the motor shaft, feeding the ESP32's pulse counter.
-- **Sonar slots**: the firmware and wiring have four reserved HC-SR04 positions (front, rear, left, right). They are currently disabled in config. The LiDAR made them redundant, but the mounting points cost nothing to keep.
-- **Start button and status LEDs**: the entire competition interface. One button to start, and two lights to show what state the car is in. The plain LED answers the one question that matters during bring-up, "is the Pi talking to the microcontroller", and blinks out the 3-second start countdown. The devkit's onboard WS2812 pixel repeats that in colour and adds the drivetrain: **red** until the Pi announces itself, **green** once connected and standing still, **flashing blue** while the motor drives straight, **flashing purple** while it drives with the wheels turned. Driving outranks the link colour, so a car that is moving never shows a resting colour — a stale throttle the ROS2 side is no longer refreshing still reads as motion, which is exactly the state you want to catch on a bench. The pixel is already soldered to the devkit, so this second light costs no wiring and no pin: `firmware/lib/rgb_status_led` drives it through the Arduino core's `neopixelWrite()` instead of pulling in a pixel library.
+- **Sonars**: none on this hardware revision. The LiDAR made them redundant, and their old GPIOs now belong to the steering servo and the Pi UART. The telemetry message keeps its four sonar fields, which always report "no reading".
+- **Start button and status LEDs**: the entire competition interface. One button to start, and two lights to show what state the car is in. The start button is the devkit's own **BOOT button** (GPIO0): a strapping pin, so the firmware only ever reads it, after boot, debounced for 30 ms. The plain LED (GPIO4) answers the one question that matters during bring-up, "is the Pi talking to the microcontroller", and blinks out the 3-second start countdown. It also blinks fast while the IMU calibrates (keep the car still) and gives a short blip every second if the IMU is missing or faulted. The devkit's onboard WS2812 pixel repeats that in colour and adds the drivetrain: **red** until the Pi announces itself, **green** once connected and standing still, **flashing blue** while the motor drives straight, **flashing purple** while it drives with the wheels turned. Driving outranks the link colour, so a car that is moving never shows a resting colour — a stale throttle the ROS2 side is no longer refreshing still reads as motion, which is exactly the state you want to catch on a bench. The pixel is already soldered to the devkit, so this second light costs no wiring and no pin: `firmware/lib/rgb_status_led` drives it through the Arduino core's `neopixelWrite()` instead of pulling in a pixel library.
 
-The full wiring is documented in [`circuit_diagram`](./circuit_diagram/) and the exact pin assignments in [`firmware/pin-map.md`](./firmware/pin-map.md):
+The full wiring is documented in [`circuit_diagram`](./circuit_diagram/) and the exact pin assignments in [`firmware/pin-map.md`](./firmware/pin-map.md) (ESP32-S3-DevKitC-1 N16R8):
+
+| Function | GPIO | Notes |
+| :-- | :-- | :-- |
+| BTS7960 RPWM (forward PWM) | 5 | 20 kHz, 10k pull-down on board |
+| BTS7960 LPWM (reverse PWM) | 6 | 20 kHz, 10k pull-down on board |
+| BTS7960 R_EN + L_EN (tied) | 7 | 10k pull-down on board |
+| Steering servo (MG996R) signal | 16 | 50 Hz, servo powered from a separate 6 V buck |
+| Encoder C1 / C2 | 1 / 2 | quadrature, 3.3 V |
+| I2C SDA / SCL | 8 / 9 | BOTGyro 0x6A, SSD1306 OLED 0x3C |
+| Start button = the devkit's BOOT button | 0 | INPUT_PULLUP, active low, read only after boot |
+| Status LED | 4 | plain LED, active high |
+| UART to the Raspberry Pi (via 6N137) | TX 40, RX 41 | Serial1, 115200 8N1, Pi side `/dev/ttyAMA0` |
+| Onboard WS2812 status pixel | 48 | soldered to the devkit |
 
 <div align="center">
   <img alt="Circuit block diagram" src="./circuit_diagram/circuit_block_diagram.png" width="600" />
@@ -406,8 +421,9 @@ The full wiring is documented in [`circuit_diagram`](./circuit_diagram/) and the
 
 We spent a lot of time on the boring failure cases, because a robot that works 9 runs out of 10 loses on the 10th:
 
-- **I2C lockups**: The BNO055 takes up to 650 ms to boot, and motor noise can hang the bus mid-run. The stock driver gives up forever after the first failed transaction. Our firmware instead runs a non-blocking retry loop: if the IMU or OLED stops answering, it re-initializes them in the background while steering and throttle keep working.
-- **Stale commands**: If the Pi stops sending velocity for any reason, the firmware's idle timeout brings the car to a stop rather than continuing at the last known throttle.
+- **I2C lockups**: Motor noise can hang the bus mid-run, and a sensor can still be in its own power-on reset when the firmware first looks for it. All I2C work runs in its own task on the second core, so a slow or failing device can never hold up steering, throttle or the drive timeout. A missing IMU is retried every 3 s, a faulted one is re-initialised every second, the OLED is re-initialised if it stops answering, and if the gyro keeps failing at 400 kHz the whole bus drops to 100 kHz. The IMU state is shown on the OLED and the LED and reported to the Pi as a MAVLink status text, and the car stays drivable throughout.
+- **Stale commands**: If no valid drive command arrives for 100 ms, for any reason (bridge crashed, cable unplugged, driving node stopped), the firmware brakes and centres the steering rather than continuing at the last known throttle.
+- **Moving during IMU calibration**: Drive commands are ignored for the first moments after boot, until the gyro has measured its bias (at most 5 s), so the car is guaranteed to be standing still while it does.
 - **Button bounce**: The start button is debounced in firmware, so one press means exactly one start.
 - **No wireless, provably**: WiFi and Bluetooth are disabled in the competition firmware build (the RC test mode is excluded at compile time), and the Pi's radios are switched off, as the rules require.
 
@@ -436,6 +452,17 @@ cd gorur_gari_2026
 ```bash
 cd firmware
 pio run --target upload
+```
+
+**2b. Enable the Pi's GPIO UART** (once per Pi). The ESP32 link is `/dev/ttyAMA0`. On a Pi 4 that is only the GPIO UART once Bluetooth is moved off it, and the Linux serial console must not be using it:
+
+```bash
+# /boot/firmware/config.txt (on older images /boot/config.txt), then reboot
+enable_uart=1
+dtoverlay=disable-bt
+# and turn the serial login console off (keep the serial hardware on):
+sudo raspi-config   # Interface Options -> Serial Port -> login shell: No, hardware: Yes
+sudo usermod -aG dialout $USER
 ```
 
 **3. Build the ROS 2 workspace**

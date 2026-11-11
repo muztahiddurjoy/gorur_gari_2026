@@ -8,7 +8,7 @@
 
 mcu_bridge:
   ros__parameters:
-    # The virtual ESP32 instead of /dev/esp32_s3.
+    # The virtual ESP32 instead of the real /dev/ttyAMA0.
     port: /tmp/gorusim_esp32
 
 open_round_run:
