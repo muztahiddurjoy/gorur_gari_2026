@@ -12,7 +12,7 @@ This folder holds block diagrams of the gorur_gari_2026 electronics, generated f
 
 ```mermaid
 flowchart LR
-    PI["Raspberry Pi 4B\n/dev/ttyAMA0 (GPIO14/15)"] <-->|"UART via 6N137 optocouplers\nMAVLink 2 @ 115200 8N1"| ESP["ESP32-S3-DevKitC-1 N16R8\nUART1 TX 40 / RX 41"]
+    PI["Raspberry Pi 4B\n/dev/gorur_mcu"] <-->|"USB cable, devkit 'USB' port\nnative USB CDC, MAVLink 2"| ESP["ESP32-S3-DevKitC-1 N16R8"]
     ESP -->|"RPWM 5, LPWM 6, EN 7"| DRV["BTS7960 (IBT-2)"] --> MOT["Drive motor"]
     ENC["Encoder C1 1 / C2 2"] --> ESP
     ESP -->|"PWM 16, 50 Hz"| SERVO["MG996R servo (own 6 V buck)"]
@@ -22,7 +22,7 @@ flowchart LR
     ESP --> PIX["Onboard WS2812 (GPIO 48)"]
 ```
 
-The Pi and the ESP32-S3 talk over a UART only: the Pi's GPIO UART (`/dev/ttyAMA0`) to the ESP32's UART1 (GPIO40 TX / GPIO41 RX), through 6N137 optocouplers. The ESP32's native USB port carries debug output only. There are no sonars on this hardware revision. GPIO35-37 belong to the N16R8 module's octal PSRAM and are never used. The encoder phases are ordered so forward motion counts as positive, see `pins.h`.
+The Pi and the ESP32-S3 talk over one USB cable into the devkit's port labelled "USB" (the S3's native USB-Serial/JTAG, VID 303a, `/dev/gorur_mcu` on the Pi via `ros2_ws/config/99-gorur.rules`). It carries MAVLink only. GPIO40/41, the old UART link, are unused. There are no sonars on this hardware revision. GPIO35-37 belong to the N16R8 module's octal PSRAM and are never used. The encoder phases are ordered so forward motion counts as positive, see `pins.h`.
 
 ## Status lights
 

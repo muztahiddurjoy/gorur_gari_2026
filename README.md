@@ -139,11 +139,6 @@ Here's a breakdown of the project folders:
       <td>Real-time control: motor PWM, steering servo, encoder counting, IMU reading, start button (the devkit's own BOOT button), status LEDs, and OLED display. N16R8 module: GPIO35-37 belong to the octal PSRAM and stay unused.</td>
     </tr>
     <tr>
-      <td><div align="center"><!-- Placeholder: add a 6N137 optocoupler photo --></div></td>
-      <td>6N137 high-speed optocouplers</td>
-      <td>Galvanically isolate the serial link between the Raspberry Pi's GPIO UART (<code>/dev/ttyAMA0</code>) and the ESP32-S3's UART1 (GPIO40 TX / GPIO41 RX), which carries MAVLink 2 at 115200 baud. Motor noise on the ESP32 side cannot reach the Pi.</td>
-    </tr>
-    <tr>
       <td><div align="center"><img src="https://cdn.roboticsbd.com/9301-home_default/rplidar-c1-dtof-lidar-360-laser-range-scanner-12m-ip54-robotics-bangladesh.jpg" width="160" alt="RPLIDAR C1"></div></td>
       <td>RPLIDAR C1</td>
       <td>360-degree laser scanner. Our primary sensor for walls, gaps, and pillar detection.</td>
@@ -239,7 +234,7 @@ flowchart LR
     NAV -->|run state| TIMER
     TIMER -->|"/run_time"| BRIDGE
     NAV --> CMDVEL --> BRIDGE
-    BRIDGE -->|"MAVLink over UART, drive commands at 50 Hz"| MAV
+    BRIDGE -->|"MAVLink over USB, drive commands at 50 Hz"| MAV
     MAV --> MOTOR
     MAV --> SERVO
     MAV -->|link announced| LEDS
@@ -250,11 +245,11 @@ flowchart LR
 
 ### Two brains, one car
 
-The Raspberry Pi and the ESP32-S3 talk over a UART, the Pi's GPIO UART (`/dev/ttyAMA0`) to the ESP32's UART1 through 6N137 optocouplers, using the **MAVLink 2** protocol with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked fine until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
+The Raspberry Pi and the ESP32-S3 talk over a USB cable plugged into the devkit's port labelled **"USB"** (the S3's own USB-Serial/JTAG controller, native USB CDC, Espressif VID 303a), not its "UART"/"COM" port: that one sits behind a USB-UART bridge chip just like the LiDAR's CP2102, and the two used to trade device names. On the Pi a udev rule turns it into `/dev/gorur_mcu`. The link uses the **MAVLink 2** protocol with message definitions we wrote ourselves (in [`mav_msg`](./mav_msg/)). We started with plain text serial, and it worked fine until the drive motor was running. Electrical noise would occasionally garble a character, and a garbled steering command is a crashed car. MAVLink frames carry a 16-bit checksum, so a corrupted packet is simply dropped instead of obeyed.
 
-The ESP32's USB port carries nothing but human-readable debug output, so no log line can ever land in the middle of a MAVLink frame (a lesson from the earlier USB link, where one stray I2C error message was enough to desync the parser on the Pi).
+That USB port carries **MAVLink and nothing else**. One stray log line in the middle of a frame was once enough to desync the parser on the Pi, so all human-readable debug text is compiled out of the firmware (`DEBUG_PRINTS=0`; turn it on only for bench tests without the Pi). Events the Pi should know about, such as a drive timeout, an IMU fault or the I2C bus slowing down, arrive as MAVLink status texts that `mcu_bridge` logs as `MCU: ...`. Opening the port never resets the ESP32: the bridge disables flow control and drops RTS before DTR, and it reconnects on its own if the cable is pulled or the ESP32 restarts.
 
-**The car moves only while drive commands keep arriving.** After boot the motor stays braked until the first valid drive command, and if no valid one (right message, good CRC) arrives for **100 ms** the firmware brakes at once and centres the steering until the next one. Heartbeats, other messages and corrupted frames never count. `mcu_bridge` re-sends the latest `/cmd_vel` at a fixed **50 Hz** while it is fresh (under 0.3 s old) and stops sending once it goes stale, so a dead bridge, an unplugged cable and a driving node that simply stops all end the same way: the car stops within 100 ms. Four lost frames in a row are tolerated.
+**The car moves only while drive commands keep arriving.** After boot the motor stays braked until the first valid drive command, and if no valid one (right message, good CRC) arrives for **100 ms** the firmware brakes at once and centres the steering until the next one. Heartbeats, other messages and corrupted frames never count. `mcu_bridge` re-sends the latest `/cmd_vel` at a fixed **50 Hz** while it is fresh (under 0.3 s old) and stops sending once it goes stale, so a dead bridge and a driving node that simply stops end the same way: the car stops within 100 ms. Pulling the USB cable (or the Pi losing power) is noticed within a few milliseconds and brakes at once. Four lost frames in a row are tolerated.
 
 ### Odometry and returning home
 
@@ -410,7 +405,8 @@ The full wiring is documented in [`circuit_diagram`](./circuit_diagram/) and the
 | I2C SDA / SCL | 8 / 9 | BOTGyro 0x6A, SSD1306 OLED 0x3C |
 | Start button = the devkit's BOOT button | 0 | INPUT_PULLUP, active low, read only after boot |
 | Status LED | 4 | plain LED, active high |
-| UART to the Raspberry Pi (via 6N137) | TX 40, RX 41 | Serial1, 115200 8N1, Pi side `/dev/ttyAMA0` |
+| Link to the Raspberry Pi | native USB (19 / 20) | the devkit's "USB" port, USB CDC (`Serial`), MAVLink only; Pi side `/dev/gorur_mcu` |
+| (unused) | 40, 41 | the old UART link, deliberately left free |
 | Onboard WS2812 status pixel | 48 | soldered to the devkit |
 
 <div align="center">
@@ -422,7 +418,7 @@ The full wiring is documented in [`circuit_diagram`](./circuit_diagram/) and the
 We spent a lot of time on the boring failure cases, because a robot that works 9 runs out of 10 loses on the 10th:
 
 - **I2C lockups**: Motor noise can hang the bus mid-run, and a sensor can still be in its own power-on reset when the firmware first looks for it. All I2C work runs in its own task on the second core, so a slow or failing device can never hold up steering, throttle or the drive timeout. A missing IMU is retried every 3 s, a faulted one is re-initialised every second, the OLED is re-initialised if it stops answering, and if the gyro keeps failing at 400 kHz the whole bus drops to 100 kHz. The IMU state is shown on the OLED and the LED and reported to the Pi as a MAVLink status text, and the car stays drivable throughout.
-- **Stale commands**: If no valid drive command arrives for 100 ms, for any reason (bridge crashed, cable unplugged, driving node stopped), the firmware brakes and centres the steering rather than continuing at the last known throttle.
+- **Stale commands**: If no valid drive command arrives for 100 ms, for any reason (bridge crashed, driving node stopped), the firmware brakes and centres the steering rather than continuing at the last known throttle. If the USB host disappears altogether (cable pulled, Pi off) it brakes immediately.
 - **Moving during IMU calibration**: Drive commands are ignored for the first moments after boot, until the gyro has measured its bias (at most 5 s), so the car is guaranteed to be standing still while it does.
 - **Button bounce**: The start button is debounced in firmware, so one press means exactly one start.
 - **No wireless, provably**: WiFi and Bluetooth are disabled in the competition firmware build (the RC test mode is excluded at compile time), and the Pi's radios are switched off, as the rules require.
@@ -454,16 +450,15 @@ cd firmware
 pio run --target upload
 ```
 
-**2b. Enable the Pi's GPIO UART** (once per Pi). The ESP32 link is `/dev/ttyAMA0`. On a Pi 4 that is only the GPIO UART once Bluetooth is moved off it, and the Linux serial console must not be using it:
+**2b. Give the USB devices stable names** (once per Pi). Plug the ESP32 into the Pi with a cable on the devkit's **"USB"** port. [`ros2_ws/config/99-gorur.rules`](./ros2_ws/config/99-gorur.rules) names it `/dev/gorur_mcu` (Espressif VID 303a) and the LiDAR `/dev/rplidar` (CP2102, 10c4:ea60):
 
 ```bash
-# /boot/firmware/config.txt (on older images /boot/config.txt), then reboot
-enable_uart=1
-dtoverlay=disable-bt
-# and turn the serial login console off (keep the serial hardware on):
-sudo raspi-config   # Interface Options -> Serial Port -> login shell: No, hardware: Yes
-sudo usermod -aG dialout $USER
+sudo cp ros2_ws/config/99-gorur.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+ls -l /dev/gorur_mcu /dev/rplidar   # both should point at a ttyACM*/ttyUSB* device
 ```
+
+`mcu_bridge` falls back to `/dev/ttyACM0` if `/dev/gorur_mcu` is missing, and the launch files default the LiDAR to `/dev/rplidar`. If your LiDAR runs as its own systemd service, point that at `/dev/rplidar` as well. None of the GPIO-UART setup is needed for the USB link (`enable_uart`, `dtoverlay=disable-bt`, turning off the serial console): leave those as they are.
 
 **3. Build the ROS 2 workspace**
 

@@ -6,7 +6,7 @@ Wiring is taken from the firmware sources — keep in sync with:
   firmware/include/config.h    (frequencies, I2C addresses, enables)
   firmware/pin-map.md          (full pin table incl. reserved slots)
   firmware/lib/rgb_status_led/ (what each WS2812 colour means)
-  ros2_ws/controls/controls/mcu_bridge.py  (/dev/ttyAMA0 MAVLink link)
+  ros2_ws/controls/controls/mcu_bridge.py  (/dev/gorur_mcu MAVLink link)
 
 Usage:  python3 generate_diagrams.py   (needs matplotlib)
         (python3 -s generate_diagrams.py if a NumPy 2 in ~/.local breaks
@@ -30,7 +30,6 @@ C_ACT     = dict(fc="#fee2e2", ec="#b91c1c")   # driver, motor, servo
 C_HMI     = dict(fc="#f3e8ff", ec="#7e22ce")   # OLED, button, LED
 
 W_USB   = "#1d4ed8"
-W_UART  = "#0891b2"
 W_I2C   = "#7e22ce"
 W_PWM   = "#ea580c"
 W_GPIO  = "#15803d"
@@ -115,13 +114,13 @@ def main_diagram():
     wire(ax, [(130, 92), (108, 92)], W_USB, arrow="<>")
     wlabel(ax, 119, 94.2, "USB", W_USB)
 
-    # Pi <-> ESP32 (GPIO UART through 6N137 optocouplers, MAVLink)
-    wire(ax, [(85, 84), (85, 73)], W_UART, lw=2.4, arrow="<>")
+    # Pi <-> ESP32 (USB cable into the devkit's native "USB" port, MAVLink)
+    wire(ax, [(85, 84), (85, 73)], W_USB, lw=2.4, arrow="<>")
     wlabel(ax, 86, 78.5,
-           "UART via 6N137 optocouplers  ·  MAVLink 2 @ 115200 8N1\n"
-           "Pi /dev/ttyAMA0 (GPIO14/15)  ↔  ESP32 TX GPIO40 / RX GPIO41\n"
-           "mcu_bridge.py: drive cmds 50 Hz  ·  telemetry every 50 ms",
-           W_UART, fs=7, ha="left")
+           "USB cable → devkit \"USB\" port (native USB CDC, VID 303a)\n"
+           "Pi /dev/gorur_mcu  ·  MAVLink 2 only  ·  mcu_bridge.py\n"
+           "drive cmds 50 Hz  ·  telemetry every 50 ms",
+           W_USB, fs=7, ha="left")
 
     # ---------------- MCU ----------------------------------------------
     block(ax, 58, 42, 54, 31, "", style=C_MCU)
@@ -206,7 +205,7 @@ def main_diagram():
 
     # ---------------- legend + power note ---------------------------------
     lx, ly = 8, 79.5
-    legend = [("USB", W_USB), ("UART", W_UART), ("I²C", W_I2C), ("PWM", W_PWM),
+    legend = [("USB", W_USB), ("I²C", W_I2C), ("PWM", W_PWM),
               ("GPIO", W_GPIO), ("encoder", W_ENC), ("motor phase", W_PHASE)]
     ax.text(lx, ly + 2.6, "SIGNALS", fontsize=7.5, fontweight="bold",
             color="#374151")
@@ -224,7 +223,7 @@ def main_diagram():
     ax.text(8, 1.4,
             "*  encoder phases ordered so forward = positive count (pins.h)      "
             "GPIO35–37 belong to the N16R8's octal PSRAM and are never used      "
-            "no sonars on this revision",
+            "GPIO40/41 unused (old UART link)      no sonars on this revision",
             fontsize=6.6, color="#6b7280", va="center")
 
     fig.savefig(os.path.join(HERE, "circuit_block_diagram.png"),
@@ -240,8 +239,8 @@ def pin_table():
     # the flag lives on the row so inserting one cannot shift a hand written
     # index onto the wrong line
     rows = [
-        ("Raspberry Pi 4B ↔ ESP32-S3", "UART1 TX / RX", "40 / 41",
-         "via 6N137 · MAVLink 2 @ 115200 8N1 · Pi /dev/ttyAMA0", False),
+        ("Raspberry Pi 4B ↔ ESP32-S3", "native USB D− / D+", "19 / 20",
+         "devkit \"USB\" port · USB CDC · MAVLink only · Pi /dev/gorur_mcu", False),
         ("BOTGyro IMU", "SDA / SCL", "8 / 9", "I²C 0x6A (0x6B if SA0 high) · 400 kHz", False),
         ("OLED SSD1306", "SDA / SCL", "8 / 9 (shared)", "I²C 0x3C · 200 ms refresh", False),
         ("BTS7960 (IBT-2)", "RPWM", "5", "forward · 20 kHz, 8-bit · 10k pull-down", False),
@@ -255,7 +254,7 @@ def pin_table():
          "link level · start countdown · IMU calibrating / fault patterns", False),
         ("Onboard WS2812", "data", "48",
          "red idle / green linked / flashing blue driving / purple turning", False),
-        ("Native USB", "D− / D+", "19 / 20", "debug output only, not the Pi link", True),
+        ("Old UART link", "—", "40 / 41", "unused, deliberately left free", True),
         ("Octal PSRAM (N16R8)", "—", "35–37", "owned by the module, never used", True),
     ]
 

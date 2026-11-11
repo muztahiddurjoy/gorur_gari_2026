@@ -16,7 +16,7 @@ flowchart LR
         ENC["Encoder motor\nC1 1, C2 2"]
     end
     subgraph LINK["Raspberry Pi link"]
-        UART["UART1 TX 40 / RX 41\nvia 6N137 optocouplers\nPi: /dev/ttyAMA0"]
+        USB["devkit 'USB' port (native USB CDC)\nPi: /dev/gorur_mcu"]
     end
     subgraph IO["Button and status lights"]
         B1["Start = BOOT button: GPIO 0"]
@@ -37,10 +37,11 @@ flowchart LR
 | I2C SDA / SCL | **8 / 9** | `Wire.setPins(8, 9)` before `Wire.begin()`; BOTGyro 0x6A (0x6B if SA0 high), SSD1306 OLED 0x3C |
 | Start button = the devkit's BOOT button | **0** | INPUT_PULLUP, active low, 30 ms software debounce |
 | Status LED | **4** | plain LED, GPIO -> 220-470 R -> anode, cathode to GND |
-| UART to the Raspberry Pi (6N137 optocouplers) | **TX 40, RX 41** | Serial1, 115200 8N1; Pi side `/dev/ttyAMA0` |
+| Link to the Raspberry Pi | **native USB (19 / 20)** | the devkit's "USB" port (USB-Serial/JTAG, VID 303a), USB CDC = `Serial` = `MAV_SERIAL`, MAVLink only; Pi side `/dev/gorur_mcu` |
+| Unused | **40, 41** | the old UART link to the Pi, deliberately left free |
 | Onboard WS2812 status pixel | **48** | soldered to the devkit (`RGB_BUILTIN`) |
 
-GPIO35, 36 and 37 are the octal PSRAM's. The native USB port (GPIO19/20) is used for debug output only.
+GPIO35, 36 and 37 are the octal PSRAM's. GPIO19/20 are the native USB data lines of the Pi link and must not be used for anything else.
 
 ## Notes
 
@@ -96,6 +97,8 @@ Some ESP32-S3-DevKitC-1 revisions route the pixel to a different GPIO. `RGB_STAT
 
 ### Link to the Pi
 
-UART1 at 115200 8N1 on GPIO40 (TX) / GPIO41 (RX), through 6N137 optocouplers to the Pi's GPIO UART (`/dev/ttyAMA0`), carrying MAVLink 2. The car moves only while valid drive commands keep arriving: after 100 ms without one (`CMD_TIMEOUT_MS`) the motor brakes and the steering centres. `mcu_bridge` sends them at 50 Hz while `/cmd_vel` is fresh.
+A USB cable from the Pi into the devkit's port labelled **"USB"**: the S3's own USB-Serial/JTAG controller, native USB CDC (`ARDUINO_USB_MODE=1`, `ARDUINO_USB_CDC_ON_BOOT=1`), Espressif VID 303a. Not the "UART"/"COM" port, whose USB-UART bridge chip clashed with the LiDAR's CP2102 in udev. On the Pi, `ros2_ws/config/99-gorur.rules` names it `/dev/gorur_mcu`.
 
-If no frame ever gets through, check the optocoupler polarity. A 6N137 stage can invert the signal depending on how its LED side is wired, and a UART needs to idle high on both ends.
+The port carries MAVLink 2 and nothing else. Debug text is compiled out (`DEBUG_PRINTS=0`), and events go to the Pi as STATUSTEXT. Nothing waits for the host: the car boots, runs the IMU and enforces the drive timeout with or without the Pi, and frames that do not fit the TX buffer are dropped whole.
+
+The car moves only while valid drive commands keep arriving. After 100 ms without one (`CMD_TIMEOUT_MS`), or immediately when the USB host disappears (start-of-frame packets stop: cable pulled, Pi off), the motor brakes and the steering centres. `mcu_bridge` sends drive commands at 50 Hz while `/cmd_vel` is fresh.

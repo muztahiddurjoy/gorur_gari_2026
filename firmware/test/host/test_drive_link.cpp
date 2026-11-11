@@ -1,7 +1,7 @@
 // Host tests for lib/drive_link: which frames count as a drive command, and
 // the 100 ms watchdog. Frames are built with the generated pack functions and
 // pushed byte by byte through the real mavlink_parse_char(), exactly as
-// loop() does with Serial1.
+// loop() does with MAV_SERIAL (the native USB link).
 
 #include <cstring>
 #include <vector>
