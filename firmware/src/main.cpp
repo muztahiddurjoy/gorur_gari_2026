@@ -91,10 +91,19 @@ static void applyDriveCommand(const DriveCommand &cmd, uint32_t nowMs) {
 }
 
 // Runs every loop() pass, after the serial input has been read. No valid
-// drive command for CMD_TIMEOUT_MS -> brake at once (no ramp) and centre the
-// steering; stay that way until the next valid command.
-static void enforceDriveTimeout(uint32_t nowMs) {
-    if (driveActive && !driveWatchdog.alive(nowMs)) {
+// drive command for CMD_TIMEOUT_MS, or the USB host gone from the bus (cable
+// pulled, Pi off: seen within a few ms) -> brake at once (no ramp) and centre
+// the steering; stay that way until the next valid command.
+static void enforceDriveTimeout(uint32_t nowMs, bool hostPresent) {
+    if (driveActive && !hostPresent) {
+        driveActive = false;
+        steer.center();
+        if (driveTimeoutLog.shouldLog(nowMs)) {
+            // sits in the TX buffer and reaches the Pi once it is back
+            statusTextf(STATUSTEXT_SEVERITY_WARNING, "Drive: USB host lost, braked (+%lu more)",
+                        (unsigned long)driveTimeoutLog.suppressed());
+        }
+    } else if (driveActive && !driveWatchdog.alive(nowMs)) {
         driveActive = false;
         steer.center();
         if (driveTimeoutLog.shouldLog(nowMs)) {
@@ -133,6 +142,7 @@ static const char *driveStateLine(uint8_t state) {
         case DRIVE_ACTIVE:  return "Cmd: OK";
         case DRIVE_STOPPED: return "Cmd: STOP (no cmd)";
         case DRIVE_IMU_HOLD: return "Cmd: held, IMU cal";
+        case DRIVE_NO_HOST: return "Cmd: STOP (no USB)";
         default:            return "Cmd: waiting";
     }
 }
@@ -458,6 +468,7 @@ static void reportImuStatus(uint32_t nowMs) {
 static const char *driveStateName() {
     if (!imuGateOpen) return "IMU-HOLD";
     if (driveActive) return "ACTIVE";
+    if (!mavHostPresent()) return "NO-HOST";
     return driveWatchdog.everFed() ? "STOPPED" : "WAITING";
 }
 
@@ -505,6 +516,7 @@ void loop(){
         shared.encoderCount = encoder.count();
         shared.driveState = !imuGateOpen ? DRIVE_IMU_HOLD
                           : driveActive ? DRIVE_ACTIVE
+                          : !mavHostPresent() ? DRIVE_NO_HOST
                           : (driveWatchdog.everFed() ? DRIVE_STOPPED : DRIVE_WAITING);
         if (pendingRunTimer.pending) {
             shared.runTimeMs = pendingRunTimer.elapsedMs;
@@ -644,11 +656,12 @@ void loop(){
         }
     }
 
-    // --- Drive safety: brake + centre if the valid commands have stopped.
-    // Every pass, after the serial input, so a command that landed in this
-    // pass counts. Nothing above can block for long: no delay(), no I2C (that
-    // is all on the other core), and serial writes go into a ring buffer ---
-    enforceDriveTimeout(millis());
+    // --- Drive safety: brake + centre if the valid commands have stopped or
+    // the USB host has gone. Every pass, after the serial input, so a command
+    // that landed in this pass counts. Nothing above can block for long: no
+    // delay(), no I2C (that is all on the other core), and link writes are
+    // dropped rather than waited for ---
+    enforceDriveTimeout(millis(), mavHostPresent());
 
     // --- Motor: advance the slew ramp towards whatever the last command asked
     // for, or hold the brake ---

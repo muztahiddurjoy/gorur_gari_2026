@@ -12,6 +12,7 @@ enum DriveState : uint8_t {
     DRIVE_ACTIVE,       // valid drive commands arriving: motor follows them
     DRIVE_STOPPED,      // commands stopped for CMD_TIMEOUT_MS: braked, centred
     DRIVE_IMU_HOLD,     // boot: drive commands ignored until the IMU is calibrated
+    DRIVE_NO_HOST,      // no USB host on the link: braked, centred
 };
 
 // Everything the two cores exchange, behind one mutex.
