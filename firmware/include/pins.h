@@ -29,17 +29,17 @@ const uint8_t PI_UART_TX_PIN = 40;
 const uint8_t PI_UART_RX_PIN = 41;
 
 
-//button pin
-const uint8_t BUTTON_PIN = 42;
+//start button: the devkit's own BOOT button, there is no separate one.
+// GPIO0 is a strapping pin, so the firmware only ever READS it, after boot,
+// with INPUT_PULLUP (pressed = LOW), debounced in software. It is never driven
+// as an output and nothing else may be wired to it. Holding it down through a
+// reset still drops the chip into the ROM bootloader, as on any devkit.
+const uint8_t START_BUTTON_PIN = 0;
 
-// status led pin (plain LED, not the onboard WS2812 on GPIO48).
-// GPIO36 is free on the DevKitC-1 header and clashes with nothing else here:
-// it is not a strapping pin (0/3/45/46), not the native USB pair (19/20), not
-// UART0 (43/44) and not wired to the SPI flash (26-32). Note that on modules
-// with octal PSRAM (N8R8/N16R8) GPIO33-37 belong to the PSRAM die - this build
-// never enables PSRAM, but move the LED to 37 or 45 if you fit such a module
-// and see trouble.
-const uint8_t STATUS_LED_PIN = 36;
+// status led pin (plain LED, not the onboard WS2812). GPIO4 -> 220-470R ->
+// anode, cathode to GND. It used to be GPIO36, which belongs to the octal
+// PSRAM on the N16R8 module (GPIO35-37 must stay unused).
+const uint8_t STATUS_LED_PIN = 4;
 
 // the devkit's own WS2812, the single addressable pixel the
 // ESP32-S3-DevKitC-1 puts on GPIO48. RGB_BUILTIN is what the board variant calls it

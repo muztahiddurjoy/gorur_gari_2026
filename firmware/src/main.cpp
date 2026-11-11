@@ -25,7 +25,7 @@
 SteeringController steer(STEERING_SERVO_PIN);
 MotorController motor(MOTOR_RPWM_PIN, MOTOR_LPWM_PIN, MOTOR_EN_PIN);
 EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_COUNTS_PER_REV);
-ButtonHandler button(BUTTON_PIN);
+ButtonHandler button(START_BUTTON_PIN, START_BUTTON_DEBOUNCE_MS);
 StatusLed status_led(STATUS_LED_PIN);
 RgbStatusLed rgb_led(RGB_STATUS_LED_PIN);
 // Heading heading;
@@ -208,7 +208,7 @@ void loop(){
     static bool buttonPressLatch = false;
     if (button.isPressed()) {
         buttonPressLatch = true;
-        DEBUG_SERIAL.println("Button pressed!");
+        DEBUG_SERIAL.println("Start (BOOT) button pressed");
         // count the start delay out on the LED. ROS2 starts its own timer off
         // the same press, so both ends run the same countdown - the blinks are
         // over at the moment the car begins to move.
