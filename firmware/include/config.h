@@ -10,9 +10,25 @@
 // ESP32PWM (allocateTimer(0..3)) before the motor or the servo attaches.
 const int LEDC_TIMER_COUNT = 4;
 
-//servo
+//servo (MG996R)
 const int SERVO_FREQUENCY_HZ = 50;
-const int STEERING_CENTER_ANGLE = 90; // boot position, held until the first command
+// The wire angle that means "straight" (mcu_bridge's steering_center_deg).
+// Boot position, and where the steering goes when commands stop.
+const int STEERING_CENTER_ANGLE = 90;
+// Steering limits as servo pulse widths, in microseconds. Wire angle 0 maps
+// to STEERING_MIN_US, 90 to STEERING_CENTER_US and 180 to STEERING_MAX_US
+// (piecewise linear, see lib/steering_control), and the servo is never sent a
+// pulse outside MIN..MAX whatever arrives on the wire.
+//
+// These are deliberately conservative placeholders (+/-400 us around a generic
+// 1500 us centre, roughly +/-36 deg of MG996R horn travel). CALIBRATE ON THE
+// BENCH before driving: find the pulse where the wheels point straight
+// (CENTER), then walk each side out until the linkage is about to touch its
+// stop and back off a little (MIN for wire angle 0 / full left, MAX for 180 /
+// full right). If the wheels turn the wrong way, swap MIN and MAX.
+const int STEERING_MIN_US = 1100;
+const int STEERING_CENTER_US = 1500;
+const int STEERING_MAX_US = 1900;
 
 //motor (BTS7960, see lib/motor_control)
 const uint32_t MOTOR_PWM_FREQUENCY_HZ = 20000; // above hearing range so the motor stays quiet; BTS7960 max is 25 kHz

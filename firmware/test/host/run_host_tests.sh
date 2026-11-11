@@ -30,5 +30,7 @@ build_and_run() {
 
 build_and_run test_motor "$HERE/test_motor.cpp" "$FW/lib/motor_control/motor_control.cpp" \
     -I "$FW/lib/motor_control"
+build_and_run test_steering "$HERE/test_steering.cpp" "$FW/lib/steering_control/steering_control.cpp" \
+    -I "$FW/lib/steering_control"
 
 exit $status

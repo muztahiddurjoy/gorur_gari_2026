@@ -166,8 +166,10 @@ void setup(){
     PI_SERIAL.setRxBufferSize(PI_UART_RX_BUFFER_BYTES);
     PI_SERIAL.setTxBufferSize(PI_UART_TX_BUFFER_BYTES);
     PI_SERIAL.begin(PI_UART_BAUD, SERIAL_8N1, PI_UART_RX_PIN, PI_UART_TX_PIN);
-    steer.begin(SERVO_FREQUENCY_HZ);
-    steer.to(STEERING_CENTER_ANGLE);
+    // centred straight away, and held there until a valid drive command
+    if (!steer.begin(SERVO_FREQUENCY_HZ, STEERING_MIN_US, STEERING_CENTER_US, STEERING_MAX_US)) {
+        DEBUG_SERIAL.println("Steering servo failed to attach");
+    }
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
     button.begin();
     // stays off until the ROS2 bridge announces itself over serial, see the

@@ -4,8 +4,9 @@
 // for the pin type and for RGB_BUILTIN, which the board variant defines
 #include <Arduino.h>
 
-//servo pins
-const uint8_t STEERING_SERVO_PIN = 10;
+//servo pin: MG996R steering servo signal (the servo is powered from its own
+//6 V buck, only signal and ground come from the ESP32)
+const uint8_t STEERING_SERVO_PIN = 16;
 //motor pins: BTS7960 (IBT-2), each with a 10k pull-down on the board so the
 //bridge stays off from power-up until MotorController::begin()
 const uint8_t MOTOR_RPWM_PIN = 5;  // forward PWM
