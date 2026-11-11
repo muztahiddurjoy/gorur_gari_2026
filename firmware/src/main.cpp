@@ -36,6 +36,10 @@ RgbStatusLed rgb_led(RGB_STATUS_LED_PIN);
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
 
+// the MAVLink link to the Raspberry Pi: UART1 on GPIO40/41 (pins.h). The USB
+// port (Serial) only ever carries debug text, see debug_serial.h.
+#define PI_SERIAL Serial1
+
 
 
 // Global I2C task handle (optional)
@@ -148,8 +152,12 @@ void i2cTask(void *pvParameters) {
 
 
 void setup(){
-    Serial.begin(115200);        // native USB CDC, binary MAVLink only
-    DEBUG_SERIAL.begin(DEBUG_SERIAL_BAUD); // UART0, human readable logs
+    debugSerialBegin();          // native USB, human readable logs only
+    // MAVLink to/from the Pi over its GPIO UART. Buffer sizes have to be set
+    // before begin(), the core refuses to resize a running port.
+    PI_SERIAL.setRxBufferSize(PI_UART_RX_BUFFER_BYTES);
+    PI_SERIAL.setTxBufferSize(PI_UART_TX_BUFFER_BYTES);
+    PI_SERIAL.begin(PI_UART_BAUD, SERIAL_8N1, PI_UART_RX_PIN, PI_UART_TX_PIN);
     steer.begin(SERVO_FREQUENCY_HZ);
     steer.to(STEERING_CENTER_ANGLE);
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
@@ -241,12 +249,12 @@ void loop(){
             SONAR_WIRE_NO_READING_CM, SONAR_WIRE_NO_READING_CM,
             buttonField);
         uint16_t txLen = mavlink_msg_to_send_buffer(txBuf, &txMsg);
-        Serial.write(txBuf, txLen);
+        PI_SERIAL.write(txBuf, txLen);
     }
 
 
-    while(Serial.available()>0){
-        uint8_t c = Serial.read();
+    while(PI_SERIAL.available()>0){
+        uint8_t c = PI_SERIAL.read();
         
         mavlink_message_t received_msg;
         mavlink_status_t status;

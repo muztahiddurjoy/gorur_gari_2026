@@ -78,4 +78,13 @@ const uint8_t RGB_STEERING_CENTER_TOLERANCE_DEG = 2;
 //ROS2 telemetry
 const unsigned long SENSOR_TX_INTERVAL_MS = 50; // how often the mcu_to_ros2 sensor message is sent
 
+//UART link to the Pi (Serial1, 8N1). Must match MCU_BAUDRATE in mcu_bridge.py.
+const unsigned long PI_UART_BAUD = 115200;
+// Both sizes must be above the 128 byte hardware FIFO. The TX ring buffer is
+// what makes Serial1.write() return at once instead of waiting for the wire
+// (one telemetry frame is 28 bytes, a STATUSTEXT up to 66). The RX side holds
+// ~0.5 s of the Pi's traffic, far more than loop() ever leaves unread.
+const size_t PI_UART_TX_BUFFER_BYTES = 512;
+const size_t PI_UART_RX_BUFFER_BYTES = 512;
+
 #endif

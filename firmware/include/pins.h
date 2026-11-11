@@ -21,6 +21,12 @@ const uint8_t ENCODER_B_PIN = 2;
 const uint8_t I2C_SDA = 8;
 const uint8_t I2C_SCL = 9;
 
+// UART link to the Raspberry Pi (Serial1, MAVLink 2), through 6N137
+// optocouplers to the Pi's GPIO UART (/dev/ttyAMA0). TX/RX are from the
+// ESP32's side: GPIO40 drives the Pi's RXD, GPIO41 listens to the Pi's TXD.
+const uint8_t PI_UART_TX_PIN = 40;
+const uint8_t PI_UART_RX_PIN = 41;
+
 
 //button pin
 const uint8_t BUTTON_PIN = 42;
