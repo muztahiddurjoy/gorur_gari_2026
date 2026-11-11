@@ -98,6 +98,15 @@ const float IMU_MAX_INTEGRATION_GAP_S = 0.12f;
 // begin() retry while the sensor is missing. BOTGyro re-initialises a sensor
 // that faults mid-run by itself, once a second.
 const uint32_t IMU_BEGIN_RETRY_MS = 3000;
+// Drive commands are ignored (the motor stays braked, the watchdog is not
+// fed) until the gyro's first calibration has finished, so the car stands
+// still while it measures its zero-rate bias - but for no longer than this
+// after boot, so a missing or broken IMU cannot keep the car from driving.
+// The gate only ever closes at boot; it never closes again once open.
+const uint32_t IMU_CAL_GATE_MAX_MS = 5000;
+// While the IMU is not usable (not found, faulted, uncalibrated) the MAVLink
+// STATUSTEXT reporting it is repeated this often; every change is sent at once.
+const uint32_t IMU_STATUSTEXT_REPEAT_MS = 5000;
 
 // Device bring up and recovery on the bus.
 // Nothing on the bus is initialised once and then trusted forever: on a cold
@@ -132,6 +141,13 @@ const unsigned long START_BUTTON_DEBOUNCE_MS = 30;
 const uint8_t START_BLINK_COUNT = 3;
 const unsigned long START_BLINK_INTERVAL_MS = 1000;
 
+//status LED patterns (priority: start countdown > IMU pattern > link level)
+// IMU calibrating, keep the car still: fast even blink, 5 Hz
+const unsigned long STATUS_LED_CAL_PERIOD_MS = 200;
+// IMU not found / faulted / uncalibrated: one short blip a second
+const unsigned long STATUS_LED_FAULT_PERIOD_MS = 1000;
+const unsigned long STATUS_LED_FAULT_ON_MS = 100;
+
 //onboard WS2812 status pixel
 // The second status light, next to the plain LED above: red until the ROS2
 // bridge announces itself, green once it has, flashing blue while the motor
@@ -150,6 +166,12 @@ const uint8_t RGB_STEERING_CENTER_TOLERANCE_DEG = 2;
 
 //ROS2 telemetry
 const unsigned long SENSOR_TX_INTERVAL_MS = 50; // how often the mcu_to_ros2 sensor message is sent
+
+//USB debug output
+// One status line (drive state, motor, steering, IMU, yaw/pitch/roll, and the
+// longest gap between two loop() passes since the last line) per interval.
+// 0 turns it off. Timeout/resume and IMU events are logged regardless.
+const uint32_t DEBUG_STATUS_INTERVAL_MS = 1000;
 
 //UART link to the Pi (Serial1, 8N1). Must match MCU_BAUDRATE in mcu_bridge.py.
 const unsigned long PI_UART_BAUD = 115200;

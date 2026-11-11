@@ -113,6 +113,7 @@ static const char *driveStateLine(uint8_t state) {
     switch (state) {
         case DRIVE_ACTIVE:  return "Cmd: OK";
         case DRIVE_STOPPED: return "Cmd: STOP (no cmd)";
+        case DRIVE_IMU_HOLD: return "Cmd: held, IMU cal";
         default:            return "Cmd: waiting";
     }
 }
@@ -186,9 +187,11 @@ void i2cTask(void *pvParameters) {
             shared.accelYg = heading.accelYg();
             shared.accelZg = heading.accelZg();
             shared.imuStatus = (uint8_t)heading.status();
+            shared.imuBeginTried = heading.beginAttempted();
             shared.imuEverCalibrated = heading.everCalibrated();
             shared.imuSampleRateHz = heading.sampleRateHz();
             shared.i2cClockHz = busClockHz;
+            // the car is meant to be still unless a drive command is in force
             calibrationAllowed = (shared.driveState != DRIVE_ACTIVE);
             xSemaphoreGive(sharedMutex);
         }
@@ -308,6 +311,130 @@ void setup(){
 }
 
 
+// --- IMU, as loop() sees it (copied out of SharedData each pass) -----------
+struct ImuView {
+    ImuStatus status = ImuStatus::NotFound;
+    bool beginTried = false;
+    bool everCalibrated = false;
+    uint16_t sampleRateHz = 0;
+    float yawDeg = 0.0f;
+    float pitchDeg = 0.0f;
+    float rollDeg = 0.0f;
+};
+static ImuView imu;
+
+// Drive commands are ignored until the first IMU calibration, or until
+// IMU_CAL_GATE_MAX_MS after boot, whichever comes first. Once open it stays
+// open: a gyro that faults or recalibrates mid run never stops the car.
+static bool imuGateOpen = false;
+RateLimitedLog imuHoldLog(DRIVE_LOG_MIN_INTERVAL_MS);
+
+static void updateImuGate(uint32_t nowMs) {
+    if (imuGateOpen) return;
+    if (imu.everCalibrated) {
+        imuGateOpen = true;
+        DEBUG_SERIAL.printf("[drive] IMU calibrated after %lu ms, drive commands accepted\n",
+                            (unsigned long)nowMs);
+    } else if (nowMs >= IMU_CAL_GATE_MAX_MS) {
+        imuGateOpen = true;
+        DEBUG_SERIAL.printf("[drive] IMU still %s after %lu ms, accepting drive commands anyway (yaw not usable)\n",
+                            imuStatusName(imu.status), (unsigned long)nowMs);
+    }
+}
+
+// The plain LED shows the IMU while it needs attention (the start countdown
+// still outranks it, and the link level comes back when it is fine).
+static void updateStatusLedAlert() {
+    switch (imu.status) {
+        case ImuStatus::Calibrating:
+            status_led.setAlert(STATUS_LED_CAL_PERIOD_MS, STATUS_LED_CAL_PERIOD_MS / 2);
+            break;
+        case ImuStatus::NotFound:
+            // nothing to say until the first attempt has actually failed
+            if (imu.beginTried) {
+                status_led.setAlert(STATUS_LED_FAULT_PERIOD_MS, STATUS_LED_FAULT_ON_MS);
+            }
+            break;
+        case ImuStatus::Fault:
+        case ImuStatus::Uncalibrated:
+            status_led.setAlert(STATUS_LED_FAULT_PERIOD_MS, STATUS_LED_FAULT_ON_MS);
+            break;
+        case ImuStatus::Ready:
+        default:
+            status_led.setAlert(0, 0);
+            break;
+    }
+}
+
+static void sendStatusText(uint8_t severity, const char *text) {
+    mavlink_message_t msg;
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    mavlink_pack_statustext(system_id, component_id, &msg, severity, text);
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    PI_SERIAL.write(buf, len);  // into the TX ring buffer, never waits
+}
+
+// Tells the Pi (MAVLink STATUSTEXT, logged by mcu_bridge) when the IMU state
+// changes, and keeps repeating it while the IMU is not usable.
+static void reportImuStatus(uint32_t nowMs) {
+    static bool reportedOnce = false;
+    static ImuStatus lastReported = ImuStatus::NotFound;
+    static uint32_t lastReportMs = 0;
+
+    if (!imu.beginTried) return;  // the first begin() is still running
+    bool unusable = imu.status == ImuStatus::NotFound || imu.status == ImuStatus::Fault ||
+                    imu.status == ImuStatus::Uncalibrated;
+    bool changed = !reportedOnce || imu.status != lastReported;
+    bool repeatDue = unusable && (uint32_t)(nowMs - lastReportMs) >= IMU_STATUSTEXT_REPEAT_MS;
+    if (!changed && !repeatDue) return;
+
+    char text[MAVLINK_STATUSTEXT_TEXT_LEN + 1];
+    uint8_t severity;
+    switch (imu.status) {
+        case ImuStatus::Ready:
+            severity = STATUSTEXT_SEVERITY_INFO;
+            snprintf(text, sizeof(text), "IMU ready, %u Hz", (unsigned)imu.sampleRateHz);
+            break;
+        case ImuStatus::Calibrating:
+            severity = STATUSTEXT_SEVERITY_NOTICE;
+            snprintf(text, sizeof(text), "IMU calibrating, keep the car still");
+            break;
+        case ImuStatus::Uncalibrated:
+            severity = STATUSTEXT_SEVERITY_WARNING;
+            snprintf(text, sizeof(text), "IMU not calibrated, yaw held");
+            break;
+        case ImuStatus::Fault:
+            severity = STATUSTEXT_SEVERITY_ERROR;
+            snprintf(text, sizeof(text), "IMU fault: gyro stopped answering, retrying");
+            break;
+        case ImuStatus::NotFound:
+        default:
+            severity = STATUSTEXT_SEVERITY_ERROR;
+            snprintf(text, sizeof(text), "IMU not found at 0x%02X, retrying", IMU_ADDRESS);
+            break;
+    }
+    sendStatusText(severity, text);
+    reportedOnce = true;
+    lastReported = imu.status;
+    lastReportMs = nowMs;
+}
+
+static const char *driveStateName() {
+    if (!imuGateOpen) return "IMU-HOLD";
+    if (driveActive) return "ACTIVE";
+    return driveWatchdog.everFed() ? "STOPPED" : "WAITING";
+}
+
+// One line a second on USB, and the longest gap between two loop() passes
+// since the previous line: the drive timeout check runs once per pass, so
+// that gap is how late it can be.
+static void debugStatusLine(uint32_t nowMs, uint32_t maxLoopGapUs) {
+    DEBUG_SERIAL.printf("[status] drive=%s mot=%+d%% str=%u | imu=%s %uHz yaw=%+.1f pitch=%+.1f roll=%+.1f | loop gap max %lu us\n",
+                        driveStateName(), motor.outputPercent(), (unsigned)steer.getAngle(),
+                        imuStatusName(imu.status), (unsigned)imu.sampleRateHz,
+                        imu.yawDeg, imu.pitchDeg, imu.rollDeg, (unsigned long)maxLoopGapUs);
+}
+
 // Run timer frames land in loop() but belong on the OLED. They are parked
 // here and handed over at the next shared-data exchange, so a busy lock delays
 // one by a pass instead of dropping it.
@@ -320,6 +447,15 @@ struct PendingRunTimer {
 static PendingRunTimer pendingRunTimer;
 
 void loop(){
+    // how long since the previous pass: the drive timeout below is checked
+    // once per pass, so this is how late it can ever be
+    static uint32_t lastLoopUs = micros();
+    static uint32_t maxLoopGapUs = 0;
+    uint32_t loopUs = micros();
+    uint32_t loopGapUs = loopUs - lastLoopUs;
+    lastLoopUs = loopUs;
+    if (loopGapUs > maxLoopGapUs) maxLoopGapUs = loopGapUs;
+
     encoder.update();
 
     // --- Shared data with the I2C task. NEVER waits: the other core only
@@ -331,7 +467,8 @@ void loop(){
         shared.motorPercent = motor.outputPercent();
         shared.steeringAngle = steer.getAngle();
         shared.encoderCount = encoder.count();
-        shared.driveState = driveActive ? DRIVE_ACTIVE
+        shared.driveState = !imuGateOpen ? DRIVE_IMU_HOLD
+                          : driveActive ? DRIVE_ACTIVE
                           : (driveWatchdog.everFed() ? DRIVE_STOPPED : DRIVE_WAITING);
         if (pendingRunTimer.pending) {
             shared.runTimeMs = pendingRunTimer.elapsedMs;
@@ -342,8 +479,21 @@ void loop(){
         }
         // written by the I2C task on the other core
         headingDeg = shared.heading;
+        imu.status = (ImuStatus)shared.imuStatus;
+        imu.beginTried = shared.imuBeginTried;
+        imu.everCalibrated = shared.imuEverCalibrated;
+        imu.sampleRateHz = shared.imuSampleRateHz;
+        imu.yawDeg = shared.heading;
+        imu.pitchDeg = shared.pitchDeg;
+        imu.rollDeg = shared.rollDeg;
         xSemaphoreGive(sharedMutex);
     }
+
+    // --- IMU: open the drive gate once calibrated (or after the time limit),
+    // show it on the LED, tell the Pi about changes ---
+    updateImuGate(millis());
+    updateStatusLedAlert();
+    reportImuStatus(millis());
 
 
     // --- Button: poll every loop, but telemetry only goes out every
@@ -358,7 +508,7 @@ void loop(){
         // over at the moment the car begins to move.
         status_led.blink(START_BLINK_COUNT, START_BLINK_INTERVAL_MS);
     }
-    // advances the countdown blinks, no-op the rest of the time
+    // advances the countdown blinks and the IMU pattern
     status_led.update();
 
     // --- RGB pixel: read the drivetrain back out every pass rather than
@@ -419,7 +569,13 @@ void loop(){
             DriveCommand driveCmd;
             // the only frame that may refresh the drive watchdog
             if(decodeDriveCommand(framing, received_msg, driveCmd)){
-                applyDriveCommand(driveCmd, millis());
+                if (imuGateOpen) {
+                    applyDriveCommand(driveCmd, millis());
+                } else if (imuHoldLog.shouldLog(millis())) {
+                    // ignored: no watchdog refresh, the motor stays braked
+                    DEBUG_SERIAL.printf("[drive] ignoring drive commands until the IMU is calibrated (keep still), at most %lu ms after boot\n",
+                                        (unsigned long)IMU_CAL_GATE_MAX_MS);
+                }
             }
             // mcu_bridge sends this once, right after it opens the port. it is the
             // only announcement we get that a ROS2 side actually exists, so it is
@@ -457,6 +613,15 @@ void loop(){
     // --- Motor: advance the slew ramp towards whatever the last command asked
     // for, or hold the brake ---
     motor.update();
+
+    // --- USB debug status line ---
+    static uint32_t lastStatusMs = 0;
+    uint32_t statusNowMs = millis();
+    if (DEBUG_STATUS_INTERVAL_MS > 0 && statusNowMs - lastStatusMs >= DEBUG_STATUS_INTERVAL_MS) {
+        lastStatusMs = statusNowMs;
+        debugStatusLine(statusNowMs, maxLoopGapUs);
+        maxLoopGapUs = 0;
+    }
 }
 
 

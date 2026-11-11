@@ -34,5 +34,7 @@ build_and_run test_steering "$HERE/test_steering.cpp" "$FW/lib/steering_control/
     -I "$FW/lib/steering_control"
 build_and_run test_drive_link "$HERE/test_drive_link.cpp" -I "$FW/lib/drive_link"
 build_and_run test_yaw "$HERE/test_yaw.cpp" -I "$FW/lib/heading"
+build_and_run test_status_led "$HERE/test_status_led.cpp" "$FW/lib/status_led/status_led.cpp" \
+    -I "$FW/lib/status_led"
 
 exit $status

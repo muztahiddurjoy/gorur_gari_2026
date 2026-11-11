@@ -11,6 +11,7 @@ enum DriveState : uint8_t {
     DRIVE_WAITING = 0,  // no valid drive command since boot: braked
     DRIVE_ACTIVE,       // valid drive commands arriving: motor follows them
     DRIVE_STOPPED,      // commands stopped for CMD_TIMEOUT_MS: braked, centred
+    DRIVE_IMU_HOLD,     // boot: drive commands ignored until the IMU is calibrated
 };
 
 // Everything the two cores exchange, behind one mutex.
@@ -46,6 +47,7 @@ struct SharedData {
     float accelYg = 0.0f;
     float accelZg = 0.0f;
     uint8_t imuStatus = 0;          // ImuStatus (lib/heading), 0 = not found yet
+    bool imuBeginTried = false;     // the first begin() attempt has finished
     bool imuEverCalibrated = false; // latched once the first calibration succeeds
     uint16_t imuSampleRateHz = 0;
     uint32_t i2cClockHz = 0;        // what the shared bus is clocked at now

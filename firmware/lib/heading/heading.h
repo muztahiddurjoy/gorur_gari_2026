@@ -69,6 +69,7 @@ public:
     ImuStatus status() const;
     bool calibrated() const { return started && gyro.isCalibrated(); }
     bool everCalibrated() const { return calibratedOnce; }
+    bool beginAttempted() const { return attempted; }
 
     float yawDeg() const { return yaw.yawDeg(); }
     float yawRateDps() const { return yaw.rateDps(); }
