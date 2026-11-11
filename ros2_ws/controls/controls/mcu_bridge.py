@@ -1,6 +1,5 @@
 import math
 
-import geometry_msgs
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -172,7 +171,7 @@ class MCUBridgeNode(Node):
         self.port = str(self.get_parameter('port').value)
         self.baudrate = int(self.get_parameter('baudrate').value)
         self.get_logger().info(f'Connecting to MCU on {self.port} at {self.baudrate} baud.')
-        self.mcu_connected = False;
+        self.mcu_connected = False
 
         # /cmd_vel scaling and clamps, see the mcu_bridge section of
         # ros2_ws/config/bot_config.yaml
@@ -248,7 +247,7 @@ class MCUBridgeNode(Node):
         self.drive_streaming = False  # for the start/stop log lines only
 
         self.connect_mcu()
-        self.cmd_vel = self.create_subscription(Twist,'/cmd_vel', self.handle_cmd_vel, 10)
+        self.cmd_vel = self.create_subscription(Twist, '/cmd_vel', self.handle_cmd_vel, 10)
         self.run_time_sub = self.create_subscription(
             Float32, '/run_time', self.handle_run_time, 10)
         self.run_timer_state_sub = self.create_subscription(
@@ -270,7 +269,7 @@ class MCUBridgeNode(Node):
         # push the run stopwatch out to the OLED at 10 Hz
         self.run_timer_tx_timer = self.create_timer(
             RUN_TIMER_TX_INTERVAL_S, self.send_run_time)
-        # self.timer = self.create_timer(0.1, self.send_heartbeat)  # Send heartbeat every 0.1 seconds
+        # self.timer = self.create_timer(0.1, self.send_heartbeat)  # heartbeat every 0.1 s
 
     def connect_mcu(self):
         try:
@@ -286,7 +285,6 @@ class MCUBridgeNode(Node):
         except Exception as e:
             self.get_logger().error(f'Failed to connect to MCU: {e}', throttle_duration_sec=2.0)
             self.mcu_connected = False
-
 
     def send_connect_notice(self):
         # one shot: whether or not the frame gets through, we never send it again
@@ -387,7 +385,8 @@ class MCUBridgeNode(Node):
                 throttle_duration_sec=5.0)
 
     def apply_launch_boost(self, linear_x, now):
-        """Scale up the throttle that gets the bot moving again from a standstill.
+        """
+        Scale up the throttle that gets the bot moving again from a standstill.
 
         The first non-zero linear.x after a stop is multiplied by the boost gain
         (and every command within launch_boost_duration of it, so the kick is not
@@ -420,7 +419,7 @@ class MCUBridgeNode(Node):
             self.launch_boost_until = None  # boosted long enough, back to normal
         return linear_x
 
-    def handle_cmd_vel(self,msg:Twist):
+    def handle_cmd_vel(self, msg: Twist):
         try:
             # if not self.mcu_connected: #handle the case where the MCU is not connected
             #     self.get_logger().error("MCU is not connected. cannot send command.")
@@ -430,8 +429,10 @@ class MCUBridgeNode(Node):
                                min(self.throttle_max, linear_x * self.throttle_scale)))
             steering = max(self.steering_min_deg,
                            min(self.steering_max_deg,
-                               int(self.steering_center_deg + msg.angular.z * self.steering_gain_deg)))
-            self.get_logger().info(f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
+                               int(self.steering_center_deg
+                                   + msg.angular.z * self.steering_gain_deg)))
+            self.get_logger().info(
+                f'Sending cmd_vel to MCU: throttle={throttle}, steering={steering}')
             # not sent from here: send_drive_command puts it on the wire at a
             # steady 50 Hz for as long as it stays fresh
             self.drive_cmd = (throttle, steering)
@@ -575,9 +576,11 @@ class MCUBridgeNode(Node):
             self.get_logger().info('Heartbeat sent to MCU.')
         except Exception as e:
             self.get_logger().error(f'Failed to send heartbeat: {e}')
+
     def odom_handler(self):
         # Placeholder for odometry handling logic
         pass
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -589,6 +592,7 @@ def main(args=None):
     finally:
         mcu_bridge_node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
