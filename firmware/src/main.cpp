@@ -157,7 +157,7 @@ void i2cTask(void *pvParameters) {
     Heading heading(Wire, imuConfig());
 
     TickType_t lastDisplayUpdate = xTaskGetTickCount();
-    const TickType_t displayInterval = pdMS_TO_TICKS(DISPLAY_REFRESH_INTERVAL_MS);
+    TickType_t displayInterval = pdMS_TO_TICKS(DISPLAY_REFRESH_INTERVAL_MS);
     const TickType_t initRetryInterval = pdMS_TO_TICKS(I2C_INIT_RETRY_INTERVAL_MS);
     const TickType_t healthCheckInterval = pdMS_TO_TICKS(I2C_HEALTH_CHECK_INTERVAL_MS);
 
@@ -175,6 +175,22 @@ void i2cTask(void *pvParameters) {
         // --- IMU, every pass: begin() retries, BOTGyro's state machine
         // (sampling, non-blocking calibration, fault recovery), yaw ---
         heading.service(calibrationAllowed);
+
+        // --- I2C fallback: gyro reads unreliable at the full clock -> re-clock
+        // the whole bus once, for the rest of the run (see config.h) ---
+        if (busClockHz != I2C_FALLBACK_CLOCK_HZ) {
+            uint32_t unreliable = heading.faultCount() + heading.failedBeginsWhilePresent();
+            if (unreliable >= I2C_FALLBACK_AFTER_FAILURES) {
+                DEBUG_SERIAL.printf("[i2c] %lu gyro faults/failed inits at %lu Hz, dropping the bus to %lu Hz\n",
+                                    (unsigned long)unreliable, (unsigned long)busClockHz,
+                                    (unsigned long)I2C_FALLBACK_CLOCK_HZ);
+                busClockHz = I2C_FALLBACK_CLOCK_HZ;
+                heading.setI2CClock(busClockHz);   // BOTGyro's next begin()
+                Wire.setClock(busClockHz);         // the bus, now (BOTGyro's own re-init uses it)
+                display.markLost();                // rebuilt at the new clock by begin()
+                displayInterval = pdMS_TO_TICKS(DISPLAY_REFRESH_INTERVAL_FALLBACK_MS);
+            }
+        }
 
         // --- swap results with loop(). Waiting for the lock is fine on this
         // core; loop() never holds it for more than a few copies ---
@@ -313,6 +329,7 @@ void setup(){
 
 // --- IMU, as loop() sees it (copied out of SharedData each pass) -----------
 struct ImuView {
+    uint32_t i2cClockHz = I2C_CLOCK_HZ;
     ImuStatus status = ImuStatus::NotFound;
     bool beginTried = false;
     bool everCalibrated = false;
@@ -375,11 +392,21 @@ static void sendStatusText(uint8_t severity, const char *text) {
 }
 
 // Tells the Pi (MAVLink STATUSTEXT, logged by mcu_bridge) when the IMU state
-// changes, and keeps repeating it while the IMU is not usable.
+// changes, and keeps repeating it while the IMU is not usable. Also reports
+// the I2C clock fallback, once.
 static void reportImuStatus(uint32_t nowMs) {
     static bool reportedOnce = false;
     static ImuStatus lastReported = ImuStatus::NotFound;
     static uint32_t lastReportMs = 0;
+
+    static bool fallbackReported = false;
+    if (!fallbackReported && imu.i2cClockHz != I2C_CLOCK_HZ) {
+        char text[MAVLINK_STATUSTEXT_TEXT_LEN + 1];
+        snprintf(text, sizeof(text), "I2C unreliable at %lu kHz, bus now %lu kHz",
+                 (unsigned long)(I2C_CLOCK_HZ / 1000), (unsigned long)(imu.i2cClockHz / 1000));
+        sendStatusText(STATUSTEXT_SEVERITY_WARNING, text);
+        fallbackReported = true;
+    }
 
     if (!imu.beginTried) return;  // the first begin() is still running
     bool unusable = imu.status == ImuStatus::NotFound || imu.status == ImuStatus::Fault ||
@@ -480,6 +507,7 @@ void loop(){
         // written by the I2C task on the other core
         headingDeg = shared.heading;
         imu.status = (ImuStatus)shared.imuStatus;
+        if (shared.i2cClockHz != 0) imu.i2cClockHz = shared.i2cClockHz;
         imu.beginTried = shared.imuBeginTried;
         imu.everCalibrated = shared.imuEverCalibrated;
         imu.sampleRateHz = shared.imuSampleRateHz;

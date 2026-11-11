@@ -68,8 +68,17 @@ const int ENCODER_SAMPLE_INTERVAL_MS = 50;
 // 400 kHz keeps a full OLED frame to ~25 ms of bus time, during which the gyro
 // cannot be read. Both devices are clocked from this one value (the OLED
 // driver re-sets the bus clock around every frame, so it is given the same
-// number).
+// number). If gyro reads turn out unreliable at this speed, the firmware drops
+// the whole bus to I2C_FALLBACK_CLOCK_HZ by itself (see below).
 const uint32_t I2C_CLOCK_HZ = 400000;
+// The fallback: after I2C_FALLBACK_AFTER_FAILURES gyro faults (or begin()
+// failures while something still ACKs the gyro's address - a sensor that is
+// simply not plugged in does not count), the bus is re-clocked to 100 kHz for
+// the rest of the run, via BOTGyro::setI2CClock() for its re-inits,
+// Wire.setClock() for the bus and a rebuilt OLED driver. Logged on USB and
+// sent to the Pi as a STATUSTEXT. It never switches back up by itself.
+const uint32_t I2C_FALLBACK_CLOCK_HZ = 100000;
+const uint8_t I2C_FALLBACK_AFTER_FAILURES = 3;
 
 //I2C addresses
 const uint8_t OLED_ADDRESS = 0x3C;  // SSD1306
@@ -123,6 +132,8 @@ const unsigned long I2C_HEALTH_CHECK_INTERVAL_MS = 1000;
 // samples. 200 ms (5 Hz) keeps that to ~12 % of the time; the screen is for
 // people, it does not need to be faster.
 const unsigned long DISPLAY_REFRESH_INTERVAL_MS = 200;
+// at I2C_FALLBACK_CLOCK_HZ a frame takes ~100 ms of bus time, so slow down
+const unsigned long DISPLAY_REFRESH_INTERVAL_FALLBACK_MS = 1000;
 
 //sonar
 // No sonars are fitted on this hardware revision, but the mcu_to_ros2 MAVLink
