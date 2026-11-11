@@ -36,19 +36,21 @@
 mcu_bridge:
   ros__parameters:
     # ── Serial link to the ESP32-S3 ───────────────────────────────
-    # The Pi's GPIO UART (GPIO14/15) through 6N137 optocouplers to the
-    # ESP32's UART1 (GPIO40/41). Needs enable_uart=1 + dtoverlay=disable-bt
-    # in /boot/firmware/config.txt and the serial console off.
-    port: /dev/ttyAMA0
-    baudrate: 115200             # = PI_UART_BAUD in firmware/include/config.h
+    # A USB cable into the devkit's "USB" port (native USB CDC, Espressif
+    # VID 303a). /dev/gorur_mcu comes from config/99-gorur.rules (see the
+    # README to install it); /dev/ttyACM0 is tried when that name is
+    # missing. The bridge reconnects by itself if the port goes away.
+    port: /dev/gorur_mcu
+    fallback_port: /dev/ttyACM0  # '' = no fallback
+    baudrate: 115200             # ignored by USB CDC; = MAV_SERIAL_BAUD in firmware
 
     # ── /cmd_vel -> wire command scaling ──────────────────────────
     # The firmware applies whatever throttle/steering arrives on the
     # wire, so these are THE drive limits. Its only clamps are hardware
     # protection: the steering pulse never leaves STEERING_MIN/MAX_US
     # (firmware/include/config.h), and the motor stops if drive
-    # commands stop (mcu_bridge re-sends them at 50 Hz while /cmd_vel
-    # is fresh).
+    # commands stop for 100 ms or the USB host disappears (mcu_bridge
+    # re-sends them at 50 Hz while /cmd_vel is fresh).
     # NOTE (BTS7960 firmware): throttle +/-127 is now FULL duty. The
     # old TB6612 code only reached ~50 % duty at 127, so the same
     # throttle_scale drives about twice as hard as before.

@@ -7,7 +7,7 @@
 
 sim_mcu:
   ros__parameters:
-    # The pty mcu_bridge opens instead of the real /dev/ttyAMA0. See sim_overlay.yaml.
+    # The pty mcu_bridge opens instead of the real /dev/gorur_mcu. See sim_overlay.yaml.
     port_link: /tmp/gorusim_esp32
 
     # Encoder ticks per turn of the wheel. Taken from the calibration the car
