@@ -37,6 +37,27 @@ const uint8_t component_id = 200;
 // port (Serial) only ever carries debug text, see debug_serial.h.
 #define PI_SERIAL Serial1
 
+// A MAVLink STATUSTEXT to the Pi, which mcu_bridge logs as "MCU: <text>" at
+// the matching level. This is how the firmware reports events now that no
+// text may go out on the link (debug_serial.h). Called from loop() and
+// setup() only, so the link keeps a single writer. At most 50 characters.
+static void statusTextf(uint8_t severity, const char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
+static void statusTextf(uint8_t severity, const char *fmt, ...) {
+    char text[MAVLINK_STATUSTEXT_TEXT_LEN + 1];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(text, sizeof(text), fmt, args);
+    va_end(args);
+    DBG_PRINTF("[mcu] %s\n", text);
+
+    mavlink_message_t msg;
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    mavlink_pack_statustext(system_id, component_id, &msg, severity, text);
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    PI_SERIAL.write(buf, len);
+}
+
 
 
 // --- drive command safety (see CMD_TIMEOUT_MS in config.h) -------------------
@@ -62,10 +83,10 @@ static void applyDriveCommand(const DriveCommand &cmd, uint32_t nowMs) {
         driveActive = true;
         if (driveResumeLog.shouldLog(nowMs)) {
             if (first) {
-                DEBUG_SERIAL.println("[drive] first valid drive command, motor released");
+                statusTextf(STATUSTEXT_SEVERITY_INFO, "Drive: first valid command, motor released");
             } else {
-                DEBUG_SERIAL.printf("[drive] drive commands resumed after %lu ms (+%lu more since last report)\n",
-                                    (unsigned long)gapMs, (unsigned long)driveResumeLog.suppressed());
+                statusTextf(STATUSTEXT_SEVERITY_INFO, "Drive: resumed after %lu ms (+%lu more)",
+                            (unsigned long)gapMs, (unsigned long)driveResumeLog.suppressed());
             }
         }
     }
@@ -79,9 +100,9 @@ static void enforceDriveTimeout(uint32_t nowMs) {
         driveActive = false;
         steer.center();
         if (driveTimeoutLog.shouldLog(nowMs)) {
-            DEBUG_SERIAL.printf("[drive] no valid drive command for %lu ms: motor braked, steering centred (+%lu more since last report)\n",
-                                (unsigned long)driveWatchdog.ageMs(nowMs),
-                                (unsigned long)driveTimeoutLog.suppressed());
+            statusTextf(STATUSTEXT_SEVERITY_WARNING, "Drive: no command for %lu ms, braked (+%lu more)",
+                        (unsigned long)driveWatchdog.ageMs(nowMs),
+                        (unsigned long)driveTimeoutLog.suppressed());
         }
     }
     if (!driveActive) {
@@ -181,7 +202,8 @@ void i2cTask(void *pvParameters) {
         if (busClockHz != I2C_FALLBACK_CLOCK_HZ) {
             uint32_t unreliable = heading.faultCount() + heading.failedBeginsWhilePresent();
             if (unreliable >= I2C_FALLBACK_AFTER_FAILURES) {
-                DEBUG_SERIAL.printf("[i2c] %lu gyro faults/failed inits at %lu Hz, dropping the bus to %lu Hz\n",
+                // reported to the Pi by loop() (reportImuStatus) as a STATUSTEXT
+                DBG_PRINTF("[i2c] %lu gyro faults/failed inits at %lu Hz, dropping the bus to %lu Hz\n",
                                     (unsigned long)unreliable, (unsigned long)busClockHz,
                                     (unsigned long)I2C_FALLBACK_CLOCK_HZ);
                 busClockHz = I2C_FALLBACK_CLOCK_HZ;
@@ -218,7 +240,7 @@ void i2cTask(void *pvParameters) {
         if (!display.isReady() && now - lastDisplayInit >= initRetryInterval) {
             lastDisplayInit = now;
             if (display.begin(busClockHz)) {
-                DEBUG_SERIAL.println("Display ready");
+                DBG_PRINTLN("Display ready");
             }
         }
 
@@ -229,7 +251,7 @@ void i2cTask(void *pvParameters) {
         if (now - lastHealthCheck >= healthCheckInterval) {
             lastHealthCheck = now;
             if (display.isReady() && !display.isResponding()) {
-                DEBUG_SERIAL.println("Display stopped responding, re-initialising");
+                DBG_PRINTLN("Display stopped responding, re-initialising");
                 display.markLost();
             }
         }
@@ -301,7 +323,7 @@ void setup(){
     PI_SERIAL.begin(PI_UART_BAUD, SERIAL_8N1, PI_UART_RX_PIN, PI_UART_TX_PIN);
     // centred straight away, and held there until a valid drive command
     if (!steer.begin(SERVO_FREQUENCY_HZ, STEERING_MIN_US, STEERING_CENTER_US, STEERING_MAX_US)) {
-        DEBUG_SERIAL.println("Steering servo failed to attach");
+        statusTextf(STATUSTEXT_SEVERITY_ERROR, "Steering servo failed to attach");
     }
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
     button.begin();
@@ -350,12 +372,12 @@ static void updateImuGate(uint32_t nowMs) {
     if (imuGateOpen) return;
     if (imu.everCalibrated) {
         imuGateOpen = true;
-        DEBUG_SERIAL.printf("[drive] IMU calibrated after %lu ms, drive commands accepted\n",
-                            (unsigned long)nowMs);
+        statusTextf(STATUSTEXT_SEVERITY_INFO, "Drive: accepted, IMU calibrated after %lu ms",
+                    (unsigned long)nowMs);
     } else if (nowMs >= IMU_CAL_GATE_MAX_MS) {
         imuGateOpen = true;
-        DEBUG_SERIAL.printf("[drive] IMU still %s after %lu ms, accepting drive commands anyway (yaw not usable)\n",
-                            imuStatusName(imu.status), (unsigned long)nowMs);
+        statusTextf(STATUSTEXT_SEVERITY_WARNING, "Drive: accepted after %lu ms, IMU %s",
+                    (unsigned long)nowMs, imuStatusName(imu.status));
     }
 }
 
@@ -383,14 +405,6 @@ static void updateStatusLedAlert() {
     }
 }
 
-static void sendStatusText(uint8_t severity, const char *text) {
-    mavlink_message_t msg;
-    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
-    mavlink_pack_statustext(system_id, component_id, &msg, severity, text);
-    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    PI_SERIAL.write(buf, len);  // into the TX ring buffer, never waits
-}
-
 // Tells the Pi (MAVLink STATUSTEXT, logged by mcu_bridge) when the IMU state
 // changes, and keeps repeating it while the IMU is not usable. Also reports
 // the I2C clock fallback, once.
@@ -404,7 +418,7 @@ static void reportImuStatus(uint32_t nowMs) {
         char text[MAVLINK_STATUSTEXT_TEXT_LEN + 1];
         snprintf(text, sizeof(text), "I2C unreliable at %lu kHz, bus now %lu kHz",
                  (unsigned long)(I2C_CLOCK_HZ / 1000), (unsigned long)(imu.i2cClockHz / 1000));
-        sendStatusText(STATUSTEXT_SEVERITY_WARNING, text);
+        statusTextf(STATUSTEXT_SEVERITY_WARNING, "%s", text);
         fallbackReported = true;
     }
 
@@ -440,7 +454,7 @@ static void reportImuStatus(uint32_t nowMs) {
             snprintf(text, sizeof(text), "IMU not found at 0x%02X, retrying", IMU_ADDRESS);
             break;
     }
-    sendStatusText(severity, text);
+    statusTextf(severity, "%s", text);
     reportedOnce = true;
     lastReported = imu.status;
     lastReportMs = nowMs;
@@ -452,11 +466,11 @@ static const char *driveStateName() {
     return driveWatchdog.everFed() ? "STOPPED" : "WAITING";
 }
 
-// One line a second on USB, and the longest gap between two loop() passes
-// since the previous line: the drive timeout check runs once per pass, so
-// that gap is how late it can be.
+// DEBUG_PRINTS builds only: one line a second, with the longest gap between
+// two loop() passes since the previous line (the drive timeout check runs
+// once per pass, so that gap is how late it can be).
 static void debugStatusLine(uint32_t maxLoopGapUs) {
-    DEBUG_SERIAL.printf("[status] drive=%s mot=%+d%% str=%u | imu=%s %uHz yaw=%+.1f pitch=%+.1f roll=%+.1f | loop gap max %lu us\n",
+    DBG_PRINTF("[status] drive=%s mot=%+d%% str=%u | imu=%s %uHz yaw=%+.1f pitch=%+.1f roll=%+.1f | loop gap max %lu us\n",
                         driveStateName(), motor.outputPercent(), (unsigned)steer.getAngle(),
                         imuStatusName(imu.status), (unsigned)imu.sampleRateHz,
                         imu.yawDeg, imu.pitchDeg, imu.rollDeg, (unsigned long)maxLoopGapUs);
@@ -530,7 +544,7 @@ void loop(){
     static bool buttonPressLatch = false;
     if (button.isPressed()) {
         buttonPressLatch = true;
-        DEBUG_SERIAL.println("Start (BOOT) button pressed");
+        DBG_PRINTLN("Start (BOOT) button pressed");
         // count the start delay out on the LED. ROS2 starts its own timer off
         // the same press, so both ends run the same countdown - the blinks are
         // over at the moment the car begins to move.
@@ -604,8 +618,7 @@ void loop(){
                     applyDriveCommand(driveCmd, millis());
                 } else if (imuHoldLog.shouldLog(millis())) {
                     // ignored: no watchdog refresh, the motor stays braked
-                    DEBUG_SERIAL.printf("[drive] ignoring drive commands until the IMU is calibrated (keep still), at most %lu ms after boot\n",
-                                        (unsigned long)IMU_CAL_GATE_MAX_MS);
+                    statusTextf(STATUSTEXT_SEVERITY_NOTICE, "Drive: ignored until IMU calibrated, keep still");
                 }
             }
             // mcu_bridge sends this once, right after it opens the port. it is the
@@ -619,7 +632,7 @@ void loop(){
                 // the pixel latches it too - it cannot read the plain LED back,
                 // since that pin belongs to the countdown while one is running
                 rgb_led.setConnected(connected != 0);
-                DEBUG_SERIAL.println(connected ? "ROS2 bridge connected" : "ROS2 bridge disconnected");
+                DBG_PRINTLN(connected ? "ROS2 bridge connected" : "ROS2 bridge disconnected");
             }
             // the run stopwatch, sent ten times a second by mcu_bridge while
             // autonomy/run_timer is up. it is display only: nothing in here
@@ -645,10 +658,11 @@ void loop(){
     // for, or hold the brake ---
     motor.update();
 
-    // --- USB debug status line ---
+    // --- debug status line (DEBUG_PRINTS builds only) ---
     static uint32_t lastStatusMs = 0;
     uint32_t statusNowMs = millis();
-    if (DEBUG_STATUS_INTERVAL_MS > 0 && statusNowMs - lastStatusMs >= DEBUG_STATUS_INTERVAL_MS) {
+    if (DEBUG_PRINTS && DEBUG_STATUS_INTERVAL_MS > 0 &&
+        statusNowMs - lastStatusMs >= DEBUG_STATUS_INTERVAL_MS) {
         lastStatusMs = statusNowMs;
         debugStatusLine(maxLoopGapUs);
         maxLoopGapUs = 0;

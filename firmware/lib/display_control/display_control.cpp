@@ -39,7 +39,7 @@ bool DisplayController::begin(uint32_t i2cClockHz) {
     // in setup()), so periphBegin=false: the library must not call
     // Wire.begin() itself
     if (!oled->begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS, false, false)) {
-        DEBUG_SERIAL.println("SSD1306 allocation failed");
+        DBG_PRINTLN("SSD1306 allocation failed");
         return false;
     }
     oled->clearDisplay();

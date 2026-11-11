@@ -1,4 +1,5 @@
 #include "rc_car.h"
+#include "debug_serial.h"  // DBG_*: text only with -D DEBUG_PRINTS=1
 #include "rc_car_config.h"
 #include "rc_car_page.h"
 #include "config.h"
@@ -27,11 +28,11 @@ void RcCar::begin(){
 
     if(MDNS.begin(RC_HOSTNAME)){
         MDNS.addService("http", "tcp", RC_HTTP_PORT);
-        Serial.printf("[rc] controller on http://%s.local\n", RC_HOSTNAME);
+        DBG_PRINTF("[rc] controller on http://%s.local\n", RC_HOSTNAME);
     } else {
-        Serial.println("[rc] mdns failed to start, use the ip instead");
+        DBG_PRINTLN("[rc] mdns failed to start, use the ip instead");
     }
-    Serial.printf("[rc] controller on http://%s\n", host().c_str());
+    DBG_PRINTF("[rc] controller on http://%s\n", host().c_str());
 
     startServer();
     lastCommandMs = millis();
@@ -39,7 +40,7 @@ void RcCar::begin(){
 
 bool RcCar::joinWifi(){
     if(strlen(RC_WIFI_SSID) == 0){
-        Serial.println("[rc] no ssid in wifi_secrets.h, going straight to ap");
+        DBG_PRINTLN("[rc] no ssid in wifi_secrets.h, going straight to ap");
         return false;
     }
 
@@ -48,19 +49,19 @@ bool RcCar::joinWifi(){
     WiFi.setSleep(false); // a remote control wants latency, not battery life
     WiFi.begin(RC_WIFI_SSID, RC_WIFI_PASSWORD);
 
-    Serial.printf("[rc] joining %s", RC_WIFI_SSID);
+    DBG_PRINTF("[rc] joining %s", RC_WIFI_SSID);
     unsigned long started = millis();
     while(WiFi.status() != WL_CONNECTED){
         if(millis() - started > RC_WIFI_CONNECT_TIMEOUT_MS){
-            Serial.println(" timed out");
+            DBG_PRINTLN(" timed out");
             return false;
         }
-        Serial.print(".");
+        DBG_PRINT(".");
         delay(250);
     }
 
     accessPoint = false;
-    Serial.printf(" joined, %s\n", WiFi.localIP().toString().c_str());
+    DBG_PRINTF(" joined, %s\n", WiFi.localIP().toString().c_str());
     return true;
 }
 
@@ -68,7 +69,7 @@ void RcCar::startAccessPoint(){
     WiFi.mode(WIFI_AP);
     WiFi.softAP(RC_AP_SSID, RC_AP_PASSWORD);
     accessPoint = true;
-    Serial.printf("[rc] hosting ap %s, %s\n", RC_AP_SSID, WiFi.softAPIP().toString().c_str());
+    DBG_PRINTF("[rc] hosting ap %s, %s\n", RC_AP_SSID, WiFi.softAPIP().toString().c_str());
 }
 
 void RcCar::startServer(){
@@ -77,10 +78,10 @@ void RcCar::startServer(){
 
     socket->onEvent([this](AsyncWebSocket *ws, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t length){
         if(type == WS_EVT_CONNECT){
-            Serial.printf("[rc] controller %u connected\n", client->id());
+            DBG_PRINTF("[rc] controller %u connected\n", client->id());
             lastCommandMs = millis();
         } else if(type == WS_EVT_DISCONNECT){
-            Serial.printf("[rc] controller %u gone\n", client->id());
+            DBG_PRINTF("[rc] controller %u gone\n", client->id());
             steerInput = 0;
             throttleInput = 0;
         } else if(type == WS_EVT_DATA){
@@ -136,7 +137,7 @@ void RcCar::update(){
         steerInput = 0;
         throttleInput = 0;
         stopped = true;
-        Serial.println("[rc] failsafe, controller went quiet");
+        DBG_PRINTLN("[rc] failsafe, controller went quiet");
     }
     if(!silent) stopped = false;
 

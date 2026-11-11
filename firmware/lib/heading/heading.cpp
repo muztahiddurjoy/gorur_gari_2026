@@ -44,16 +44,16 @@ void Heading::tryBegin(unsigned long nowMs) {
     if (gyro.begin()) {
         started = true;
         yaw.reset(0.0f);
-        DEBUG_SERIAL.printf("[imu] BOTGyro found at 0x%02X, I2C %lu Hz\n",
+        DBG_PRINTF("[imu] BOTGyro found at 0x%02X, I2C %lu Hz\n",
                             config.i2cAddress, (unsigned long)config.i2cClockHz);
         return;
     }
     if (addressAcks()) {
         presentButFailed++;
-        DEBUG_SERIAL.printf("[imu] something answers at 0x%02X but BOTGyro begin() failed, retrying in %lu ms\n",
+        DBG_PRINTF("[imu] something answers at 0x%02X but BOTGyro begin() failed, retrying in %lu ms\n",
                             config.i2cAddress, (unsigned long)config.beginRetryMs);
     } else {
-        DEBUG_SERIAL.printf("[imu] BOTGyro not found at 0x%02X, retrying in %lu ms\n",
+        DBG_PRINTF("[imu] BOTGyro not found at 0x%02X, retrying in %lu ms\n",
                             config.i2cAddress, (unsigned long)config.beginRetryMs);
     }
 }
@@ -116,11 +116,11 @@ ImuStatus Heading::status() const {
 
 void Heading::logTransition(ImuStatus from, ImuStatus to) {
     if (to == ImuStatus::Ready && from == ImuStatus::Calibrating) {
-        DEBUG_SERIAL.printf("[imu] calibrated: bias z %.3f dps, noise z %.3f dps\n",
+        DBG_PRINTF("[imu] calibrated: bias z %.3f dps, noise z %.3f dps\n",
                             gyro.getBiasZ(), gyro.getNoiseZ());
     } else if (to == ImuStatus::Uncalibrated && from == ImuStatus::Calibrating) {
-        DEBUG_SERIAL.println("[imu] calibration disturbed (car moved?), yaw held until it succeeds");
+        DBG_PRINTLN("[imu] calibration disturbed (car moved?), yaw held until it succeeds");
     } else {
-        DEBUG_SERIAL.printf("[imu] %s -> %s\n", imuStatusName(from), imuStatusName(to));
+        DBG_PRINTF("[imu] %s -> %s\n", imuStatusName(from), imuStatusName(to));
     }
 }
