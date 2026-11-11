@@ -42,7 +42,9 @@ const int STEERING_CENTER_ANGLE = 90;
 // stop and back off a little (MIN for wire angle 0 / full left, MAX for 180 /
 // full right). If the wheels turn the wrong way, swap MIN and MAX.
 const int STEERING_MIN_US = 1100;
-const int STEERING_CENTER_US = 1500;
+// Trimmed +33 us (~3 deg right, MG996R ~11 us/deg): at 1500 the wheels sat
+// slightly left of straight.
+const int STEERING_CENTER_US = 1533;
 const int STEERING_MAX_US = 1900;
 
 //motor (BTS7960, see lib/motor_control)
