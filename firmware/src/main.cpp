@@ -13,6 +13,8 @@
 #include "status_led.h"
 #include "rgb_status_led.h"
 #include "run_timer.h"
+#include "drive_link.h"
+#include "rate_limited_log.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -36,6 +38,59 @@ const uint8_t component_id = 200;
 // port (Serial) only ever carries debug text, see debug_serial.h.
 #define PI_SERIAL Serial1
 
+
+
+// --- drive command safety (see CMD_TIMEOUT_MS in config.h) -------------------
+// driveActive is true only while a fresh valid drive command is in force. It
+// starts false, so the motor is braked from boot until the first valid one.
+DriveWatchdog driveWatchdog(CMD_TIMEOUT_MS);
+bool driveActive = false;
+RateLimitedLog driveTimeoutLog(DRIVE_LOG_MIN_INTERVAL_MS);
+RateLimitedLog driveResumeLog(DRIVE_LOG_MIN_INTERVAL_MS);
+
+// A valid drive command arrived: refresh the watchdog and apply it.
+static void applyDriveCommand(const DriveCommand &cmd, uint32_t nowMs) {
+    bool first = !driveWatchdog.everFed();
+    uint32_t gapMs = driveWatchdog.ageMs(nowMs);
+    driveWatchdog.feed(nowMs);
+
+    // full command range -> full duty range, see MOTOR_COMMAND_MAX
+    motor.setTarget((float)constrain((int)cmd.throttle, -MOTOR_COMMAND_MAX, MOTOR_COMMAND_MAX)
+                    / (float)MOTOR_COMMAND_MAX);
+    steer.to(cmd.steering);
+
+    if (!driveActive) {
+        driveActive = true;
+        if (driveResumeLog.shouldLog(nowMs)) {
+            if (first) {
+                DEBUG_SERIAL.println("[drive] first valid drive command, motor released");
+            } else {
+                DEBUG_SERIAL.printf("[drive] drive commands resumed after %lu ms (+%lu more since last report)\n",
+                                    (unsigned long)gapMs, (unsigned long)driveResumeLog.suppressed());
+            }
+        }
+    }
+}
+
+// Runs every loop() pass, after the serial input has been read. No valid
+// drive command for CMD_TIMEOUT_MS -> brake at once (no ramp) and centre the
+// steering; stay that way until the next valid command.
+static void enforceDriveTimeout(uint32_t nowMs) {
+    if (driveActive && !driveWatchdog.alive(nowMs)) {
+        driveActive = false;
+        steer.center();
+        if (driveTimeoutLog.shouldLog(nowMs)) {
+            DEBUG_SERIAL.printf("[drive] no valid drive command for %lu ms: motor braked, steering centred (+%lu more since last report)\n",
+                                (unsigned long)driveWatchdog.ageMs(nowMs),
+                                (unsigned long)driveTimeoutLog.suppressed());
+        }
+    }
+    if (!driveActive) {
+        // immediate and idempotent: the bridge pins are only rewritten if
+        // something had changed them
+        motor.brake();
+    }
+}
 
 
 // Global I2C task handle (optional)
@@ -268,14 +323,14 @@ void loop(){
         mavlink_message_t received_msg;
         mavlink_status_t status;
 
-        if(mavlink_parse_char(MAVLINK_COMM_0, c, &received_msg, &status)){
-            if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg){
-                int throttle = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_throttle(&received_msg);
-                // full command range -> full duty range, see MOTOR_COMMAND_MAX
-                motor.setTarget((float)constrain(throttle, -MOTOR_COMMAND_MAX, MOTOR_COMMAND_MAX)
-                                / (float)MOTOR_COMMAND_MAX);
-                uint8_t steering = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_steering(&received_msg);
-                steer.to(steering);
+        // only MAVLINK_FRAMING_OK is a whole frame with a good CRC; bad CRCs
+        // and half frames come back as something else and are dropped here
+        uint8_t framing = mavlink_parse_char(MAVLINK_COMM_0, c, &received_msg, &status);
+        if(framing == MAVLINK_FRAMING_OK){
+            DriveCommand driveCmd;
+            // the only frame that may refresh the drive watchdog
+            if(decodeDriveCommand(framing, received_msg, driveCmd)){
+                applyDriveCommand(driveCmd, millis());
             }
             // mcu_bridge sends this once, right after it opens the port. it is the
             // only announcement we get that a ROS2 side actually exists, so it is
@@ -308,9 +363,14 @@ void loop(){
         }
     }
 
+    // --- Drive safety: brake + centre if the valid commands have stopped.
+    // Every pass, after the serial input, so a command that landed in this
+    // pass counts. Nothing above can block for long: no delay(), no I2C (that
+    // is all on the other core), and serial writes go into a ring buffer ---
+    enforceDriveTimeout(millis());
+
     // --- Motor: advance the slew ramp towards whatever the last command asked
-    // for. Runs every pass, after the serial input, so a command that just
-    // landed is acted on in the same pass ---
+    // for, or hold the brake ---
     motor.update();
 }
 

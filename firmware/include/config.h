@@ -3,7 +3,22 @@
 
 // The firmware applies whatever throttle and steering arrive on the wire -
 // the drive limits (steering swing/clamps, throttle scaling) are enforced on
-// the ROS2 side only, see the mcu_bridge section of ros2_ws/config/bot_config.yaml.
+// the ROS2 side, see the mcu_bridge section of ros2_ws/config/bot_config.yaml.
+// The two exceptions are hardware protection: the steering pulse limits
+// (STEERING_*_US) and the drive command timeout below.
+
+//drive command safety
+// The car moves only while valid drive commands keep arriving from the Pi.
+// After boot the motor is braked until the first valid
+// gorur_gari_ros2_to_mcu_msg, and whenever the newest one is older than this
+// the motor brakes at once and the steering centres, until the next one.
+// Heartbeats, connect/timer frames and anything with a bad CRC never count
+// (lib/drive_link). mcu_bridge sends drive commands at 50 Hz (every 20 ms)
+// while /cmd_vel is fresh, so 100 ms rides through four lost frames in a row.
+// Do not lower the bridge's rate without raising this.
+const uint32_t CMD_TIMEOUT_MS = 100;
+// the timeout / resume messages on the USB debug port print at most this often
+const uint32_t DRIVE_LOG_MIN_INTERVAL_MS = 1000;
 
 //PWM timers
 // The ESP32-S3 LEDC peripheral has 4 timers; setup() hands all of them to
