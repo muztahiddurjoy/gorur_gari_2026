@@ -30,7 +30,6 @@ EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_COUNTS_PER_REV);
 ButtonHandler button(START_BUTTON_PIN, START_BUTTON_DEBOUNCE_MS);
 StatusLed status_led(STATUS_LED_PIN);
 RgbStatusLed rgb_led(RGB_STATUS_LED_PIN);
-// Heading heading;
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
 
@@ -162,25 +161,17 @@ void i2cTask(void *pvParameters) {
         if (display.isReady() && now - lastDisplayUpdate >= displayInterval) {
             lastDisplayUpdate = now;
 
-            // Read display strings from shared struct
-            String speed, encoder, steering, velData;
-            float yaw = 0.0f;
-            uint32_t runTimeMs = 0;
-            uint8_t runTimeState = RUN_TIMER_IDLE;
+            // Copy the numbers out under the lock and format them after it is
+            // released: loop() only ever tries the lock, so holding it while
+            // building Strings would make it skip its exchange for nothing.
+            // Waiting here is fine, this is core 0.
+            SharedData snap;
             bool runTimeStale = false;
             if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
-                speed = shared.speedText;
-                encoder = shared.encoderText;
-                steering = shared.steeringText;
-                velData = shared.vel_data;
-                // taken under the same lock as the strings, so the screen never
-                // shows a half written float
-                yaw = shared.heading;
-                // the run clock is the Pi's, we only draw it. all three fields
-                // come out together so the line can never mix a fresh time with
-                // a stale flag
-                runTimeMs = shared.runTimeMs;
-                runTimeState = shared.runTimeState;
+                snap = shared;
+                // the run clock is the Pi's, we only draw it. the stale flag is
+                // worked out from the same copy so the line can never mix a
+                // fresh time with a stale flag
                 runTimeStale = shared.runTimeSeen &&
                                (millis() - shared.runTimeRxMs > RUN_TIMER_STALE_MS);
                 xSemaphoreGive(sharedMutex);
@@ -188,12 +179,11 @@ void i2cTask(void *pvParameters) {
 
             // Draw everything
             display.clear();
-            display.displayText(speed, 0, 0, 1);
-            display.displayText(encoder, 0, 10, 1);
-            display.displayText(steering, 0, 20, 1);
-            display.displayText("Yaw: " + String(yaw), 0, 30, 1);
-            display.displayText(velData, 0, 40, 1);
-            display.displayText(runTimerLine(runTimeMs, runTimeState, runTimeStale), 0, 50, 1);
+            display.displayText("Motor: " + String(snap.motorPercent) + "%", 0, 0, 1);
+            display.displayText("Encoder: " + String(snap.encoderCount), 0, 10, 1);
+            display.displayText("Steering: " + String(snap.steeringAngle), 0, 20, 1);
+            display.displayText("Yaw: " + String(snap.heading), 0, 30, 1);
+            display.displayText(runTimerLine(snap.runTimeMs, snap.runTimeState, runTimeStale), 0, 50, 1);
             display.updateScreen();    // single I2C transfer
         }
 
@@ -243,15 +233,39 @@ void setup(){
 }
 
 
-void loop(){
-     encoder.update();
+// Run timer frames land in loop() but belong on the OLED. They are parked
+// here and handed over at the next shared-data exchange, so a busy lock delays
+// one by a pass instead of dropping it.
+struct PendingRunTimer {
+    bool pending = false;
+    uint32_t elapsedMs = 0;
+    uint8_t state = 0;
+    unsigned long rxMs = 0;
+};
+static PendingRunTimer pendingRunTimer;
 
-     float headingDeg = 0.0f;
-     if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
-        shared.speedText = "Motor: " + String(motor.outputPercent()) + "%";
-        shared.encoderText = "Encoder: " + String(encoder.count());
-        shared.steeringText = "Steering: " + String(steer.getAngle());
-        // written by the I2C task on the other core, so only read it in here
+void loop(){
+    encoder.update();
+
+    // --- Shared data with the I2C task. NEVER waits: the other core only
+    // holds the lock long enough to copy a few numbers, and if it holds it
+    // right now this pass skips the exchange and the next one (microseconds
+    // later) does it. Values read here keep their last good copy ---
+    static float headingDeg = 0.0f;
+    if (xSemaphoreTake(sharedMutex, 0) == pdTRUE) {
+        shared.motorPercent = motor.outputPercent();
+        shared.steeringAngle = steer.getAngle();
+        shared.encoderCount = encoder.count();
+        shared.driveState = driveActive ? DRIVE_ACTIVE
+                          : (driveWatchdog.everFed() ? DRIVE_STOPPED : DRIVE_WAITING);
+        if (pendingRunTimer.pending) {
+            shared.runTimeMs = pendingRunTimer.elapsedMs;
+            shared.runTimeState = pendingRunTimer.state;
+            shared.runTimeSeen = true;
+            shared.runTimeRxMs = pendingRunTimer.rxMs;
+            pendingRunTimer.pending = false;
+        }
+        // written by the I2C task on the other core
         headingDeg = shared.heading;
         xSemaphoreGive(sharedMutex);
     }
@@ -350,15 +364,11 @@ void loop(){
             // steers, brakes or counts on it, so frames going missing costs a
             // line on the screen and nothing else
             else if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_timer_msg){
-                uint32_t elapsedMs = mavlink_msg_gorur_gari_ros2_to_mcu_timer_msg_get_elapsed_ms(&received_msg);
-                uint8_t timerState = mavlink_msg_gorur_gari_ros2_to_mcu_timer_msg_get_state(&received_msg);
-                if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
-                    shared.runTimeMs = elapsedMs;
-                    shared.runTimeState = timerState;
-                    shared.runTimeSeen = true;
-                    shared.runTimeRxMs = millis();
-                    xSemaphoreGive(sharedMutex);
-                }
+                // parked, handed to the I2C task at the next exchange
+                pendingRunTimer.elapsedMs = mavlink_msg_gorur_gari_ros2_to_mcu_timer_msg_get_elapsed_ms(&received_msg);
+                pendingRunTimer.state = mavlink_msg_gorur_gari_ros2_to_mcu_timer_msg_get_state(&received_msg);
+                pendingRunTimer.rxMs = millis();
+                pendingRunTimer.pending = true;
             }
         }
     }
