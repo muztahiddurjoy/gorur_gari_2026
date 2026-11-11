@@ -8,6 +8,7 @@
 #include "pins.h"
 #include "config.h"
 #include "debug_serial.h"
+#include "mav_serial.h"
 #include "shared_data.h"
 #include "button_handler.h"
 #include "status_led.h"
@@ -33,9 +34,6 @@ RgbStatusLed rgb_led(RGB_STATUS_LED_PIN);
 const uint8_t system_id = 1;
 const uint8_t component_id = 200;
 
-// the MAVLink link to the Raspberry Pi: UART1 on GPIO40/41 (pins.h). The USB
-// port (Serial) only ever carries debug text, see debug_serial.h.
-#define PI_SERIAL Serial1
 
 // A MAVLink STATUSTEXT to the Pi, which mcu_bridge logs as "MCU: <text>" at
 // the matching level. This is how the firmware reports events now that no
@@ -55,7 +53,7 @@ static void statusTextf(uint8_t severity, const char *fmt, ...) {
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     mavlink_pack_statustext(system_id, component_id, &msg, severity, text);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    PI_SERIAL.write(buf, len);
+    mavWriteFrame(buf, len);  // whole frame or nothing, never waits
 }
 
 
@@ -315,12 +313,9 @@ void setup(){
     motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS,
                 MOTOR_SLEW_PERCENT_PER_S);
 
-    debugSerialBegin();          // native USB, human readable logs only
-    // MAVLink to/from the Pi over its GPIO UART. Buffer sizes have to be set
-    // before begin(), the core refuses to resize a running port.
-    PI_SERIAL.setRxBufferSize(PI_UART_RX_BUFFER_BYTES);
-    PI_SERIAL.setTxBufferSize(PI_UART_TX_BUFFER_BYTES);
-    PI_SERIAL.begin(PI_UART_BAUD, SERIAL_8N1, PI_UART_RX_PIN, PI_UART_TX_PIN);
+    // MAVLink to/from the Pi over the devkit's native USB port. Does not wait
+    // for a host: everything below runs whether or not the Pi is there.
+    mavSerialBegin();
     // centred straight away, and held there until a valid drive command
     if (!steer.begin(SERVO_FREQUENCY_HZ, STEERING_MIN_US, STEERING_CENTER_US, STEERING_MAX_US)) {
         statusTextf(STATUSTEXT_SEVERITY_ERROR, "Steering servo failed to attach");
@@ -597,12 +592,13 @@ void loop(){
             SONAR_WIRE_NO_READING_CM, SONAR_WIRE_NO_READING_CM,
             buttonField);
         uint16_t txLen = mavlink_msg_to_send_buffer(txBuf, &txMsg);
-        PI_SERIAL.write(txBuf, txLen);
+        // dropped whole if the Pi is not reading; the next one is 50 ms away
+        mavWriteFrame(txBuf, txLen);
     }
 
 
-    while(PI_SERIAL.available()>0){
-        uint8_t c = PI_SERIAL.read();
+    while(MAV_SERIAL.available()>0){
+        uint8_t c = MAV_SERIAL.read();
         
         mavlink_message_t received_msg;
         mavlink_status_t status;

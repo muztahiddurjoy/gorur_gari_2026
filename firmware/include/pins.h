@@ -22,11 +22,9 @@ const uint8_t ENCODER_B_PIN = 2;
 const uint8_t I2C_SDA = 8;
 const uint8_t I2C_SCL = 9;
 
-// UART link to the Raspberry Pi (Serial1, MAVLink 2), through 6N137
-// optocouplers to the Pi's GPIO UART (/dev/ttyAMA0). TX/RX are from the
-// ESP32's side: GPIO40 drives the Pi's RXD, GPIO41 listens to the Pi's TXD.
-const uint8_t PI_UART_TX_PIN = 40;
-const uint8_t PI_UART_RX_PIN = 41;
+// The Raspberry Pi link is NOT on a GPIO: it is native USB CDC on the
+// devkit's "USB" port (USB-Serial/JTAG on GPIO19/20, which must stay free),
+// see MAV_SERIAL in config.h. GPIO40/41, the old UART link, are now unused.
 
 
 //start button: the devkit's own BOOT button, there is no separate one.
@@ -54,8 +52,8 @@ const uint8_t RGB_STATUS_LED_PIN = RGB_BUILTIN;
 const uint8_t RGB_STATUS_LED_PIN = 48;
 #endif
 
-// No sonars are fitted. Their old pins now belong to the steering servo (16)
-// and the UART link to the Pi (40/41); see SONAR_WIRE_NO_READING_CM in config.h
-// for what the telemetry still reports in the four sonar fields.
+// No sonars are fitted. GPIO16, one of their old pins, is now the steering
+// servo; see SONAR_WIRE_NO_READING_CM in config.h for what the telemetry still
+// reports in the four sonar fields.
 
 #endif

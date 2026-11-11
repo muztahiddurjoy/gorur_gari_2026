@@ -184,13 +184,22 @@ const unsigned long SENSOR_TX_INTERVAL_MS = 50; // how often the mcu_to_ros2 sen
 // 0 turns it off. Timeout/resume and IMU events are logged regardless.
 const uint32_t DEBUG_STATUS_INTERVAL_MS = 1000;
 
-//UART link to the Pi (Serial1, 8N1). Must match MCU_BAUDRATE in mcu_bridge.py.
-const unsigned long PI_UART_BAUD = 115200;
-// Both sizes must be above the 128 byte hardware FIFO. The TX ring buffer is
-// what makes Serial1.write() return at once instead of waiting for the wire
-// (one telemetry frame is 28 bytes, a STATUSTEXT up to 66). The RX side holds
-// ~0.5 s of the Pi's traffic, far more than loop() ever leaves unread.
-const size_t PI_UART_TX_BUFFER_BYTES = 512;
-const size_t PI_UART_RX_BUFFER_BYTES = 512;
+//MAVLink link to the Pi: native USB CDC on the devkit's "USB" port
+// (the S3's USB-Serial/JTAG controller; ARDUINO_USB_MODE=1 and
+// ARDUINO_USB_CDC_ON_BOOT=1 in platformio.ini make it `Serial`). Carries
+// MAVLink ONLY - see debug_serial.h. Helpers in include/mav_serial.h.
+#define MAV_SERIAL Serial
+// USB CDC ignores the baud rate; kept equal to MCU_BAUDRATE in mcu_bridge.py
+const unsigned long MAV_SERIAL_BAUD = 115200;
+// Ring buffers (the core defaults to 256 each). TX: a telemetry frame is 28
+// bytes every 50 ms and a STATUSTEXT up to 66, so 1 KB never fills while the
+// Pi reads; when it does fill (port closed, Pi busy) whole frames are dropped,
+// never half frames and never by waiting. RX: about a second of the Pi's
+// traffic, far more than loop() ever leaves unread.
+const size_t MAV_SERIAL_TX_BUFFER_BYTES = 1024;
+const size_t MAV_SERIAL_RX_BUFFER_BYTES = 1024;
+// 0 = the core's USB write() never waits for the host (its default is 100 ms,
+// the whole drive-command timeout)
+const uint32_t MAV_SERIAL_TX_TIMEOUT_MS = 0;
 
 #endif

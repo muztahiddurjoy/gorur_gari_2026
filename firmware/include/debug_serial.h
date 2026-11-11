@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+#include "config.h"  // MAV_SERIAL
+
 // Human readable debug output, OFF by default.
 //
 // The firmware has one USB port and it carries binary MAVLink to the Pi. Any
@@ -19,24 +21,11 @@
 #define DEBUG_PRINTS 0
 #endif
 
-#define DEBUG_SERIAL Serial
+// the only USB port there is - the MAVLink link
+#define DEBUG_SERIAL MAV_SERIAL
 
 #define DBG_PRINT(x)    do { if (DEBUG_PRINTS) DEBUG_SERIAL.print(x); } while (0)
 #define DBG_PRINTLN(x)  do { if (DEBUG_PRINTS) DEBUG_SERIAL.println(x); } while (0)
 #define DBG_PRINTF(...) do { if (DEBUG_PRINTS) DEBUG_SERIAL.printf(__VA_ARGS__); } while (0)
-
-const unsigned long DEBUG_SERIAL_BAUD = 115200;  // ignored by native USB
-
-// With a host enumerated on the USB port but nothing reading it, the core's
-// USB serial write() waits up to 100 ms per call for buffer space - the whole
-// drive-command timeout. 0 = drop instead of waiting.
-const uint32_t DEBUG_SERIAL_TX_TIMEOUT_MS = 0;
-
-inline void debugSerialBegin() {
-    DEBUG_SERIAL.begin(DEBUG_SERIAL_BAUD);
-#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
-    DEBUG_SERIAL.setTxTimeoutMs(DEBUG_SERIAL_TX_TIMEOUT_MS);
-#endif
-}
 
 #endif // DEBUG_SERIAL_H
