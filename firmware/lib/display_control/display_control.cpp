@@ -3,13 +3,13 @@
 #include "pins.h"
 #include "debug_serial.h"
 
-DisplayController::DisplayController(): oled(nullptr), ready(false){}
+DisplayController::DisplayController(): oled(nullptr), oledClockHz(0), ready(false){}
 
 DisplayController::~DisplayController() {
     delete oled;
 }
 
-bool DisplayController::begin() {
+bool DisplayController::begin(uint32_t i2cClockHz) {
     ready = false;
 
     // Adafruit_SSD1306::begin() reports success as long as it can allocate its
@@ -22,12 +22,22 @@ bool DisplayController::begin() {
 
     // built once and reused across retries: begin() re-sends the whole init
     // sequence and only mallocs the frame buffer if it does not have one yet,
-    // so re-running it on the same object is both safe and leak free
-    if (!oled) {
-        oled = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+    // so re-running it on the same object is both safe and leak free. Only a
+    // change of bus clock rebuilds it, since the driver bakes the clock in.
+    if (oled && oledClockHz != i2cClockHz) {
+        delete oled;
+        oled = nullptr;
     }
-    // Wire is already up with our own SDA/SCL pins, so tell the library not to
-    // call Wire.begin() itself with the core's default pins
+    if (!oled) {
+        // the same clock during and after each frame: the default would drop
+        // the shared bus to 100 kHz after every frame, under the gyro's feet
+        oled = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET,
+                                    i2cClockHz, i2cClockHz);
+        oledClockHz = i2cClockHz;
+    }
+    // Wire is already up on our own SDA/SCL pins (Wire.setPins + Wire.begin
+    // in setup()), so periphBegin=false: the library must not call
+    // Wire.begin() itself
     if (!oled->begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS, false, false)) {
         DEBUG_SERIAL.println("SSD1306 allocation failed");
         return false;

@@ -64,31 +64,56 @@ const float MOTOR_SLEW_PERCENT_PER_S = 500.0f;
 const int ENCODER_COUNTS_PER_REV = 1320;   // 11 ppr * 4 edges * 30:1 gearbox, retune for your motor
 const int ENCODER_SAMPLE_INTERVAL_MS = 50;
 
-//I2C addresses
-const uint8_t OLED_ADDRESS = 0x3C; // I2C address for the OLED display
-const uint8_t BNO055_ADDRESS = 0x29; // I2C address for the BNO055 IMU
+//I2C bus (SDA GPIO8 / SCL GPIO9), shared by the BOTGyro and the OLED
+// 400 kHz keeps a full OLED frame to ~25 ms of bus time, during which the gyro
+// cannot be read. Both devices are clocked from this one value (the OLED
+// driver re-sets the bus clock around every frame, so it is given the same
+// number).
+const uint32_t I2C_CLOCK_HZ = 400000;
 
-// I2C device bring up and recovery.
-// Nothing on the bus is initialised once and then trusted forever. On a cold
-// power up the esp32 reaches the I2C task a few hundred ms in, while the BNO055
-// needs 650 ms of power on reset before it answers at all - and Adafruit's
-// begin() gives up on the very first NACK. A single failed attempt used to mean
-// a dark screen and a dead IMU until the next reboot, even though both devices
-// were perfectly healthy a moment later (which is why an I2C scanner, scanning
-// in a loop, always finds them). The same applies mid run: a brownout when the
-// motor kicks in can knock a device off the bus. So a device that is not up gets
-// retried, and a device that stops answering is re-initialised.
-// Adafruit_BNO055::begin() already spends up to 850 ms retrying detection on its
-// own, which covers the 650 ms power on reset by itself - this interval is what
-// governs a longer absence (unplugged sensor, brownout). Retrying much faster
-// than this just parks the task inside a failing begin() and starves the screen.
+//I2C addresses
+const uint8_t OLED_ADDRESS = 0x3C;  // SSD1306
+const uint8_t IMU_ADDRESS = 0x6A;   // BOTGyro with SA0 low; 0x6B (BOTGYRO_ADDR_HIGH) if SA0 is tied high
+
+//IMU (BOTGyro: ASM330LHH gyro + accelerometer, no magnetometer, lib/heading)
+// 416 Hz: fine time steps for the yaw integration, and calibration is
+// IMU_CALIBRATION_SAMPLES / 416 = ~1.5 s of standing still.
+const float IMU_ODR_HZ = 416.0f;
+// a small car spins well under 1000 deg/s even in a crash; 2000 would halve
+// the resolution for nothing, 500 could clip in one
+const int32_t IMU_GYRO_FULL_SCALE_DPS = 1000;
+const int32_t IMU_ACCEL_FULL_SCALE_G = 4;     // bumps and kerbs stay unclipped for pitch/roll
+const uint16_t IMU_CALIBRATION_SAMPLES = 600;
+const float IMU_ATTITUDE_ALPHA = 0.98f;       // pitch/roll complementary filter, weight on the gyro
+// The ROS nodes expect the heading to grow CLOCKWISE seen from above (the
+// BNO055 compass convention; heading_clockwise: true in bot_config.yaml). A
+// right-handed gyro mounted with its Z axis UP reads counter-clockwise as
+// positive, hence -1. If the board is mounted upside down, use +1. Check it on
+// the bench: turn the car clockwise by hand and the OLED yaw must go UP.
+const float IMU_YAW_SIGN = -1.0f;
+// Samples further apart than this (a stalled bus, a fault) are not
+// integrated across: the rate in between is unknown. An OLED frame stalls the
+// gyro for ~25 ms at 400 kHz, ~100 ms at 100 kHz, so this sits just above.
+const float IMU_MAX_INTEGRATION_GAP_S = 0.12f;
+// begin() retry while the sensor is missing. BOTGyro re-initialises a sensor
+// that faults mid-run by itself, once a second.
+const uint32_t IMU_BEGIN_RETRY_MS = 3000;
+
+// Device bring up and recovery on the bus.
+// Nothing on the bus is initialised once and then trusted forever: on a cold
+// power up a device may still be in its own power on reset when the I2C task
+// first tries it, and a brownout when the motor kicks in can knock one off the
+// bus mid run. So a device that is not up gets retried, and one that stops
+// answering is re-initialised. These two govern the OLED; the IMU retries on
+// IMU_BEGIN_RETRY_MS and its library's own fault recovery.
 const unsigned long I2C_INIT_RETRY_INTERVAL_MS = 2000;
 const unsigned long I2C_HEALTH_CHECK_INTERVAL_MS = 1000;
 
-// a full 128x64 frame is ~25 ms of bus time, so 50 ms already spends half the
-// bus on the screen. lower this before raising it.
-const unsigned long DISPLAY_REFRESH_INTERVAL_MS = 50;
-const unsigned long IMU_SAMPLE_INTERVAL_MS = 10;
+// A full 128x64 frame is ~25 ms of bus time at 400 kHz, and the gyro cannot be
+// read while it goes out, so the yaw integration bridges each frame on two
+// samples. 200 ms (5 Hz) keeps that to ~12 % of the time; the screen is for
+// people, it does not need to be faster.
+const unsigned long DISPLAY_REFRESH_INTERVAL_MS = 200;
 
 //sonar
 // No sonars are fitted on this hardware revision, but the mcu_to_ros2 MAVLink

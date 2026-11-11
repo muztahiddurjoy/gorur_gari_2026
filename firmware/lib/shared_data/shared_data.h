@@ -35,7 +35,20 @@ struct SharedData {
     unsigned long runTimeRxMs = 0;  // millis() of that frame, for the stale check
 
     // ---- written by the I2C task (core 0), read by loop() (core 1) ----
-    float heading = 0.0f;           // yaw angle in degrees
+    // Yaw in degrees, (-180, 180], clockwise positive. RELATIVE to where the
+    // car pointed at boot, and it drifts slowly: integrated from the gyro,
+    // there is no magnetometer (see lib/heading/yaw_integrator.h).
+    float heading = 0.0f;
+    float pitchDeg = 0.0f;
+    float rollDeg = 0.0f;
+    float yawRateDps = 0.0f;        // clockwise positive, like heading
+    float accelXg = 0.0f;
+    float accelYg = 0.0f;
+    float accelZg = 0.0f;
+    uint8_t imuStatus = 0;          // ImuStatus (lib/heading), 0 = not found yet
+    bool imuEverCalibrated = false; // latched once the first calibration succeeds
+    uint16_t imuSampleRateHz = 0;
+    uint32_t i2cClockHz = 0;        // what the shared bus is clocked at now
 };
 
 extern SharedData shared;

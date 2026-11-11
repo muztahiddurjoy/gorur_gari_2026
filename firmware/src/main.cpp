@@ -92,68 +92,126 @@ static void enforceDriveTimeout(uint32_t nowMs) {
 }
 
 
+// --- the I2C side: IMU + OLED, on core 0 -------------------------------------
+
+static HeadingConfig imuConfig() {
+    HeadingConfig c;
+    c.i2cAddress = IMU_ADDRESS;
+    c.i2cClockHz = I2C_CLOCK_HZ;
+    c.odrHz = IMU_ODR_HZ;
+    c.gyroFullScaleDps = IMU_GYRO_FULL_SCALE_DPS;
+    c.accelFullScaleG = IMU_ACCEL_FULL_SCALE_G;
+    c.calibrationSamples = IMU_CALIBRATION_SAMPLES;
+    c.attitudeAlpha = IMU_ATTITUDE_ALPHA;
+    c.yawSign = IMU_YAW_SIGN;
+    c.maxIntegrationGapS = IMU_MAX_INTEGRATION_GAP_S;
+    c.beginRetryMs = IMU_BEGIN_RETRY_MS;
+    return c;
+}
+
+static const char *driveStateLine(uint8_t state) {
+    switch (state) {
+        case DRIVE_ACTIVE:  return "Cmd: OK";
+        case DRIVE_STOPPED: return "Cmd: STOP (no cmd)";
+        default:            return "Cmd: waiting";
+    }
+}
+
+// The two IMU lines of the OLED
+static void imuLines(const SharedData &d, char *line1, char *line2, size_t len) {
+    switch ((ImuStatus)d.imuStatus) {
+        case ImuStatus::Calibrating:
+            snprintf(line1, len, "IMU calibrating,");
+            snprintf(line2, len, "keep still!");
+            break;
+        case ImuStatus::Ready:
+            snprintf(line1, len, "IMU OK %u Hz", (unsigned)d.imuSampleRateHz);
+            snprintf(line2, len, "I2C %lu kHz", (unsigned long)(d.i2cClockHz / 1000));
+            break;
+        case ImuStatus::Uncalibrated:
+            snprintf(line1, len, "IMU NOT CALIBRATED");
+            snprintf(line2, len, "yaw held");
+            break;
+        case ImuStatus::Fault:
+            snprintf(line1, len, "IMU FAULT");
+            snprintf(line2, len, "retrying...");
+            break;
+        case ImuStatus::NotFound:
+        default:
+            snprintf(line1, len, "IMU not found 0x%02X", IMU_ADDRESS);
+            snprintf(line2, len, "retrying...");
+            break;
+    }
+}
+
 // Global I2C task handle (optional)
 TaskHandle_t i2cTaskHandle = nullptr;
 
+// Owns the I2C bus: nothing on core 1 touches Wire. The IMU is serviced on
+// EVERY pass (gyro.update() inside Heading::service), the OLED is redrawn
+// every DISPLAY_REFRESH_INTERVAL_MS. Anything slow on the bus - an OLED frame,
+// BOTGyro's 120 ms begin()/re-init - only ever stalls this task.
 void i2cTask(void *pvParameters) {
-    // Create display and IMU objects locally – they own the I2C bus
     DisplayController display;
-    Heading heading;
+    Heading heading(Wire, imuConfig());
 
     TickType_t lastDisplayUpdate = xTaskGetTickCount();
     const TickType_t displayInterval = pdMS_TO_TICKS(DISPLAY_REFRESH_INTERVAL_MS);
-    const TickType_t imuInterval = pdMS_TO_TICKS(IMU_SAMPLE_INTERVAL_MS);
     const TickType_t initRetryInterval = pdMS_TO_TICKS(I2C_INIT_RETRY_INTERVAL_MS);
     const TickType_t healthCheckInterval = pdMS_TO_TICKS(I2C_HEALTH_CHECK_INTERVAL_MS);
 
-    TickType_t lastIMUUpdate = xTaskGetTickCount();
     TickType_t lastHealthCheck = xTaskGetTickCount();
-    // one interval back, so both devices get their first attempt straight away
+    // one interval back, so the display gets its first attempt straight away
     TickType_t lastDisplayInit = xTaskGetTickCount() - initRetryInterval;
-    TickType_t lastIMUInit = lastDisplayInit;
+
+    // from loop(): may the gyro (re)calibrate, i.e. is the car meant to be still
+    bool calibrationAllowed = true;
+    uint32_t busClockHz = I2C_CLOCK_HZ;
 
     while (true) {
         TickType_t now = xTaskGetTickCount();
 
-        // --- Bring up whatever is not up yet. On a cold boot the panel and the
-        // BNO055 may still be in their own power on reset, so a failed attempt
-        // means "not yet", never "give up" ---
+        // --- IMU, every pass: begin() retries, BOTGyro's state machine
+        // (sampling, non-blocking calibration, fault recovery), yaw ---
+        heading.service(calibrationAllowed);
+
+        // --- swap results with loop(). Waiting for the lock is fine on this
+        // core; loop() never holds it for more than a few copies ---
+        if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
+            shared.heading = heading.yawDeg();
+            shared.pitchDeg = heading.pitchDeg();
+            shared.rollDeg = heading.rollDeg();
+            shared.yawRateDps = heading.yawRateDps();
+            shared.accelXg = heading.accelXg();
+            shared.accelYg = heading.accelYg();
+            shared.accelZg = heading.accelZg();
+            shared.imuStatus = (uint8_t)heading.status();
+            shared.imuEverCalibrated = heading.everCalibrated();
+            shared.imuSampleRateHz = heading.sampleRateHz();
+            shared.i2cClockHz = busClockHz;
+            calibrationAllowed = (shared.driveState != DRIVE_ACTIVE);
+            xSemaphoreGive(sharedMutex);
+        }
+
+        // --- Bring the OLED up if it is not up yet. On a cold boot the panel
+        // may still be in its own power on reset, so a failed attempt means
+        // "not yet", never "give up" ---
         if (!display.isReady() && now - lastDisplayInit >= initRetryInterval) {
             lastDisplayInit = now;
-            if (display.begin()) {
+            if (display.begin(busClockHz)) {
                 DEBUG_SERIAL.println("Display ready");
             }
         }
-        if (!heading.isReady() && now - lastIMUInit >= initRetryInterval) {
-            lastIMUInit = now;
-            heading.begin();  // logs its own outcome
-        }
 
-        // --- Watch for a device dropping off the bus mid run (brownout when the
-        // motor kicks in, a loose jumper). Marking it lost hands it back to the
-        // retry path above, so it recovers without a reboot ---
+        // --- Watch for the panel dropping off the bus mid run (brownout when
+        // the motor kicks in, a loose jumper). Marking it lost hands it back
+        // to the retry path above, so it recovers without a reboot. (The gyro
+        // has its own watchdog inside BOTGyro.) ---
         if (now - lastHealthCheck >= healthCheckInterval) {
             lastHealthCheck = now;
             if (display.isReady() && !display.isResponding()) {
                 DEBUG_SERIAL.println("Display stopped responding, re-initialising");
                 display.markLost();
-            }
-            if (heading.isReady() && !heading.isResponding()) {
-                DEBUG_SERIAL.println("BNO055 stopped responding, re-initialising");
-                heading.markLost();
-            }
-        }
-
-        // --- Update IMU (every IMU_SAMPLE_INTERVAL_MS) ---
-        if (heading.isReady() && now - lastIMUUpdate >= imuInterval) {
-            lastIMUUpdate = now;
-            heading.update();
-            float yaw = heading.getHeading();
-
-            // Write heading to shared struct
-            if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
-                shared.heading = yaw;
-                xSemaphoreGive(sharedMutex);
             }
         }
 
@@ -163,8 +221,7 @@ void i2cTask(void *pvParameters) {
 
             // Copy the numbers out under the lock and format them after it is
             // released: loop() only ever tries the lock, so holding it while
-            // building Strings would make it skip its exchange for nothing.
-            // Waiting here is fine, this is core 0.
+            // building text would make it skip its exchange for nothing.
             SharedData snap;
             bool runTimeStale = false;
             if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
@@ -177,13 +234,25 @@ void i2cTask(void *pvParameters) {
                 xSemaphoreGive(sharedMutex);
             }
 
-            // Draw everything
+            // 8 lines of 21 characters (6x8 px font)
+            const size_t LEN = 22;
+            char line[LEN];
+            char imu1[LEN], imu2[LEN];
+            imuLines(snap, imu1, imu2, LEN);
+
             display.clear();
-            display.displayText("Motor: " + String(snap.motorPercent) + "%", 0, 0, 1);
-            display.displayText("Encoder: " + String(snap.encoderCount), 0, 10, 1);
-            display.displayText("Steering: " + String(snap.steeringAngle), 0, 20, 1);
-            display.displayText("Yaw: " + String(snap.heading), 0, 30, 1);
-            display.displayText(runTimerLine(snap.runTimeMs, snap.runTimeState, runTimeStale), 0, 50, 1);
+            snprintf(line, LEN, "Mot %+4d%% Str %3u", snap.motorPercent, (unsigned)snap.steeringAngle);
+            display.displayText(line, 0, 0, 1);
+            display.displayText(driveStateLine(snap.driveState), 0, 8, 1);
+            snprintf(line, LEN, "Enc %ld", snap.encoderCount);
+            display.displayText(line, 0, 16, 1);
+            snprintf(line, LEN, "Yaw %+7.1f", snap.heading);
+            display.displayText(line, 0, 24, 1);
+            snprintf(line, LEN, "P %+6.1f R %+6.1f", snap.pitchDeg, snap.rollDeg);
+            display.displayText(line, 0, 32, 1);
+            display.displayText(imu1, 0, 40, 1);
+            display.displayText(imu2, 0, 48, 1);
+            display.displayText(runTimerLine(snap.runTimeMs, snap.runTimeState, runTimeStale), 0, 56, 1);
             display.updateScreen();    // single I2C transfer
         }
 
@@ -225,8 +294,14 @@ void setup(){
     // nothing is connected yet.
     rgb_led.begin(RGB_STATUS_LED_BRIGHTNESS, RGB_STATUS_FLASH_PERIOD_MS,
                   STEERING_CENTER_ANGLE, RGB_STEERING_CENTER_TOLERANCE_DEG);
-    Wire.begin(I2C_SDA, I2C_SCL);
-    
+    // The I2C bus for the BOTGyro and the OLED. Pins first, then begin(), both
+    // before the I2C task (and so before gyro.begin(), whose own Wire.begin()
+    // is then a no-op on the right pins). The OLED driver is told not to call
+    // Wire.begin() at all (periphBegin=false).
+    Wire.setPins(I2C_SDA, I2C_SCL);
+    Wire.begin();
+    Wire.setClock(I2C_CLOCK_HZ);
+
     sharedMutex = xSemaphoreCreateMutex();
 
     xTaskCreatePinnedToCore(i2cTask,"I2C Task", 8192, NULL, 1, &i2cTaskHandle, 0);
