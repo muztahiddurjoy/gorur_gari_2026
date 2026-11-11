@@ -1,78 +1,126 @@
 #include "motor_control.h"
 
-MotorController::MotorController(int pwm_pin, int in_a_pin, int in_b_pin, int standby_pin){
-    pwmPin = pwm_pin;
-    inAPin = in_a_pin;
-    inBPin = in_b_pin;
-    standbyPin = standby_pin;
-    motorSpeed = 0;
-    maxSpeed = 255; // replaced by begin() once the resolution is known
+MotorController::MotorController(uint8_t rpwm_pin, uint8_t lpwm_pin, uint8_t enable_pin)
+    : rpwmPin(rpwm_pin), lpwmPin(lpwm_pin), enablePin(enable_pin),
+      maxDuty(255), slewPerSecond(0.0f), targetFraction(0.0f),
+      outputFraction(0.0f), coasting(false), lastUpdateUs(0),
+      rpwmDuty(0), lpwmDuty(0), enableLevel(-1) {}
+
+void MotorController::begin(uint32_t pwmFrequencyHz, uint8_t pwmResolutionBits,
+                            float slewPercentPerSecond) {
+    // bridge off while the PWM pins are being attached (the pull-downs hold
+    // RPWM/LPWM low until then)
+    pinMode(enablePin, OUTPUT);
+    writeEnable(LOW);
+
+    maxDuty = (1UL << pwmResolutionBits) - 1;
+    slewPerSecond = slewPercentPerSecond > 0.0f ? slewPercentPerSecond / 100.0f : 0.0f;
+
+    // same frequency, so ESP32PWM puts both on one LEDC timer
+    rpwm.attachPin(rpwmPin, pwmFrequencyHz, pwmResolutionBits);
+    lpwm.attachPin(lpwmPin, pwmFrequencyHz, pwmResolutionBits);
+    rpwm.write(0);
+    lpwm.write(0);
+    rpwmDuty = 0;
+    lpwmDuty = 0;
+
+    lastUpdateUs = micros();
+    brake();  // stopped, and held stopped, until something asks otherwise
 }
 
-void MotorController::begin(int frequency, int resolution){
-    pinMode(inAPin, OUTPUT);
-    pinMode(inBPin, OUTPUT);
-    pinMode(standbyPin, OUTPUT);
-
-    maxSpeed = (1 << resolution) - 1;
-    throttle.attachPin(pwmPin, frequency, resolution);
-
-    digitalWrite(standbyPin, HIGH); // driver awake
-    coast();
+void MotorController::setTarget(float fraction) {
+    if (isnan(fraction)) fraction = 0.0f;
+    targetFraction = constrain(fraction, -1.0f, 1.0f);
 }
 
-// writes the direction pins and the duty in one place so every
-// motor state goes through the same path.
-void MotorController::hold(int inA, int inB, int duty){
-    digitalWrite(inAPin, inA);
-    digitalWrite(inBPin, inB);
-    throttle.write(duty);
+void MotorController::update() {
+    unsigned long now = micros();
+    float dt = (now - lastUpdateUs) * 1e-6f;  // unsigned, so rollover safe
+    lastUpdateUs = now;
+
+    float next = targetFraction;
+    if (slewPerSecond > 0.0f) {
+        float maxStep = slewPerSecond * dt;
+        float delta = targetFraction - outputFraction;
+        if (delta > maxStep) delta = maxStep;
+        else if (delta < -maxStep) delta = -maxStep;
+        next = outputFraction + delta;
+    }
+    // A change of direction never jumps across zero, even with the ramp off:
+    // land on 0 (brake) for this update, the other side starts on the next.
+    if ((outputFraction > 0.0f && next < 0.0f) ||
+        (outputFraction < 0.0f && next > 0.0f)) {
+        next = 0.0f;
+    }
+
+    outputFraction = next;
+    apply(outputFraction);
 }
 
-void MotorController::to(int speed){
-    int mappedSpeed = map(speed, -maxSpeed, maxSpeed, -maxSpeed, maxSpeed);
-    if(speed > maxSpeed) speed = maxSpeed;
-    if(speed < -maxSpeed) speed = -maxSpeed;
-    motorSpeed = mappedSpeed;
-
-    if(speed > 0) hold(HIGH, LOW, mappedSpeed);
-    else if(speed < 0) hold(LOW, HIGH, -mappedSpeed);
-    else brake();
+void MotorController::brake() {
+    targetFraction = 0.0f;
+    outputFraction = 0.0f;
+    coasting = false;
+    apply(0.0f);
 }
 
-void MotorController::forward(int speed){
-    int mappedSpeed = map(speed, 0, maxSpeed, 0, maxSpeed);
-    to(abs(mappedSpeed));
+void MotorController::coast() {
+    targetFraction = 0.0f;
+    outputFraction = 0.0f;
+    coasting = true;
+    apply(0.0f);
 }
 
-void MotorController::reverse(int speed){
-    int mappedSpeed = map(speed, 0, maxSpeed, 0, maxSpeed);
-    to(-abs(mappedSpeed));
+int MotorController::outputPercent() const {
+    return (int)lroundf(outputFraction * 100.0f);
 }
 
-// both direction pins high shorts the motor windings and stops it dead.
-void MotorController::brake(){
-    motorSpeed = 0;
-    hold(HIGH, HIGH, 0);
-}
-
-// both direction pins low lets the motor spin down on its own.
-void MotorController::coast(){
-    motorSpeed = 0;
-    hold(LOW, LOW, 0);
-}
-
-void MotorController::standby(bool sleeping){
-    if(sleeping) coast();
-    digitalWrite(standbyPin, sleeping ? LOW : HIGH);
-}
-
-int MotorController::speed(){
-    return motorSpeed;
-}
-
-int MotorController::direction(){
-    if(motorSpeed > 0) return 1;
-    if(motorSpeed < 0) return -1;
+int MotorController::direction() const {
+    if (outputFraction > 0.0f) return 1;
+    if (outputFraction < 0.0f) return -1;
     return 0;
+}
+
+// The one place the bridge pins change. The order inside each branch is the
+// point: the side that must be off goes to 0 before EN and the driving side
+// are touched, so RPWM and LPWM are never high together.
+void MotorController::apply(float fraction) {
+    uint32_t duty = (uint32_t)lroundf(fabsf(fraction) * (float)maxDuty);
+    if (duty > maxDuty) duty = maxDuty;
+
+    if (duty == 0) {
+        writeRpwm(0);
+        writeLpwm(0);
+        writeEnable(coasting ? LOW : HIGH);
+        return;
+    }
+
+    coasting = false;
+    if (fraction > 0.0f) {
+        writeLpwm(0);
+        writeEnable(HIGH);
+        writeRpwm(duty);
+    } else {
+        writeRpwm(0);
+        writeEnable(HIGH);
+        writeLpwm(duty);
+    }
+}
+
+void MotorController::writeRpwm(uint32_t duty) {
+    if (duty == rpwmDuty) return;
+    rpwm.write(duty);
+    rpwmDuty = duty;
+}
+
+void MotorController::writeLpwm(uint32_t duty) {
+    if (duty == lpwmDuty) return;
+    lpwm.write(duty);
+    lpwmDuty = duty;
+}
+
+void MotorController::writeEnable(int level) {
+    if (level == enableLevel) return;
+    digitalWrite(enablePin, level);
+    enableLevel = level;
 }

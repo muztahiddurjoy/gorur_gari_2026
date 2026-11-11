@@ -5,13 +5,29 @@
 // the drive limits (steering swing/clamps, throttle scaling) are enforced on
 // the ROS2 side only, see the mcu_bridge section of ros2_ws/config/bot_config.yaml.
 
+//PWM timers
+// The ESP32-S3 LEDC peripheral has 4 timers; setup() hands all of them to
+// ESP32PWM (allocateTimer(0..3)) before the motor or the servo attaches.
+const int LEDC_TIMER_COUNT = 4;
+
 //servo
 const int SERVO_FREQUENCY_HZ = 50;
 const int STEERING_CENTER_ANGLE = 90; // boot position, held until the first command
 
-//motor
-const int MOTOR_PWM_FREQUENCY_HZ = 20000; // above hearing range so the motor stays quiet
-const int MOTOR_PWM_RESOLUTION_BITS = 8;  // duty is 0..255
+//motor (BTS7960, see lib/motor_control)
+const uint32_t MOTOR_PWM_FREQUENCY_HZ = 20000; // above hearing range so the motor stays quiet; BTS7960 max is 25 kHz
+const uint8_t MOTOR_PWM_RESOLUTION_BITS = 8;   // duty is 0..255, 255 = fully on
+// The throttle field on the wire is an int8 (mcu_bridge clamps it to
+// -128..127). +/-MOTOR_COMMAND_MAX is full duty in that direction, so the whole
+// command range now reaches the whole duty range (-128 counts as -127). The
+// old TB6612 code wrote the raw command into an 8-bit duty, so a full 127
+// only ever reached ~50 %: the same /cmd_vel now drives about twice as hard.
+const int MOTOR_COMMAND_MAX = 127;
+// How fast the motor output may change, in % of full duty per second. 500 %/s
+// is 0 -> full in 200 ms, and a full forward -> full reverse swing takes 400 ms,
+// braking through zero on the way. The safety stop (CMD_TIMEOUT_MS) ignores
+// this and brakes at once. <= 0 turns the ramp off.
+const float MOTOR_SLEW_PERCENT_PER_S = 500.0f;
 
 //encoder
 const int ENCODER_COUNTS_PER_REV = 1320;   // 11 ppr * 4 edges * 30:1 gearbox, retune for your motor

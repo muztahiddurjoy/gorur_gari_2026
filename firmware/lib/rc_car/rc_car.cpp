@@ -141,6 +141,7 @@ void RcCar::update(){
     if(!silent) stopped = false;
 
     apply();
+    motor.update(); // advances the throttle ramp, see MotorController
 
     if(now - lastTelemetryMs >= RC_TELEMETRY_INTERVAL_MS){
         lastTelemetryMs = now;
@@ -159,7 +160,7 @@ void RcCar::apply(){
     if(wantSteer == appliedSteer && wantThrottle == appliedThrottle) return;
 
     steer.to(STEERING_CENTER_ANGLE + (int)lroundf(wantSteer * STEERING_MAX_ANGLE));
-    motor.to((int)lroundf(wantThrottle * MOTOR_MAX_SPEED));
+    motor.setTarget(wantThrottle);  // -1..1, ramped by MotorController::update()
 
     appliedSteer = wantSteer;
     appliedThrottle = wantThrottle;

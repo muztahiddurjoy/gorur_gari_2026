@@ -6,11 +6,7 @@ SteeringController::SteeringController(int pin){
 }
 
 void SteeringController::begin(int frequency){
-    ESP32PWM::allocateTimer(0);
-    ESP32PWM::allocateTimer(1);
-    ESP32PWM::allocateTimer(2);
-    ESP32PWM::allocateTimer(3);
-
+    // ESP32PWM::allocateTimer() is called once, at the top of setup()
     steer.setPeriodHertz(frequency);
     steer.attach(servoPin, 500, 2400);
 }

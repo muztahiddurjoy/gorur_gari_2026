@@ -6,11 +6,11 @@
 
 //servo pins
 const uint8_t STEERING_SERVO_PIN = 10;
-//motor pins
-const uint8_t PWM_THROTTLE_PIN = 4;
-const uint8_t IN_A = 5;
-const uint8_t IN_B = 6;
-const uint8_t STANDBY_PIN = 7;
+//motor pins: BTS7960 (IBT-2), each with a 10k pull-down on the board so the
+//bridge stays off from power-up until MotorController::begin()
+const uint8_t MOTOR_RPWM_PIN = 5;  // forward PWM
+const uint8_t MOTOR_LPWM_PIN = 6;  // reverse PWM
+const uint8_t MOTOR_EN_PIN = 7;    // R_EN and L_EN, tied together
 //encoder pin
 // A and B are deliberately the reverse of the silkscreen: wired the other way
 // the quadrature decoder counts DOWN when the car drives forward, which flips

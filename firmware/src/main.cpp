@@ -23,7 +23,7 @@
 
 
 SteeringController steer(STEERING_SERVO_PIN);
-MotorController motor(PWM_THROTTLE_PIN, IN_A, IN_B, STANDBY_PIN);
+MotorController motor(MOTOR_RPWM_PIN, MOTOR_LPWM_PIN, MOTOR_EN_PIN);
 EncoderReader encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_COUNTS_PER_REV);
 ButtonHandler button(BUTTON_PIN);
 StatusLed status_led(STATUS_LED_PIN);
@@ -148,6 +148,18 @@ void i2cTask(void *pvParameters) {
 
 
 void setup(){
+    // First thing, before anything attaches a PWM pin: hand all four LEDC
+    // timers to ESP32PWM. It then gives each frequency its own timer, so the
+    // two 20 kHz motor channels share one and the 50 Hz servo can never be
+    // put on it (ESP32Servo 3.x actually drives the servo from MCPWM on the
+    // S3, which keeps the two apart regardless).
+    for (int timer = 0; timer < LEDC_TIMER_COUNT; timer++) {
+        ESP32PWM::allocateTimer(timer);
+    }
+    // the bridge comes up braked and stays braked until a valid drive command
+    motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS,
+                MOTOR_SLEW_PERCENT_PER_S);
+
     debugSerialBegin();          // native USB, human readable logs only
     // MAVLink to/from the Pi over its GPIO UART. Buffer sizes have to be set
     // before begin(), the core refuses to resize a running port.
@@ -156,7 +168,6 @@ void setup(){
     PI_SERIAL.begin(PI_UART_BAUD, SERIAL_8N1, PI_UART_RX_PIN, PI_UART_TX_PIN);
     steer.begin(SERVO_FREQUENCY_HZ);
     steer.to(STEERING_CENTER_ANGLE);
-    motor.begin(MOTOR_PWM_FREQUENCY_HZ, MOTOR_PWM_RESOLUTION_BITS);
     encoder.begin(ENCODER_SAMPLE_INTERVAL_MS);
     button.begin();
     // stays off until the ROS2 bridge announces itself over serial, see the
@@ -180,7 +191,7 @@ void loop(){
 
      float headingDeg = 0.0f;
      if (xSemaphoreTake(sharedMutex, portMAX_DELAY) == pdTRUE) {
-        shared.speedText = "Speed: " + String(motor.speed());
+        shared.speedText = "Motor: " + String(motor.outputPercent()) + "%";
         shared.encoderText = "Encoder: " + String(encoder.count());
         shared.steeringText = "Steering: " + String(steer.getAngle());
         // written by the I2C task on the other core, so only read it in here
@@ -208,7 +219,7 @@ void loop(){
     // latching what the last serial frame asked for, so it shows what the motor
     // and servo are actually holding. update() only touches the pixel when the
     // colour changes, so this is free on the quiet frames ---
-    rgb_led.setDrive(motor.speed(), steer.getAngle());
+    rgb_led.setDrive(motor.outputPercent(), steer.getAngle());
     rgb_led.update();
 
     // --- Send encoder/steering/heading/button telemetry to ROS2 ---
@@ -258,7 +269,9 @@ void loop(){
         if(mavlink_parse_char(MAVLINK_COMM_0, c, &received_msg, &status)){
             if(received_msg.msgid == MAVLINK_MSG_ID_gorur_gari_ros2_to_mcu_msg){
                 int throttle = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_throttle(&received_msg);
-                motor.to(throttle);
+                // full command range -> full duty range, see MOTOR_COMMAND_MAX
+                motor.setTarget((float)constrain(throttle, -MOTOR_COMMAND_MAX, MOTOR_COMMAND_MAX)
+                                / (float)MOTOR_COMMAND_MAX);
                 uint8_t steering = mavlink_msg_gorur_gari_ros2_to_mcu_msg_get_steering(&received_msg);
                 steer.to(steering);
             }
@@ -293,7 +306,10 @@ void loop(){
         }
     }
 
-
+    // --- Motor: advance the slew ramp towards whatever the last command asked
+    // for. Runs every pass, after the serial input, so a command that just
+    // landed is acted on in the same pass ---
+    motor.update();
 }
 
 
