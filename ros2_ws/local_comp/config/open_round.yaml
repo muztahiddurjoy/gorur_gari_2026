@@ -15,15 +15,18 @@ open_round:
     wall_safe_dist: 0.35        # Side wall emergency buffer (m)
 
     # ── Lap & Direction Configuration ──
+    start_delay_sec: 5.0        # Pre-run delay after button press (s)
     direction_latch_deg: 35.0   # turn threshold to lock CW or CCW (deg)
-    target_laps_yaw: 1060.0     # Yaw threshold for 3 full laps (12 corners x 90°)
+    target_laps_yaw: 1065.0     # Yaw threshold for 3 full laps (12 corners x 90° minus exit tol)
 
     # ── Speed & Throttle Profile (m/s) ──
     speed_straight: 1.20        # Straight speed (m/s)
     speed_turn: 1.00            # Cornering speed (m/s) - 
 
     # ── Steering & Control Tuning ──
-    max_steer_deg: 30.0         # Maximum steering lock in degrees (softened for wide arc)
+    max_steer_deg: 25.0         # Maximum steering lock in degrees (softened for wide arc)
     steer_alpha: 0.45           # Steering EMA filter factor (0.0 = frozen, 1.0 = original)
-    turn_entry_dist: 0.30       # Distance to front wall before triggering corner turn (m)
+    turn_entry_dist: 1.00       # Distance to front wall before triggering corner turn (m)
     center_kp: 1.8              # Proportional gain for straight-line corridor centering
+    heading_kp: 0.025           # Steer per degree of IMU heading error on straights
+    corner_exit_tol_deg: 15.0   # Exit corner mode within this many deg of 90° target

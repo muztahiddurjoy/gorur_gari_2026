@@ -5,17 +5,29 @@
 obstacle_round:
   ros__parameters:
     # ── Field of View (degrees) ──
-    fov_min_deg: -70.0
-    fov_max_deg: 70.0
+    fov_min_deg: -85.0          # Use full front hemisphere (IMU masks corridor cone)
+    fov_max_deg: 85.0
 
     # ── Disparity Extender & Robot Geometry (metres) ──
-    car_radius: 0.12            # 0.06m half-width + 0.06m safety margin
+    car_radius: 0.130           # 0.06m car half-width + 0.070m wheel-sweep clearance
     disparity_thresh: 0.12      # Minimum jump between adjacent rays to trigger disparity smearing
     max_range: 1.15             # Capped lookahead horizon (m)
     stop_dist: 0.40             # End-wall distance to trigger finish line stop
-    wall_safe_dist: 0.24        # Side-wall repulsion margin (m)
+    wall_safe_dist: 0.15        # Side-bumper clearance threshold (50..85 deg) before gentle pushback
+
+    # ── IMU Heading Fusion (/heading) ──
+    heading_fusion_enable: true # Master switch; falls back to LiDAR-only if /heading stops
+    heading_clockwise: true     # True if /heading increases turning CW (BOTGyro & sim_mcu)
+    heading_kp: 0.025           # Closed-loop P gain: steer per deg of heading error
+    heading_kd: 0.005           # Yaw-rate D damping: opposes physical spin rate (deg/s)
+    heading_deadband_deg: 1.5   # Soft deadband to suppress IMU jitter on straights
+    heading_stale_sec: 0.5      # Fallback to LiDAR-only if /heading is older than this
+    max_corridor_deg: 62.0      # Ignore gap rays pointing >62 deg off down-corridor axis
+    corridor_align_weight: 0.60 # Score preference toward straight-down-corridor alignment
+    finish_max_yaw_deg: 55.0    # Reject finish detection when rotated toward a side wall
+    steer_alpha: 0.65           # Steering EMA smoothing factor (1.0 = unsmoothed)
 
     # ── Drive Configuration (Ackermann dynamics) ──
-    speed_straight: 1.0         # Cruising speed (m/s)
-    speed_turn: 1.25            # Boosted cornering speed to overcome tyre scrub (m/s)
-    max_steer_deg: 40.0         # Maximum steering lock in degrees
+    speed_straight: 0.95        # Cruising speed (m/s)
+    speed_turn: 1.05            # Gentle turn throttle boost to overcome tyre scrub (m/s)
+    max_steer_deg: 40.0         # Maximum steering lock in degrees (used in LiDAR fallback)
