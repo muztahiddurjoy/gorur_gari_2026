@@ -74,7 +74,7 @@ GPIO0 is a strapping pin. The firmware only reads it, after boot, with the inter
 
 Priority order:
 
-1. The start countdown: after a start button press, three blinks, once a second.
+1. The start countdown: after a start button press, five blinks, once a second (5 s), then back to the link level as the car moves.
 2. IMU patterns: a fast 5 Hz blink while the gyro calibrates (keep the car still), or a short blip once a second if the IMU is missing, faulted or uncalibrated.
 3. The link level: lit once the ROS 2 bridge has announced itself, then whatever `mcu_bridge`'s `/status_led` topics ask for.
 

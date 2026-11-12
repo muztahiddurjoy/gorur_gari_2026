@@ -270,14 +270,14 @@ The open round node is a state machine with five states:
 stateDiagram-v2
     [*] --> STANDBY
     STANDBY --> ARMING: start button pressed
-    ARMING --> RUNNING: 3s countdown complete
+    ARMING --> RUNNING: 5s countdown complete
     RUNNING --> HOMING: 3 laps complete
     HOMING --> FINISHED: within 5cm of home
     FINISHED --> [*]
 ```
 
 - **STANDBY**: Everything is initialized and the LiDAR is spinning, but the node publishes zero velocity. A config flag (`enable_auto_steering`) defaults to *off*, so the car physically cannot move from a bare `ros2 run`. This is a safety habit we picked up after one runaway test.
-- **ARMING**: Pressing the start button begins a 3-second countdown while the plain status LED blinks once per second.
+- **ARMING**: Pressing the start button begins a 5-second countdown while the plain status LED blinks once per second; the LED goes solid as the car moves.
 - **RUNNING**: The car drives its laps steering toward open space (see the disparity extender below), with a **wall-hugging correction** layered on top. A proportional controller nudges the heading to hold about 35 cm from the outer wall on straights, limited to a 12-degree trim so it can never fight the main steering.
 - **HOMING**: Lap counting is done by `lap_counter`, which watches the IMU heading and counts 90-degree corners. Once three laps are in, the node computes the vector back to the start point and drives it, slowing down over the last 60 cm.
 - **FINISHED**: The car stops and keeps republishing zero velocity so the microcontroller can never latch onto a stale throttle command.
@@ -391,7 +391,7 @@ The important decision here: the drive motor draws directly from the battery thr
 - **USB camera**: front-facing with a slight downward tilt so pillars fill the frame at the distances that matter. Continuous auto-focus is turned off with `v4l2-ctl` before every run, because a lens that hunts for focus mid-corner produces exactly the blurry frame you least want.
 - **Wheel encoder**: on the motor shaft, feeding the ESP32's pulse counter.
 - **Sonars**: none on this hardware revision. The LiDAR made them redundant, and their old GPIOs now belong to the steering servo and the Pi UART. The telemetry message keeps its four sonar fields, which always report "no reading".
-- **Start button and status LEDs**: the entire competition interface. One button to start, and two lights to show what state the car is in. The start button is the devkit's own **BOOT button** (GPIO0): a strapping pin, so the firmware only ever reads it, after boot, debounced for 30 ms. The plain LED (GPIO4) answers the one question that matters during bring-up, "is the Pi talking to the microcontroller", and blinks out the 3-second start countdown. It also blinks fast while the IMU calibrates (keep the car still) and gives a short blip every second if the IMU is missing or faulted. The devkit's onboard WS2812 pixel repeats that in colour and adds the drivetrain: **red** until the Pi announces itself, **green** once connected and standing still, **flashing blue** while the motor drives straight, **flashing purple** while it drives with the wheels turned. Driving outranks the link colour, so a car that is moving never shows a resting colour — a stale throttle the ROS2 side is no longer refreshing still reads as motion, which is exactly the state you want to catch on a bench. The pixel is already soldered to the devkit, so this second light costs no wiring and no pin: `firmware/lib/rgb_status_led` drives it through the Arduino core's `neopixelWrite()` instead of pulling in a pixel library.
+- **Start button and status LEDs**: the entire competition interface. One button to start, and two lights to show what state the car is in. The start button is the devkit's own **BOOT button** (GPIO0): a strapping pin, so the firmware only ever reads it, after boot, debounced for 30 ms. The plain LED (GPIO4) answers the one question that matters during bring-up, "is the Pi talking to the microcontroller", and blinks out the 5-second start countdown. It also blinks fast while the IMU calibrates (keep the car still) and gives a short blip every second if the IMU is missing or faulted. The devkit's onboard WS2812 pixel repeats that in colour and adds the drivetrain: **red** until the Pi announces itself, **green** once connected and standing still, **flashing blue** while the motor drives straight, **flashing purple** while it drives with the wheels turned. Driving outranks the link colour, so a car that is moving never shows a resting colour — a stale throttle the ROS2 side is no longer refreshing still reads as motion, which is exactly the state you want to catch on a bench. The pixel is already soldered to the devkit, so this second light costs no wiring and no pin: `firmware/lib/rgb_status_led` drives it through the Arduino core's `neopixelWrite()` instead of pulling in a pixel library.
 
 The full wiring is documented in [`circuit_diagram`](./circuit_diagram/) and the exact pin assignments in [`firmware/pin-map.md`](./firmware/pin-map.md) (ESP32-S3-DevKitC-1 N16R8):
 

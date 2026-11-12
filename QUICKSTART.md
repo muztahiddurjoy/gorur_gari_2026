@@ -48,7 +48,7 @@ The devkit's **onboard WS2812** (GPIO 48) carries the whole picture:
 | Flashing blue | Motor driving, steering near centre | If the car is meant to be stopped, something is still publishing `/cmd_vel` (the firmware brakes within 100 ms of the drive commands stopping) |
 | Flashing purple | Motor driving with the wheels turned | Same, plus the steering is off centre |
 
-The **plain LED** (GPIO 4) lights on the same connect message and blinks three times, once a second, after a start button press (the start button is the devkit's **BOOT** button). Those blinks are the start delay the ROS 2 side holds the car still for, so the car starts moving the moment they stop. Two more patterns come from the IMU and take precedence over the connect level (the countdown still wins):
+The **plain LED** (GPIO 4) lights on the same connect message and blinks five times, once a second, after a start button press (the start button is the devkit's **BOOT** button). Those blinks are the 5 s start delay the ROS 2 side holds the car still for, so the car starts moving the moment they stop and the LED goes solid. On the autostarted car, which round the button starts is set in [`ros2_ws/config/round_select.yaml`](./ros2_ws/config/round_select.yaml) (see [`ros2_ws/systemd/README.md`](./ros2_ws/systemd/README.md)). Two more patterns come from the IMU and take precedence over the connect level (the countdown still wins):
 
 | Plain LED | Meaning |
 | --- | --- |

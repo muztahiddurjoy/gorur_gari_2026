@@ -28,7 +28,7 @@ The Pi and the ESP32-S3 talk over one USB cable into the devkit's port labelled 
 
 Two of the blocks need no wiring decisions but do need explaining, since they are the only output the car has once it is on the mat.
 
-The **status LED on GPIO 4** is a plain single-colour LED (GPIO → 220–470 Ω → anode, cathode to GND). It is off from boot, lights when the ROS 2 bridge announces itself, and blinks the 3-second start countdown after a press of the BOOT button (GPIO 0, the start button). While the IMU calibrates it blinks fast (keep the car still); if the IMU is missing or faulted it gives a short blip once a second.
+The **status LED on GPIO 4** is a plain single-colour LED (GPIO → 220–470 Ω → anode, cathode to GND). It is off from boot, lights when the ROS 2 bridge announces itself, and blinks the 5-second start countdown after a press of the BOOT button (GPIO 0, the start button). While the IMU calibrates it blinks fast (keep the car still); if the IMU is missing or faulted it gives a short blip once a second.
 
 The **WS2812 on GPIO 48** is soldered to the devkit, so it costs no wiring and no extra pin. It repeats the link state in colour and adds what the drivetrain is doing:
 
