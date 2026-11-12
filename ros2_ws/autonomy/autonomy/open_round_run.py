@@ -199,7 +199,7 @@ class OpenRoundRunNode(Node):
         self.declare_parameter('heading_fusion_enable', True)
         self.declare_parameter('heading_kp', 0.03)
         self.declare_parameter('heading_kd', 0.005)
-        # 1.5 = full 0-180 servo travel through the bridge's 90 + z*60 map.
+        # z = ±1.0 is already full 0-180 travel via the bridge's 90 + z*90 map.
         self.declare_parameter('heading_max_steer', 1.5)
         self.declare_parameter('heading_deadband_deg', 2.0)
         # /heading older than this falls back to raw LiDAR-angle steering.
