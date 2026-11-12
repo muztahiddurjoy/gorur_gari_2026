@@ -107,7 +107,7 @@ is blinking, a command only changes the level the LED goes back to when the coun
 | Throttle | duty = \|wire\| / 255, so full-scale int8 is under 50% | `motor_control.cpp`, 8-bit PWM |
 | Steering | `servoCorrection = 23`: horn travel −67° .. +90° about centre | `steering_control.h` |
 | Telemetry | 50 ms | `SENSOR_TX_INTERVAL_MS` |
-| Encoder rpm | 50 ms samples over 1320 counts | `ENCODER_COUNTS_PER_REV` |
+| Encoder rpm | 50 ms samples over 400 counts | `ENCODER_COUNTS_PER_REV` |
 | Heading | 0..360°, clockwise, zero at power-on | `heading.cpp` |
 | Drive watchdog | none: the last throttle stays latched | `main.cpp` |
 

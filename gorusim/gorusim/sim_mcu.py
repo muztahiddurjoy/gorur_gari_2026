@@ -17,8 +17,7 @@ What each firmware piece became:
                        travel is -67 .. +90 deg about centre and the two directions
                        really are unequal. Then MG996R slew, and the linkage.
     EncoderReader      Ticks from the axle angle. rpm from the same 50 ms sampling and
-                       ENCODER_COUNTS_PER_REV = 1320, which reads low against the true
-                       tick rate on the real car as well.
+                       ENCODER_COUNTS_PER_REV = 400, the car's ticks per wheel turn.
     Heading            BNO055 Euler x: 0..360 degrees, clockwise, zero at power-on.
     Sonars             All disabled in config.h, so they read 255, "no echo".
     Button             Latched into exactly one 50 ms telemetry frame, like a tap.
@@ -59,7 +58,7 @@ from gorusim.linkage import LinkageGeometry, SteeringLinkage, interpolate
 MOTOR_MAX_DUTY = 255                # MOTOR_PWM_RESOLUTION_BITS = 8
 STEERING_CENTER_ANGLE = 90
 SERVO_CORRECTION_DEG = 23           # firmware/lib/steering_control/steering_control.h
-ENCODER_COUNTS_PER_REV = 1320
+ENCODER_COUNTS_PER_REV = 400
 ENCODER_SAMPLE_INTERVAL_S = 0.050
 SENSOR_TX_INTERVAL_S = 0.050
 SONAR_NO_READING_CM = 255

@@ -70,7 +70,11 @@ const int MOTOR_COMMAND_MAX = 127;
 const float MOTOR_SLEW_PERCENT_PER_S = 500.0f;
 
 //encoder
-const int ENCODER_COUNTS_PER_REV = 1320;   // 11 ppr * 4 edges * 30:1 gearbox, retune for your motor
+// Ticks per WHEEL revolution as counted at the tick stream (57 mm wheel).
+// Only feeds rpm(); odometry (vector_odom) integrates the raw tick count and
+// must be given the same number. Wheel rpm above 255 (~0.76 m/s) saturates the
+// uint8 encoder_speed telemetry field.
+const int ENCODER_COUNTS_PER_REV = 400;
 const int ENCODER_SAMPLE_INTERVAL_MS = 50;
 
 //I2C bus (SDA GPIO8 / SCL GPIO9), shared by the BOTGyro and the OLED
