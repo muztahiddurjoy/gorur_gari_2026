@@ -1,0 +1,24 @@
+# ════════════════════════════════════════════════════════════════════
+# What the start button starts.
+#
+# Read by launch/gorur_round.launch.py, which gorur-round.service runs at
+# boot. The chosen driver waits in STANDBY; press the car's start button
+# (the ESP32 BOOT button) and it drives exactly start_delay_sec later. The
+# status LED blinks once a second through the delay and goes solid as the
+# car moves. A second press during the countdown restarts it; a press while
+# the car is driving is ignored.
+#
+# After editing, apply it with:  sudo systemctl restart gorur-round
+# (or `gorur-round open|obstacle`, which edits `round` and restarts for you).
+# ════════════════════════════════════════════════════════════════════
+
+# Which node the button starts:
+#   open      -> local_comp open_round      (tuning: local_comp/config/open_round.yaml)
+#   obstacle  -> local_comp obstacle_round  (tuning: local_comp/config/obstacle_round.yaml)
+round: open
+
+# Seconds from the press to the first drive command, for either round.
+# The LED countdown is firmware: START_BLINK_COUNT x START_BLINK_INTERVAL_MS
+# in firmware/include/config.h (5 x 1000 ms). Change both together and
+# reflash, or the LED and the car disagree.
+start_delay_sec: 5.0
