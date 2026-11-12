@@ -4,7 +4,7 @@ Power the car on and it is ready for the start button — no laptop needed.
 
 | Unit | Runs | Launch file |
 | --- | --- | --- |
-| `gorur-base.service` | `mcu_bridge`, `vector_odom`, RPLIDAR C1 (`rplidar_ros`) | `launch/gorur_base.launch.py` |
+| `gorur-base.service` | `mcu_bridge`, `vector_odom`, RPLIDAR C1 (`sllidar_ros2`, built in `~/lidar_ws`) | `launch/gorur_base.launch.py` |
 | `gorur-round.service` | `local_comp` `open_round` **or** `obstacle_round` | `launch/gorur_round.launch.py round:=…` |
 
 Both round nodes wait in STANDBY until the ESP32's BOOT button (`/button_status`) is pressed.

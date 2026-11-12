@@ -8,6 +8,9 @@ GORUR_ROUND=open
 # Workspace the services run from (built with colcon --symlink-install).
 GORUR_WS=/home/goru/gorur_gari_2026/ros2_ws
 
+# Underlay with the sllidar_ros2 (RPLIDAR C1) driver, built by install.sh.
+GORUR_LIDAR_WS=/home/goru/lidar_ws
+
 # ROS 2 networking. Keep the laptop on the same domain to echo topics/RViz.
 ROS_DOMAIN_ID=0
 RMW_IMPLEMENTATION=rmw_fastrtps_cpp

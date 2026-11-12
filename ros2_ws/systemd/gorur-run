@@ -8,6 +8,10 @@ WS="${GORUR_WS:-/home/goru/gorur_gari_2026/ros2_ws}"
 set +u
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
+# Underlay with the RPLIDAR C1 driver (sllidar_ros2), built by install.sh.
+LIDAR_WS="${GORUR_LIDAR_WS:-/home/goru/lidar_ws}"
+# shellcheck disable=SC1091
+[ -f "$LIDAR_WS/install/setup.bash" ] && source "$LIDAR_WS/install/setup.bash"
 # shellcheck disable=SC1091
 source "$WS/install/setup.bash"
 set -u

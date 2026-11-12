@@ -16,9 +16,19 @@ sudo apt-get update -q
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
     python3-colcon-common-extensions python3-rosdep python3-pytest \
     python3-serial python3-numpy python3-opencv v4l-utils \
-    ros-humble-rplidar-ros ros-humble-cv-bridge ros-humble-tf2-ros \
+    python3-pip ros-humble-cv-bridge ros-humble-tf2-ros \
     ros-humble-nav-msgs ros-humble-visualization-msgs ros-humble-launch-ros \
     ros-humble-ament-flake8 ros-humble-ament-pep257 ros-humble-ament-copyright
+
+echo "==> pymavlink (mcu_bridge's MAVLink codec, not packaged in apt)"
+python3 -c "import pymavlink" 2>/dev/null || sudo pip3 install pymavlink
+
+echo "==> sllidar_ros2 (RPLIDAR C1 driver; apt rplidar_ros has no C1 support)"
+LIDAR_WS="$HOME/lidar_ws"
+mkdir -p "$LIDAR_WS/src"
+[ -d "$LIDAR_WS/src/sllidar_ros2" ] || \
+    git clone --depth 1 https://github.com/Slamtec/sllidar_ros2.git "$LIDAR_WS/src/sllidar_ros2"
+(set +u; source /opt/ros/humble/setup.bash; cd "$LIDAR_WS" && colcon build --symlink-install)
 
 echo "==> rosdep"
 [ -f /etc/ros/rosdep/sources.list.d/20-default.list ] || sudo rosdep init
