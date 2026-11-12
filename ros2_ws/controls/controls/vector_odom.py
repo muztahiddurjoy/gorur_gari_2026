@@ -39,15 +39,12 @@ class VectorOdometryNode(Node):
         # -- rig geometry: MEASURE THESE, the defaults are only a starting point --
         # Metres, NOT millimetres. Putting 65 here makes every distance the
         # node reports 1000x too large.
-        self.declare_parameter('wheel_diameter_m', 0.050)
+        self.declare_parameter('wheel_diameter_m', 0.057)
         # Ticks per WHEEL revolution, after the gearbox, so no separate gear
-        # ratio is needed. Measured over two straight line drives (549 ticks
-        # over 31 cm, 641 ticks over 36 cm), which both give ~363 = 11 ppr at
-        # one edge through the 33:1 gearbox. Note this disagrees with
-        # ENCODER_COUNTS_PER_REV = 1320 in firmware/include/config.h, which
-        # assumes x4 decoding - that constant does not touch the tick stream,
-        # only the rpm the MCU reports, so rpm telemetry is ~3.6x too low.
-        self.declare_parameter('encoder_counts_per_rev', 185)
+        # ratio is needed: 400 at the tick stream for the 57 mm wheel, the
+        # same number as ENCODER_COUNTS_PER_REV in firmware/include/config.h
+        # (which only scales the rpm the MCU reports).
+        self.declare_parameter('encoder_counts_per_rev', 400)
         # Whatever error is left once the geometry above is right. Drive a
         # measured straight line and set this to (tape measure / reported).
         # See the calibration note in the startup log.
