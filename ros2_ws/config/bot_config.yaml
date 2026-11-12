@@ -140,11 +140,16 @@ open_round_run:
     heading_fusion_enable: true
     heading_kp: 0.03             # steer per degree of heading error
     heading_kd: 0.005            # damping against error swing
-    # 1.5 is FULL servo travel: the bridge maps servo = 90 + z*60, so
-    # z = ±1.5 reaches 0/180. Steering is deliberately unlimited.
+    # The bridge maps servo = 90 + z*90 (steering_gain_deg), so z = ±1.0
+    # already reaches 0/180; 1.5 just leaves headroom that the bridge
+    # clips. Steering is deliberately unlimited.
     heading_max_steer: 1.5
     heading_deadband_deg: 2.0    # BNO jitter suppression on straights
     heading_stale_sec: 0.5       # /heading older -> raw LiDAR steering
+    # Raw-LiDAR (fallback) and homing steering = target angle / this.
+    # The in-code default 180 only reached ~±0.5 (about 45-135 on the
+    # servo) because targets sit within about ±90 deg; 90 reaches full lock.
+    str_ang_thresh: 90.0
 
     # ── Encoder stall adaptation ──────────────────────────────────
     # /encoder/count fused as a wheels-actually-turning sense: while a
@@ -152,7 +157,7 @@ open_round_run:
     # ramps up GENTLY (never a slam) until the wheels move, then eases
     # back. Peak throttle = drive_speed * stall_boost_max = 1.10.
     drive_speed: 1.25           # nominal linear.x while lapping — THE linear limit
-    max_steer_cmd: 1.5           # steering unlimited: full 0-180 servo travel
+    max_steer_cmd: 1.5           # unlimited: |z| >= 1.0 is already full 0-180 travel
     stall_timeout_sec: 0.2       # frozen ticks this long while driving = stalled
     stall_boost_step: 0.2        # boost ramp per second (up and down)
     stall_boost_max: 10.0         # boost ceiling ("not too much")

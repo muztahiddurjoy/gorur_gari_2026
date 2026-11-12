@@ -57,8 +57,8 @@ pipeline from disparity_extender.py, with five additions:
    gently (stall_boost_step per second) to at most stall_boost_max — never
    a full-throttle slam — and eases back to 1.0 as soon as the wheels turn
    again. Only the THROTTLE is limited: steering is unrestricted, with
-   max_steer_cmd at 1.5 spanning the full 0-180 servo travel (the bridge
-   maps servo = 90 + angular.z*60). A dead /encoder/count stream disables
+   max_steer_cmd at 1.5 (the bridge maps servo = 90 + angular.z*90 per
+   steering_gain_deg, so |z| >= 1.0 is already full 0-180 travel). A dead /encoder/count stream disables
    the boost (never blind-boost) and the base speed still drives the car.
 
 State machine:
@@ -208,9 +208,9 @@ class OpenRoundRunNode(Node):
         # ── Encoder Stall Adaptation ─────────────────────────────────
         # Nominal linear.x while lapping — THE linear command limit.
         self.declare_parameter('drive_speed', 1.25)
-        # |angular.z| ceiling. 1.5 is full servo travel (the bridge maps
-        # servo = 90 + z*60, so z = ±1.5 reaches the 0/180 endpoints):
-        # steering is deliberately unlimited, only linear is capped.
+        # |angular.z| ceiling. The bridge maps servo = 90 + z*90
+        # (steering_gain_deg), so z = ±1.0 already reaches 0/180 and 1.5
+        # is headroom: steering is deliberately unlimited, only linear is capped.
         self.declare_parameter('max_steer_cmd', 1.5)
         # Encoder count frozen this long while commanding motion = stalled.
         self.declare_parameter('stall_timeout_sec', 0.4)
