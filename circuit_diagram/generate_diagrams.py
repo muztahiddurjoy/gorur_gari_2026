@@ -152,7 +152,7 @@ def main_diagram():
     block(ax, 128, 55, 34, 17, "BTS7960 (IBT-2)",
           "dual half-bridge driver\nB+ = VBAT · 10k pull-downs", C_ACT)
     block(ax, 128, 31, 34, 12, "JGA370 motor",
-          "DC gearmotor + quadrature\nencoder (1320 cnt/rev)", C_SENSOR)
+          "DC gearmotor + quadrature\nencoder (400 cnt/wheel rev)", C_SENSOR)
 
     ctrl = [("GPIO5 → RPWM · 20 kHz", 69.5, W_PWM),
             ("GPIO6 → LPWM · 20 kHz", 65.0, W_PWM),

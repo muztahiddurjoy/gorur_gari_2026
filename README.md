@@ -260,7 +260,7 @@ The rules say the car must stop where it started. Instead of guessing with timer
 
 Each encoder tick is turned into a small displacement vector pointing in the current heading direction, and all the vectors are summed up. At any moment the car knows its position as one straight-line vector from the start point. After the third lap, `open_round_run` simply drives that vector backwards until the car is within **5 cm** of home.
 
-Calibrating this taught us not to trust datasheets. On paper, the encoder gives 1320 counts per revolution. Measured at the actual tick stream, one wheel revolution is **363 counts**, and even then a tape-measure test showed a small residual error we correct with a scale factor of 0.976. Measure everything.
+Calibrating this taught us not to trust datasheets. On paper, the encoder gives 1320 counts per revolution. Measured at the actual tick stream, one turn of our 57 mm wheel is **400 counts**, about 0.45 mm of travel per tick, and both the odometry and the firmware's rpm now use that measured number. Measure everything.
 
 ### Open Round
 

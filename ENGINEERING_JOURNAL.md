@@ -31,16 +31,16 @@ The car is a four-wheeled, rear-wheel-drive layout with front-wheel Ackermann st
 ### Testing that changed the design
 
 - **PWM frequency**: chosen from a direct bench comparison (audible whine + rough low-speed torque vs. silent + smooth) — not a datasheet default.
-- **Encoder calibration**: the nameplate figure of 1320 counts/rev did not survive contact with the actual tick stream. Measured against a marked wheel rotation, one wheel revolution reads **363 counts**, and a tape-measure distance test on top of that still showed a small residual error, corrected with a scale factor of **0.976**. This number now drives `vector_odom` (see [`ros2_ws/config/bot_config.yaml`](./ros2_ws/config/bot_config.yaml)), and it is why the wheel diameter is a launch parameter instead of a hardcoded constant — a millimeter of measurement error compounds into centimeters of homing error over three laps.
+- **Encoder calibration**: the nameplate figure of 1320 counts/rev did not survive contact with the actual tick stream. Measured against a marked wheel rotation, one revolution of the 57 mm wheel reads **400 counts** (0.4477 mm per tick). This number now drives `vector_odom` (see [`ros2_ws/launch/gorur_base.launch.py`](./ros2_ws/launch/gorur_base.launch.py)) and the firmware's `ENCODER_COUNTS_PER_REV`. The earlier 65 mm wheel read 363 counts and needed a tape-measure correction of **0.976**; that factor belonged to the old wheel, so the scale is back to 1.0 until a tape-measure run on the new wheel says otherwise. The calibration is also why the wheel diameter is a launch parameter instead of a hardcoded constant — a millimeter of measurement error compounds into centimeters of homing error over three laps.
 - **Encoder wiring**: A and B channels are deliberately wired opposite to the board's silkscreen. Wired "correctly", the decoder counted *down* while the car drove forward, which flipped the sign of every odometry distance. Swapping two physical pins in [`firmware/include/pins.h`](./firmware/include/pins.h) was the fix, chosen over negating the value in three separate places downstream — one wrong assumption fixed at the source instead of patched at every consumer.
 
 ### Torque and speed budget
 
 | Parameter | Value | Source |
 | :-- | :-- | :-- |
-| Gearbox ratio | 30:1 | `ENCODER_COUNTS_PER_REV` comment, `firmware/include/config.h` |
-| Encoder resolution (nameplate) | 1320 counts/rev | `firmware/include/config.h` |
-| Encoder resolution (measured) | 363 counts/rev | bench calibration, see above |
+| Gearbox ratio | 30:1 | motor nameplate |
+| Encoder resolution (nameplate) | 1320 counts/rev | 11 ppr × 4 edges × 30:1 |
+| Encoder resolution (measured) | 400 counts per 57 mm wheel rev | bench calibration, `firmware/include/config.h` |
 | Cruise speed (straights) | 0.6 m/s | disparity extender speed scaling, `README.md` |
 | Min speed (full steering lock) | 0.25 m/s | disparity extender speed scaling, `README.md` |
 | Steering lock | ±60° | servo mechanical stop |
@@ -89,7 +89,7 @@ The drive motor draws directly off the battery through its own driver; everythin
 
 ### Calibration method
 
-- **Encoder scale factor**: nameplate count → measured tick count over a marked wheel rotation → tape-measure distance check → correction factor (0.976), detailed in §1.
+- **Encoder scale factor**: nameplate count → measured tick count over a marked wheel rotation → tape-measure distance check → correction factor (0.976 on the old 65 mm wheel; 1.0 on the 57 mm wheel until re-measured), detailed in §1.
 - **HSV color thresholds** (`vision_node`): tuned interactively at the venue with [`tune_hsv.py`](./ros2_ws/autonomy/autonomy/tune_hsv.py) rather than fixed in advance, because pillar color detection is sensitive to venue lighting. This is a repeatable procedure, not a one-time value: re-run it whenever the lighting changes.
 - **Wheel diameter**: measured before each run rather than hardcoded, and passed as a launch parameter — see §1 for why.
 
