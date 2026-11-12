@@ -57,6 +57,14 @@ MCU_RECONNECT_INTERVAL_S = 1.0
 # reading), so a stuck MCU can never stall the node. Not 0: pyserial's
 # "non-blocking" write_timeout=0 spins forever when the tty buffer is full.
 MCU_WRITE_TIMEOUT_S = 0.01
+# The firmware streams telemetry every loop whatever the host does, so a port
+# that stays open but silent this long means the ESP32 is wedged (seen after a
+# cold boot of the car: it enumerates on USB but sends nothing until reset).
+# The bridge then resets it through the USB modem lines, see reset_mcu().
+# 0 disables the watchdog.
+MCU_SILENT_RESET_S = 4.0
+# how long RTS holds the chip in reset
+MCU_RESET_PULSE_S = 0.1
 
 # Drive command stream. The firmware moves the car only while valid drive
 # commands keep arriving: it brakes and centres the steering when none has
@@ -161,6 +169,25 @@ def open_mcu_port(path, baudrate, serial_class=serial.Serial):
     return port
 
 
+def mcu_is_silent(now, last_rx, timeout_s):
+    """Return True when the link has carried nothing for timeout_s (0 = never)."""
+    return timeout_s > 0 and last_rx is not None and now - last_rx >= timeout_s
+
+
+def reset_mcu(port, pulse_s=MCU_RESET_PULSE_S, sleep=time.sleep):
+    """
+    Reset the ESP32-S3 into its normal (flash) boot over USB.
+
+    On the USB-Serial/JTAG controller RTS high with DTR low holds the chip in
+    reset; releasing RTS with DTR still low lets it boot from flash (DTR high
+    there would select the ROM bootloader instead). See open_mcu_port().
+    """
+    port.dtr = False
+    port.rts = True
+    sleep(pulse_s)
+    port.rts = False
+
+
 def drive_command_is_fresh(age_s, stale_s=CMD_VEL_STALE_S):
     """
     Whether a /cmd_vel that arrived age_s seconds ago may still be sent.
@@ -221,6 +248,11 @@ class MCUBridgeNode(Node):
         self.mav_tx = None       # ros2_to_mcu encoder writing to self.ser
         self.mcu_port_in_use = None
         self.last_connect_attempt = None
+        # monotonic time of the last byte from the MCU (or of the connect),
+        # for the silent-MCU watchdog, see MCU_SILENT_RESET_S
+        self.declare_parameter('mcu_silent_reset_sec', MCU_SILENT_RESET_S)
+        self.silent_reset_s = float(self.get_parameter('mcu_silent_reset_sec').value)
+        self.last_rx_time = None
 
         # /cmd_vel scaling and clamps, see the mcu_bridge section of
         # ros2_ws/config/bot_config.yaml
@@ -349,6 +381,7 @@ class MCUBridgeNode(Node):
             self.mav_tx = ros2_to_mcu.MAVLink(port, srcSystem=2, srcComponent=1)
             self.mcu_connected = True
             self.mcu_announced = False
+            self.last_rx_time = time.monotonic()
             which = '' if path == self.port else ' (fallback port)'
             self.get_logger().info(f'Connected to MCU on {path}{which}.')
             self.connect_notice_timer.reset()
@@ -597,7 +630,10 @@ class MCUBridgeNode(Node):
             self.disconnect_mcu(f'read failed: {e}')
             return
         if not data:
+            if mcu_is_silent(time.monotonic(), self.last_rx_time, self.silent_reset_s):
+                self.reset_silent_mcu()
             return
+        self.last_rx_time = time.monotonic()
         try:
             msgs = self.mav_rx.parse_buffer(data) or []
         except Exception as e:
@@ -613,6 +649,19 @@ class MCUBridgeNode(Node):
                 # resync noise (the ROM boot banner after a reset, or we opened
                 # mid packet), not fatal
                 self.get_logger().debug(f'Skipping non-MAVLink bytes: {msg.reason}')
+
+    def reset_silent_mcu(self):
+        """Reset an MCU whose port is open but silent, then reconnect."""
+        self.get_logger().warn(
+            f'MCU on {self.mcu_port_in_use} silent for {self.silent_reset_s:.0f} s; '
+            'resetting it over USB.')
+        try:
+            reset_mcu(self.ser)
+        except (OSError, serial.SerialException) as e:
+            self.get_logger().error(f'MCU reset failed: {e}')
+        # the chip re-enumerates after a reset, so drop the port and let
+        # poll_mcu open it again once it is back
+        self.disconnect_mcu('reset after silence')
 
     def handle_mcu_statustext(self, msg):
         """Log a STATUSTEXT from the MCU at the matching level."""
