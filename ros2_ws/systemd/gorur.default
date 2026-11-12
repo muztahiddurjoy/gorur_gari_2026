@@ -1,9 +1,7 @@
 # /etc/default/gorur — read by gorur-base.service and gorur-round.service.
-# Change the round with `gorur-round open|obstacle` (edits this file and
-# restarts gorur-round.service).
-
-# Round driven at boot: open | obstacle
-GORUR_ROUND=open
+# What the start button starts (open | obstacle) and its start delay are NOT
+# set here: they live in $GORUR_WS/config/round_select.yaml. Switch with
+# `gorur-round open|obstacle` (edits that file and restarts gorur-round).
 
 # Workspace the services run from (built with colcon --symlink-install).
 GORUR_WS=/home/goru/gorur_gari_2026/ros2_ws
@@ -15,6 +13,7 @@ GORUR_LIDAR_WS=/home/goru/lidar_ws
 ROS_DOMAIN_ID=0
 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 
-# Extra launch args, e.g. GORUR_BASE_ARGS="lidar_inverted:=false"
+# Extra launch args, e.g. GORUR_BASE_ARGS="lidar_inverted:=false" or
+# GORUR_ROUND_ARGS="round:=obstacle" to override round_select.yaml.
 GORUR_BASE_ARGS=
 GORUR_ROUND_ARGS=

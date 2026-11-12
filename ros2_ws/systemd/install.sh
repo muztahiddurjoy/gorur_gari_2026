@@ -52,6 +52,12 @@ if [ ! -f /etc/default/gorur ]; then
     sudo install -m 644 "$SYSTEMD_DIR/gorur.default" /etc/default/gorur
 fi
 sudo sed -i "s|^GORUR_WS=.*|GORUR_WS=$WS|" /etc/default/gorur
+# The round used to be GORUR_ROUND here; it is config/round_select.yaml now.
+if grep -qE '^GORUR_ROUND=' /etc/default/gorur; then
+    echo "==> note: $(grep -E '^GORUR_ROUND=' /etc/default/gorur) in /etc/default/gorur is no longer" \
+         "read; the round is set in $WS/config/round_select.yaml"
+    sudo sed -i 's/^GORUR_ROUND=/# unused, see config\/round_select.yaml: GORUR_ROUND=/' /etc/default/gorur
+fi
 sudo install -m 644 "$SYSTEMD_DIR/gorur-base.service" /etc/systemd/system/
 sudo install -m 644 "$SYSTEMD_DIR/gorur-round.service" /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -60,4 +66,6 @@ if [ "$ENABLE" = 1 ]; then
     sudo systemctl restart gorur-base.service gorur-round.service
 fi
 systemctl --no-pager --lines=0 status gorur-base.service gorur-round.service || true
-echo "==> done. Round: $(grep ^GORUR_ROUND= /etc/default/gorur). Logs: journalctl -fu gorur-base -u gorur-round"
+echo "==> done. Start button: $(grep -E '^round:' "$WS/config/round_select.yaml")," \
+     "$(grep -E '^start_delay_sec:' "$WS/config/round_select.yaml")." \
+     "Logs: journalctl -fu gorur-base -u gorur-round"

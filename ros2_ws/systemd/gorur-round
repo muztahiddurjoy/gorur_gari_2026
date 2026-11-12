@@ -1,16 +1,26 @@
 #!/bin/bash
-# Show or switch the round gorur-round.service drives on boot.
+# Show or switch what the start button starts. The choice lives in
+# config/round_select.yaml in the workspace; this edits its `round:` line and
+# restarts gorur-round.service so it takes effect at once (and on every boot).
 #
-#   gorur-round              print the current round and service state
-#   gorur-round open         drive the open round (now and on every boot)
-#   gorur-round obstacle     drive the obstacle round (now and on every boot)
+#   gorur-round              print the round, the start delay and service state
+#   gorur-round open         the start button starts the open round
+#   gorur-round obstacle     the start button starts the obstacle round
 set -euo pipefail
 CONF=/etc/default/gorur
+WS="$( (grep -E '^GORUR_WS=' "$CONF" 2>/dev/null || echo GORUR_WS=/home/goru/gorur_gari_2026/ros2_ws) | cut -d= -f2-)"
+SELECT="$WS/config/round_select.yaml"
 
-current() { (grep -E '^GORUR_ROUND=' "$CONF" 2>/dev/null || echo GORUR_ROUND=open) | cut -d= -f2; }
+# value of a top-level `key: value` line, trailing comment stripped
+value() { grep -E "^$1:" "$SELECT" | head -n1 | sed -E "s/^$1:[[:space:]]*//; s/[[:space:]]*#.*$//"; }
+
+if [ ! -f "$SELECT" ]; then
+    echo "gorur-round: $SELECT not found (GORUR_WS in $CONF?)" >&2
+    exit 1
+fi
 
 if [ $# -eq 0 ]; then
-    echo "round: $(current)"
+    echo "round: $(value round)   start delay: $(value start_delay_sec) s   ($SELECT)"
     systemctl --no-pager --lines=0 status gorur-base.service gorur-round.service || true
     exit 0
 fi
@@ -20,10 +30,6 @@ case "$1" in
     *) echo "usage: gorur-round [open|obstacle]" >&2; exit 2 ;;
 esac
 
-if grep -qE '^GORUR_ROUND=' "$CONF" 2>/dev/null; then
-    sudo sed -i "s/^GORUR_ROUND=.*/GORUR_ROUND=$1/" "$CONF"
-else
-    echo "GORUR_ROUND=$1" | sudo tee -a "$CONF" >/dev/null
-fi
+sed -i -E "s/^round:.*/round: $1/" "$SELECT"
 sudo systemctl restart gorur-round.service
-echo "gorur-round.service now drives the $1 round (persisted in $CONF)"
+echo "the start button now starts the $1 round (saved in $SELECT)"
