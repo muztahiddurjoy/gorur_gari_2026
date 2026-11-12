@@ -21,8 +21,9 @@ Run it by hand from the workspace root:
 """
 import os
 
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, LogInfo
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -120,5 +121,13 @@ def generate_launch_description():
             'scan_mode': 'Standard',
         }],
     )
+
+    # Without the driver the car cannot run a round, but keep the MCU link
+    # up anyway (status LEDs, OLED, debugging) instead of failing the launch.
+    try:
+        get_package_share_directory('sllidar_ros2')
+    except PackageNotFoundError:
+        rplidar = LogInfo(msg='[ERROR] sllidar_ros2 not found - no /scan. '
+                              'Build it with ros2_ws/systemd/install.sh.')
 
     return LaunchDescription(arguments + [mcu_bridge, vector_odom, rplidar])
