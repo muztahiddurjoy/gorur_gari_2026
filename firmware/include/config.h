@@ -41,15 +41,16 @@ const int STEERING_CENTER_ANGLE = 90;
 // (CENTER), then walk each side out until the linkage is about to touch its
 // stop and back off a little (MIN for wire angle 0 / full left, MAX for 180 /
 // full right). If the wheels turn the wrong way, swap MIN and MAX.
-const int STEERING_MIN_US = 1100;
+// Symmetric around STEERING_CENTER_US (1245): 500 us of horn travel each way.
+const int STEERING_MIN_US = 745;
 // Steering centre trim in servo degrees, + = right, - = left. At 0 the wheels
 // sat slightly left of straight. Converted to a pulse with the servo's
 // 500..2500 us = 0..180 deg scale (~11 us/deg).
-const int STEERING_CENTER_TRIM_DEG = 3;
+const int STEERING_CENTER_TRIM_DEG = -23;
 const int SERVO_CENTER_US = 1500;
 const int STEERING_CENTER_US =
-    SERVO_CENTER_US + STEERING_CENTER_TRIM_DEG * 2000 / 180;  // 1533 at +3
-const int STEERING_MAX_US = 1900;
+    SERVO_CENTER_US + STEERING_CENTER_TRIM_DEG * 2000 / 180;  // 1245 at -23
+const int STEERING_MAX_US = 1745;
 
 //motor (BTS7960, see lib/motor_control)
 const uint32_t MOTOR_PWM_FREQUENCY_HZ = 20000; // above hearing range so the motor stays quiet; BTS7960 max is 25 kHz
