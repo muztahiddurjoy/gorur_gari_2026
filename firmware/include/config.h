@@ -39,10 +39,12 @@ const int STEERING_CENTER_ANGLE = 90;
 // 1500 us centre, roughly +/-36 deg of MG996R horn travel). CALIBRATE ON THE
 // BENCH before driving: find the pulse where the wheels point straight
 // (CENTER), then walk each side out until the linkage is about to touch its
-// stop and back off a little (MIN for wire angle 0 / full left, MAX for 180 /
-// full right). If the wheels turn the wrong way, swap MIN and MAX.
-// Symmetric around STEERING_CENTER_US (1245): 500 us of horn travel each way.
-const int STEERING_MIN_US = 745;
+// stop and back off a little (MIN for wire angle 0 / full right, MAX for 180 /
+// full left; angular.z -1 = wire 0 = right, the ROS convention). If the wheels
+// turn the wrong way, swap MIN and MAX.
+// Full right = 500 us, the servo's own 0 deg endpoint (and ESP32Servo's floor):
+// 745 us of travel right of centre against 500 us to the left.
+const int STEERING_MIN_US = 500;
 // Steering centre trim in servo degrees, + = right, - = left. At 0 the wheels
 // sat slightly left of straight. Converted to a pulse with the servo's
 // 500..2500 us = 0..180 deg scale (~11 us/deg).
