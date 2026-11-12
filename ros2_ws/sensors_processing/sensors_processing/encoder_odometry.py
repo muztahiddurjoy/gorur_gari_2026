@@ -42,9 +42,9 @@ class EncoderOdometryNode(Node):
         super().__init__('encoder_odometry')
 
         # -- rig geometry: MEASURE THESE, the defaults are only a starting point --
-        self.declare_parameter('wheel_diameter_m', 0.065)
+        self.declare_parameter('wheel_diameter_m', 0.057)
         # matches ENCODER_COUNTS_PER_REV in firmware/include/config.h
-        self.declare_parameter('encoder_counts_per_rev', 1320)
+        self.declare_parameter('encoder_counts_per_rev', 400)
 
         self.declare_parameter('odom_frame', 'odom')
         self.declare_parameter('base_frame', 'base_link')

@@ -11,11 +11,10 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-# The wheel size scales every distance odometry reports, and nothing in the
-# repo records it, so it stays an argument you are expected to set.
-DEFAULT_WHEEL_DIAMETER_M = '0.065'
+# The wheel size scales every distance odometry reports.
+DEFAULT_WHEEL_DIAMETER_M = '0.057'
 # matches ENCODER_COUNTS_PER_REV in firmware/include/config.h
-DEFAULT_COUNTS_PER_REV = '1320'
+DEFAULT_COUNTS_PER_REV = '400'
 
 SONARS = ['front', 'left', 'right', 'rear']
 
