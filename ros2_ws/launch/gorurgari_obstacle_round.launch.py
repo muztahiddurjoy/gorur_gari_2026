@@ -34,9 +34,9 @@ DEFAULT_BOT_CONFIG = os.path.join(WORKSPACE_DIR, 'config', 'bot_config.yaml')
 DEFAULT_DISPARITY_PARAMS = os.path.join(WORKSPACE_DIR, 'config', 'disparity_extender_params.yaml')
 DEFAULT_VISION_PARAMS = os.path.join(WORKSPACE_DIR, 'config', 'vision_params.yaml')
 
-DEFAULT_WHEEL_DIAMETER_M = '0.065'
-DEFAULT_COUNTS_PER_REV = '363'
-DEFAULT_DISTANCE_SCALE = '0.976'
+DEFAULT_WHEEL_DIAMETER_M = '0.057'
+DEFAULT_COUNTS_PER_REV = '400'
+DEFAULT_DISTANCE_SCALE = '1.0'  # re-tape-measure on the 57 mm wheel
 
 SONARS = ['front', 'left', 'right', 'rear']
 

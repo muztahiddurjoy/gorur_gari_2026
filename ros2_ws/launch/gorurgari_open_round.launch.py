@@ -45,13 +45,13 @@ DEFAULT_BOT_CONFIG = os.path.join(
     WORKSPACE_DIR, 'config', 'bot_config.yaml')
 
 # Measure the wheel before a run - it scales every distance odometry reports.
-DEFAULT_WHEEL_DIAMETER_M = '0.065'
-# Ticks per wheel revolution as measured at the tick stream. Deliberately NOT
-# the firmware's ENCODER_COUNTS_PER_REV (1320) - see the note on the parameter
-# in controls/controls/vector_odom.py.
-DEFAULT_COUNTS_PER_REV = '363'
+DEFAULT_WHEEL_DIAMETER_M = '0.057'
+# Ticks per wheel revolution at the tick stream, the same 400 as the firmware's
+# ENCODER_COUNTS_PER_REV.
+DEFAULT_COUNTS_PER_REV = '400'
 # Residual error after the geometry is right: (tape measure / reported).
-DEFAULT_DISTANCE_SCALE = '0.976'
+# 1.0 until a tape-measure run on the 57 mm wheel says otherwise.
+DEFAULT_DISTANCE_SCALE = '1.0'
 
 SONARS = ['front', 'left', 'right', 'rear']
 
