@@ -60,7 +60,7 @@ stateDiagram-v2
 ```
 
 - **STANDBY**: powered up, processing scans, holding the car at zero. Waiting for the button.
-- **ARMING**: button seen; counting down `start_delay_sec` (3 s), one log line per second, matching the MCU's LED blinks.
+- **ARMING**: button seen; counting down `start_delay_sec` (5 s), one log line per second, matching the MCU's LED blinks.
 - **RUNNING**: the lap phase, open-space steering plus wall hugging, until 3 laps.
 - **HOMING**: laps done, drive back to the captured start point.
 - **FINISHED**: parked. Zero commands are republished slowly forever so the MCU can never latch a stale throttle.
@@ -327,7 +327,7 @@ The BNO055 compass reports a heading that grows **clockwise** (like a real compa
 
 ```python
         self.declare_parameter('require_button_start', True)
-        self.declare_parameter('start_delay_sec', 3.0)
+        self.declare_parameter('start_delay_sec', 5.0)
         self.declare_parameter('button_topic', '/button_status')
 
         self.declare_parameter('scan_topic', '/scan')

@@ -34,7 +34,7 @@ disparity_extender_node:
 
     # ── Start Gate ─────────────────────────────────────────────────
     require_button_start: true  # Stay in standby until the car's start button is pressed
-    start_delay_sec: 3.0        # Delay between the press and the first movement
+    start_delay_sec: 5.0        # Delay between the press and the first movement
     button_topic: "/button_status"
 
     # ── Steering ───────────────────────────────────────────────────

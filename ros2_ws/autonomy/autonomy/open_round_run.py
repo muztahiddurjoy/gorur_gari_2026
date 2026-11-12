@@ -288,7 +288,7 @@ class OpenRoundRunNode(Node):
 
         # ── Start Gate ───────────────────────────────────────────────
         self.declare_parameter('require_button_start', True)
-        self.declare_parameter('start_delay_sec', 3.0)
+        self.declare_parameter('start_delay_sec', 5.0)
         self.declare_parameter('button_topic', '/button_status')
         self.declare_parameter('wait_for_track_ready', False)
 

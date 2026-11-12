@@ -53,7 +53,7 @@ def generate_launch_description():
         DeclareLaunchArgument('require_button_start', default_value='false',
                               description='true holds the car in standby until '
                                           '/gorusim/press_start is called.'),
-        DeclareLaunchArgument('start_delay_sec', default_value='3.0'),
+        DeclareLaunchArgument('start_delay_sec', default_value='5.0'),
         # gorurgari_autonomy_boot.launch.py's defaults, verbatim.
         DeclareLaunchArgument('wheel_diameter_m', default_value='0.057'),
         DeclareLaunchArgument('encoder_counts_per_rev', default_value='400'),

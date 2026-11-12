@@ -46,7 +46,7 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('enable_auto_steering', default_value='true'),
         DeclareLaunchArgument('require_button_start', default_value='false'),
-        DeclareLaunchArgument('start_delay_sec', default_value='3.0'),
+        DeclareLaunchArgument('start_delay_sec', default_value='5.0'),
         # gorurgari_obstacle_round.launch.py's defaults, verbatim.
         DeclareLaunchArgument('wheel_diameter_m', default_value='0.057'),
         DeclareLaunchArgument('encoder_counts_per_rev', default_value='400'),

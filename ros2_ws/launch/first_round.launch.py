@@ -87,7 +87,7 @@ def generate_launch_description():
             description='Hold open_round_run in standby until the start button on '
                         'the car is pressed. False to drive as soon as scans arrive.'),
         DeclareLaunchArgument(
-            'start_delay_sec', default_value='3.0',
+            'start_delay_sec', default_value='5.0',
             description='Seconds between the start button press and the first movement. '
                         'The MCU blinks its status LED once a second through it.'),
                         

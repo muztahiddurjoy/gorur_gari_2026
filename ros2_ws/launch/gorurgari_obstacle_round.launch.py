@@ -80,7 +80,7 @@ def generate_launch_description():
             'require_button_start', default_value='true',
             description='Hold disparity_extender in standby until the start button is pressed.'),
         DeclareLaunchArgument(
-            'start_delay_sec', default_value='3.0',
+            'start_delay_sec', default_value='5.0',
             description='Seconds between start button press and first movement.'),
 
         # LiDAR Arguments
