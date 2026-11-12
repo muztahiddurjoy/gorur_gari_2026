@@ -6,7 +6,10 @@ Always-on hardware layer of the car, started at boot by gorur-base.service.
                                  button_status, ...; drives /cmd_vel out
     vector_odom     controls     encoder/count + heading -> /odom_vector
                                  (and the odom -> base_link TF)
-    rplidar_node    rplidar_ros  RPLIDAR C1 on /dev/rplidar -> /scan
+    sllidar_node    sllidar_ros2 RPLIDAR C1 on /dev/rplidar -> /scan
+                                 (Slamtec's driver, built in ~/lidar_ws by
+                                 systemd/install.sh - the apt rplidar_ros has
+                                 no C1 support)
 
 The round drivers (local_comp open_round / obstacle_round) are deliberately
 NOT here: they run in gorur-round.service, so switching rounds or restarting
@@ -97,12 +100,12 @@ def generate_launch_description():
         }],
     )
 
-    # rplidar_node exits if the port is missing or the C1 does not answer;
+    # sllidar_node exits if the port is missing or the C1 does not answer;
     # respawn keeps retrying so the LiDAR can be plugged in after boot.
     rplidar = Node(
-        package='rplidar_ros',
-        executable='rplidar_node',
-        name='rplidar_node',
+        package='sllidar_ros2',
+        executable='sllidar_node',
+        name='sllidar_node',
         output='screen',
         emulate_tty=True,
         respawn=True,
