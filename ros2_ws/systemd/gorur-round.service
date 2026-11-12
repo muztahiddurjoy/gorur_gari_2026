@@ -1,0 +1,24 @@
+[Unit]
+Description=Gorur Gari round driver (local_comp open_round / obstacle_round)
+Documentation=file:///home/goru/gorur_gari_2026/ros2_ws/systemd/README.md
+# The driver needs /scan and /button_status from the base layer; restart
+# along with it so a base restart never leaves a stale driver behind.
+Requires=gorur-base.service
+After=gorur-base.service
+PartOf=gorur-base.service
+
+[Service]
+Type=simple
+User=goru
+Group=goru
+EnvironmentFile=/etc/default/gorur
+Environment=PYTHONUNBUFFERED=1
+Environment=RCUTILS_COLORIZED_OUTPUT=0
+ExecStart=/usr/local/bin/gorur-run gorur_round.launch.py round:=${GORUR_ROUND} $GORUR_ROUND_ARGS
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+#!/bin/bash
+# Entry point for the gorur-* systemd units: source ROS 2 + the workspace,
+# then exec `ros2 launch <file> [args]` so systemd supervises ros2 launch itself.
+#
+#   gorur-run <launch file in ros2_ws/launch> [launch args...]
+set -e
+WS="${GORUR_WS:-/home/goru/gorur_gari_2026/ros2_ws}"
+set +u
+# shellcheck disable=SC1091
+source /opt/ros/humble/setup.bash
+# shellcheck disable=SC1091
+source "$WS/install/setup.bash"
+set -u
+exec ros2 launch "$WS/launch/$1" "${@:2}"

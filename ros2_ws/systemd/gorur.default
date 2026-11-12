@@ -1,0 +1,17 @@
+# /etc/default/gorur — read by gorur-base.service and gorur-round.service.
+# Change the round with `gorur-round open|obstacle` (edits this file and
+# restarts gorur-round.service).
+
+# Round driven at boot: open | obstacle
+GORUR_ROUND=open
+
+# Workspace the services run from (built with colcon --symlink-install).
+GORUR_WS=/home/goru/gorur_gari_2026/ros2_ws
+
+# ROS 2 networking. Keep the laptop on the same domain to echo topics/RViz.
+ROS_DOMAIN_ID=0
+RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+# Extra launch args, e.g. GORUR_BASE_ARGS="lidar_inverted:=false"
+GORUR_BASE_ARGS=
+GORUR_ROUND_ARGS=

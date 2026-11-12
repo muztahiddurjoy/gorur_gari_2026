@@ -1,0 +1,22 @@
+[Unit]
+Description=Gorur Gari hardware layer (mcu_bridge, vector_odom, RPLIDAR C1)
+Documentation=file:///home/goru/gorur_gari_2026/ros2_ws/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=goru
+Group=goru
+SupplementaryGroups=dialout video
+EnvironmentFile=/etc/default/gorur
+Environment=PYTHONUNBUFFERED=1
+Environment=RCUTILS_COLORIZED_OUTPUT=0
+ExecStart=/usr/local/bin/gorur-run gorur_base.launch.py $GORUR_BASE_ARGS
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
