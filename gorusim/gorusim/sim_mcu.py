@@ -20,7 +20,7 @@ What each firmware piece became:
                        ENCODER_COUNTS_PER_REV = 400, the car's ticks per wheel turn.
     Heading            BNO055 Euler x: 0..360 degrees, clockwise, zero at power-on.
     Sonars             All disabled in config.h, so they read 255, "no echo".
-    Button             Latched into exactly one 50 ms telemetry frame, like a tap.
+    Button             Latched into exactly one telemetry frame, sent at once, like a tap.
     StatusLed          Same state machine: set() from the connect frame, and the start
                        countdown blink (START_BLINK_COUNT x START_BLINK_INTERVAL_MS) on
                        a button press. Shown as a light above the car in RViz
@@ -62,7 +62,7 @@ ENCODER_COUNTS_PER_REV = 400
 ENCODER_SAMPLE_INTERVAL_S = 0.050
 SENSOR_TX_INTERVAL_S = 0.050
 SONAR_NO_READING_CM = 255
-START_BLINK_COUNT = 3
+START_BLINK_COUNT = 5
 START_BLINK_INTERVAL_S = 1.000      # START_BLINK_INTERVAL_MS
 
 # firmware/src/main.cpp
@@ -459,6 +459,7 @@ class SimMcu(Node):
     def press_start(self, request, response):
         self.button_latch = True
         self.status_led.blink(START_BLINK_COUNT, START_BLINK_INTERVAL_S, self.now_s())
+        self.send_telemetry()  # like the firmware: a press goes out at once
         self.get_logger().info('Start button pressed.')
         response.success = True
         response.message = 'start button pressed'
@@ -468,6 +469,7 @@ class SimMcu(Node):
         self.auto_start_timer.cancel()
         self.button_latch = True
         self.status_led.blink(START_BLINK_COUNT, START_BLINK_INTERVAL_S, self.now_s())
+        self.send_telemetry()
         self.get_logger().info(f'Start button auto-pressed after {self.auto_start_sec:.0f} s.')
 
     def destroy_node(self):

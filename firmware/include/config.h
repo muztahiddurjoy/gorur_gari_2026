@@ -157,12 +157,13 @@ const uint8_t SONAR_WIRE_NO_READING_CM = 255;
 
 //start button (the BOOT button on GPIO0, see pins.h)
 const unsigned long START_BUTTON_DEBOUNCE_MS = 30;
-// Pressing the button arms the run. The ROS2 side (autonomy/disparity_extender)
-// holds the car still for START_BLINK_COUNT * START_BLINK_INTERVAL_MS after the
-// press, and the status LED blinks that delay out so the countdown is visible on
-// the car. Keep these in step with start_delay_sec in
-// ros2_ws/config/disparity_extender_params.yaml - 3 * 1000 ms = 3 s.
-const uint8_t START_BLINK_COUNT = 3;
+// Pressing the button arms the run. The ROS2 side holds the car still for
+// START_BLINK_COUNT * START_BLINK_INTERVAL_MS after the press, and the status
+// LED blinks that delay out (once a second) and goes solid the moment the car
+// moves. Keep these in step with start_delay_sec in
+// ros2_ws/config/round_select.yaml (the boot round drivers) and
+// ros2_ws/config/disparity_extender_params.yaml - 5 * 1000 ms = 5 s.
+const uint8_t START_BLINK_COUNT = 5;
 const unsigned long START_BLINK_INTERVAL_MS = 1000;
 
 //status LED patterns (priority: start countdown > IMU pattern > link level)

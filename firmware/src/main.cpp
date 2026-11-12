@@ -549,8 +549,13 @@ void loop(){
     // SENSOR_TX_INTERVAL_MS. Latch the press edge so a tap shorter than that
     // interval still reaches ROS2 instead of falling between two frames ---
     static bool buttonPressLatch = false;
+    // a press goes out in a frame of its own straight away rather than waiting
+    // up to SENSOR_TX_INTERVAL_MS for the next one, so the ROS2 start delay is
+    // timed from the same instant the LED countdown starts
+    static bool sendTelemetryNow = false;
     if (button.isPressed()) {
         buttonPressLatch = true;
+        sendTelemetryNow = true;
         DBG_PRINTLN("Start (BOOT) button pressed");
         // count the start delay out on the LED. ROS2 starts its own timer off
         // the same press, so both ends run the same countdown - the blinks are
@@ -570,7 +575,8 @@ void loop(){
     // --- Send encoder/steering/heading/button telemetry to ROS2 ---
     static unsigned long lastSensorTxMs = 0;
     unsigned long nowMs = millis();
-    if (nowMs - lastSensorTxMs >= SENSOR_TX_INTERVAL_MS) {
+    if (sendTelemetryNow || nowMs - lastSensorTxMs >= SENSOR_TX_INTERVAL_MS) {
+        sendTelemetryNow = false;
         lastSensorTxMs = nowMs;
 
         // raw cumulative tick count, the same value the OLED prints

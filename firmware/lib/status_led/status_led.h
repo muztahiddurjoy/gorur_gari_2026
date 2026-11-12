@@ -49,7 +49,7 @@ public:
 
     // Blink `times` full cycles, one cycle per `periodMs` (half lit, half dark),
     // then hand the LED back (alert pattern or set() level). Total runtime is
-    // times * periodMs, so 3 x 1000 ms fills a 3 second countdown exactly.
+    // times * periodMs, so 5 x 1000 ms fills a 5 second countdown exactly.
     // Calling it again restarts the sequence.
     void blink(uint8_t times, unsigned long periodMs);
     bool isBlinking() const { return pulsesLeft > 0; }
