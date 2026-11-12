@@ -43,6 +43,7 @@ mcu_bridge:
     port: /dev/gorur_mcu
     fallback_port: /dev/ttyACM0  # '' = no fallback
     baudrate: 115200             # ignored by USB CDC; = MAV_SERIAL_BAUD in firmware
+    mcu_silent_reset_sec: 4.0    # port open but no telemetry this long -> reset the ESP32 over USB (0 = off)
 
     # ── /cmd_vel -> wire command scaling ──────────────────────────
     # The firmware applies whatever throttle/steering arrives on the
