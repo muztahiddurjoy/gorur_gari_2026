@@ -39,8 +39,8 @@ THROTTLE_MIN = -128       # int8 wire field floor (full reverse)
 THROTTLE_MAX = 127        # int8 wire field ceiling (full forward)
 STEERING_CENTER_DEG = 90  # servo angle that rolls straight
 STEERING_GAIN_DEG = 60.0  # wire angle = center + angular.z * this
-STEERING_MIN_DEG = 0      # servo clamp, full left
-STEERING_MAX_DEG = 180    # servo clamp, full right
+STEERING_MIN_DEG = 0      # servo clamp, full right (z = -1)
+STEERING_MAX_DEG = 180    # servo clamp, full left (z = +1)
 
 # The ESP32-S3 is on a USB cable into the devkit's port labelled "USB" (the
 # chip's own USB-Serial/JTAG controller, USB VID 303a), not its "UART" port.

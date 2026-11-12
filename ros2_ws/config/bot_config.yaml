@@ -65,8 +65,8 @@ mcu_bridge:
     # range. Drop it if the linkage binds before the servo endpoints —
     # the servo would stall against the stop and cook itself.
     steering_gain_deg: 90.0      # wire angle = center + angular.z * this
-    steering_min_deg: 0          # servo clamp, full left
-    steering_max_deg: 180        # servo clamp, full right
+    steering_min_deg: 0          # servo clamp, full right (z = -1)
+    steering_max_deg: 180        # servo clamp, full left (z = +1)
 
     # ── Launch boost (kick to break static friction) ──────────────
     launch_boost_gain: 2.0       # multiplier on the command that starts a move
