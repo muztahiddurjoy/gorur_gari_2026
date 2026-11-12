@@ -11,14 +11,12 @@ sim_mcu:
     port_link: /tmp/gorusim_esp32
 
     # Encoder ticks per turn of the wheel. Taken from the calibration the car
-    # actually runs with rather than from bot.encoder_counts_per_rev (185),
-    # which no running node reads: the launch files give vector_odom 363 ticks,
-    # a 0.065 m wheel and a tape-measured scale of 0.976. That is one fixed
-    # distance per tick, 0.549 mm, whatever the numbers were labelled at the time.
-    # Around the CAD's 53 mm tyre:
-    #   363 * 0.053 / (0.065 * 0.976) = 303.26 ticks
-    # so vector_odom reads true distance in the sim, exactly as it was calibrated to.
-    encoder_counts_per_wheel_rev: 303.26
+    # actually runs with: the launch files give vector_odom 400 ticks, a
+    # 0.057 m wheel and a distance scale of 1.0. That is one fixed distance per
+    # tick, 0.4477 mm. Around the CAD's 53 mm tyre:
+    #   400 * 0.053 / (0.057 * 1.0) = 371.93 ticks
+    # so vector_odom reads true distance in the sim, exactly as it is calibrated to.
+    encoder_counts_per_wheel_rev: 371.93
 
     # At full duty on a 3S pack. Must match motor_no_load_speed in
     # description/control.xacro: see there for the working and the caveat.

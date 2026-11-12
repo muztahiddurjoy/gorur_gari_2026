@@ -58,8 +58,8 @@ def test_motor_speed_agrees(sim_mcu_params):
 
 
 def test_encoder_keeps_the_calibration_the_car_runs(geo, sim_mcu_params):
-    # vector_odom on the car: 363 ticks, 0.065 m, 0.976. Same distance per tick here.
-    real = 0.976 * math.pi * 0.065 / 363
+    # vector_odom on the car: 400 ticks, 0.057 m, 1.0. Same distance per tick here.
+    real = 1.0 * math.pi * 0.057 / 400
     wheel = math.pi * 2.0 * geo['rear_tyre_radius_mm'] * 0.001
     assert wheel / sim_mcu_params['encoder_counts_per_wheel_rev'] == pytest.approx(real, rel=1e-3)
 

@@ -24,7 +24,7 @@ from std_msgs.msg import Float32, Int32, UInt8
 from gorusim.linkage import SteeringLinkage
 from gorusim.sim_mcu import horn_from_wire
 
-METRES_PER_TICK = 0.065 * math.pi * 0.976 / 363  # what vector_odom is launched with
+METRES_PER_TICK = 0.057 * math.pi * 1.0 / 400  # what vector_odom is launched with
 WHEELBASE = 0.140
 
 

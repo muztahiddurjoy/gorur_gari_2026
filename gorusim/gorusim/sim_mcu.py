@@ -220,7 +220,7 @@ class SimMcu(Node):
         self.declare_parameter('port_link', '/tmp/gorusim_esp32')
         self.declare_parameter('cad_geometry_path', '')
         # See config/sim_hardware.yaml for where each of these comes from.
-        self.declare_parameter('encoder_counts_per_wheel_rev', 303.26)
+        self.declare_parameter('encoder_counts_per_wheel_rev', 371.93)
         self.declare_parameter('motor_no_load_speed_rad_s', 98.3)
         self.declare_parameter('motor_breakaway_duty', 0.15)
         self.declare_parameter('servo_slew_deg_per_s', 353.0)

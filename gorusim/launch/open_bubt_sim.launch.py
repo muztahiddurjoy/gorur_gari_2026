@@ -39,9 +39,9 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument('gui', default_value='true', description='Run Ignition GUI.'),
         DeclareLaunchArgument('rviz', default_value='true', description='Open RViz.'),
-        DeclareLaunchArgument('wheel_diameter_m', default_value='0.065'),
-        DeclareLaunchArgument('encoder_counts_per_rev', default_value='363'),
-        DeclareLaunchArgument('distance_scale', default_value='0.976'),
+        DeclareLaunchArgument('wheel_diameter_m', default_value='0.057'),
+        DeclareLaunchArgument('encoder_counts_per_rev', default_value='400'),
+        DeclareLaunchArgument('distance_scale', default_value='1.0'),
         DeclareLaunchArgument('output_units', default_value='cm'),
         DeclareLaunchArgument('heading_clockwise', default_value='true'),
     ]
