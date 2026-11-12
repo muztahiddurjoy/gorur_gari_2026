@@ -50,8 +50,10 @@ mcu_bridge:
     # wire, so these are THE drive limits. Its only clamps are hardware
     # protection: the steering pulse never leaves STEERING_MIN/MAX_US
     # (firmware/include/config.h), and the motor stops if drive
-    # commands stop for 100 ms or the USB host disappears (mcu_bridge
-    # re-sends them at 50 Hz while /cmd_vel is fresh).
+    # commands stop for 100 ms or the USB host disappears. mcu_bridge
+    # re-sends them at 50 Hz until /cmd_vel is 0.7 s old
+    # (CMD_VEL_STALE_S in mcu_bridge.py), so the car brakes ~0.8 s
+    # after the last /cmd_vel.
     # NOTE (BTS7960 firmware): throttle +/-127 is now FULL duty. The
     # old TB6612 code only reached ~50 % duty at 127, so the same
     # throttle_scale drives about twice as hard as before.

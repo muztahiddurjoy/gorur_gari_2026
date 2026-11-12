@@ -74,9 +74,10 @@ MCU_RESET_PULSE_S = 0.1
 # frames in a row. Do NOT lower the rate without raising the firmware timeout.
 DRIVE_TX_INTERVAL_S = 0.02
 # /cmd_vel older than this is stale: the node stops sending drive commands and
-# the firmware brakes on its own 100 ms timeout. 0.3 s comfortably covers the
-# slowest driving node (10 Hz), so a live node never trips it.
-CMD_VEL_STALE_S = 0.3
+# the firmware brakes on its own 100 ms timeout, so the car stops about
+# 0.8 s after the last /cmd_vel. 0.7 s rides through long gaps between
+# messages (teleop key repeats, a slow planning cycle) without stuttering.
+CMD_VEL_STALE_S = 0.7
 # mirror of the firmware's CMD_TIMEOUT_MS, for the logs and the tests
 FIRMWARE_CMD_TIMEOUT_S = 0.1
 

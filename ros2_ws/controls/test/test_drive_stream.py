@@ -140,7 +140,7 @@ def test_fresh(age):
     assert drive_command_is_fresh(age)
 
 
-@pytest.mark.parametrize('age', [None, CMD_VEL_STALE_S, 0.5, 10.0, -0.1])
+@pytest.mark.parametrize('age', [None, CMD_VEL_STALE_S, CMD_VEL_STALE_S + 0.2, 10.0, -0.1])
 def test_stale_or_nothing_yet(age):
     assert not drive_command_is_fresh(age)
 
