@@ -18,8 +18,8 @@
     bot:
       width_m: 0.12              # chassis width including wheels
       length_m: 0.21             # bumper to bumper
-      wheel_diameter_m: 0.050    # drive wheel diameter
-      encoder_counts_per_rev: 185
+      wheel_diameter_m: 0.057    # drive wheel diameter
+      encoder_counts_per_rev: 400  # ticks per wheel rev (= firmware ENCODER_COUNTS_PER_REV)
       max_steer_deg: 180.0        # physical steering lock (one side)
       safety_margin_m: 0.01      # clearance kept on EACH side of the bot
       max_speed_mps: 0.45         # cruise ceiling on open track
