@@ -38,6 +38,9 @@ class OpenRound(Node):
         self.declare_parameter('max_steer_deg', 22.0)       
         self.declare_parameter('turn_entry_dist', 0.30)
         self.declare_parameter('center_kp', 1.8)             # Proportional gain for straight centering
+        # Press -> first drive command. Set from config/round_select.yaml by
+        # gorur_round.launch.py; the firmware's LED countdown must match it.
+        self.declare_parameter('start_delay_sec', 5.0)
 
         # ── Read Parameters ──
         self.fov_min_deg = float(self.get_parameter('fov_min_deg').value)
@@ -54,6 +57,9 @@ class OpenRound(Node):
         self.steer_alpha = float(self.get_parameter('steer_alpha').value)
         self.turn_entry_dist = float(self.get_parameter('turn_entry_dist').value)
         self.center_kp = float(self.get_parameter('center_kp').value)
+        self.start_delay_sec = float(self.get_parameter('start_delay_sec').value)
+        if not self.start_delay_sec > 0.0:
+            raise ValueError(f'start_delay_sec must be > 0, got {self.start_delay_sec}')
 
 
         self.target_laps_yaw = float(self.get_parameter('target_laps_yaw').value)
@@ -64,7 +70,8 @@ class OpenRound(Node):
         self.scan_ranges = np.array([])   # metres
 
         self.state = 'STANDBY'
-        self.countdown_start = None
+        self.start_timer = None         # one-shot, ends COUNTDOWN
+        self.button_was_down = False    # press edge detection
         self.lidar_last_timestamp = None
         self.vel = Twist()
 
@@ -81,13 +88,43 @@ class OpenRound(Node):
 
                 
     def button_callback(self, msg):
-        if msg.data and self.state in ('STANDBY', 'FINISHED'):
-            self.state = 'COUNTDOWN'
-            self.countdown_start = time.time()
-            self.total_yaw_deg = 0.0
-            self.prev_steer = 0.0
-            self.get_logger().info('Button pressed! Starting Open Round in 5.0s:::::')
-            self.lap_direction = None
+        # Act on the press edge only: the MCU keeps sending True while the
+        # button is held, and its LED countdown starts on the edge as well.
+        pressed = bool(msg.data)
+        rising = pressed and not self.button_was_down
+        self.button_was_down = pressed
+        if not rising or self.state == 'RUNNING':
+            return
+        # A press mid-countdown restarts it, exactly like the LED does.
+        restarted = self.state == 'COUNTDOWN'
+        self.state = 'COUNTDOWN'
+        self.total_yaw_deg = 0.0
+        self.prev_steer = 0.0
+        self.lap_direction = None
+        self.arm_start_timer()
+        self.get_logger().info(
+            f'Button pressed{" again, countdown restarted" if restarted else ""}! '
+            f'Starting Open Round in {self.start_delay_sec:.1f}s:::::')
+
+    def arm_start_timer(self):
+        """(Re)start the one-shot timer that ends the countdown."""
+        if self.start_timer is not None:
+            self.destroy_timer(self.start_timer)
+        self.start_timer = self.create_timer(self.start_delay_sec, self.start_run)
+
+    def start_run(self):
+        """Fire once, start_delay_sec after the press, and drive at once."""
+        self.start_timer.cancel()  # one shot
+        if self.state != 'COUNTDOWN':
+            return
+        self.total_yaw_deg = 0.0
+        # Log distance to front wall normalized
+        self.start_front_dist = float(np.clip(self.front_clearance(), 0.60, 1.60))
+        self.state = 'RUNNING'
+        self.get_logger().info(
+            f'RUNNING (starting front wall dist: {self.start_front_dist:.2f}m).')
+        # First drive command now, not on the next 20 Hz tick.
+        self.open_control_loop()
 
     def heading_callback(self, msg):
         raw = float(msg.data)
@@ -204,24 +241,21 @@ class OpenRound(Node):
     
     
     
-    def open_control_loop(self):
-        if self.state in ('STANDBY', 'FINISHED'):
-            return
-
+    def front_clearance(self):
+        """Closest raw return within +-15 deg of the nose (2.5 m before any scan)."""
         front_clear = 2.50
         if self.raw_ranges.size > 0:
             front_mask = np.abs(self.scan_angles) <= math.radians(15.0)
             if np.any(front_mask):
                 front_clear = float(np.min(self.raw_ranges[front_mask]))
+        return front_clear
 
-        if self.state == 'COUNTDOWN':
-            if (time.time() - self.countdown_start) < 5.0:
-                return
-            self.total_yaw_deg = 0.0
-            # Log distance to front wall normalized
-            self.start_front_dist = float(np.clip(front_clear, 0.60, 1.60))
-            self.state = 'RUNNING'
-            self.get_logger().info(f'RUNNING (starting front wall dist: {self.start_front_dist:.2f}m).')
+    def open_control_loop(self):
+        # STANDBY, FINISHED, or COUNTDOWN (start_run() ends that one)
+        if self.state != 'RUNNING':
+            return
+
+        front_clear = self.front_clearance()
 
         now_ms = int(time.time() * 1000)
         if self.lidar_last_timestamp is None or (now_ms - self.lidar_last_timestamp) > 1200:

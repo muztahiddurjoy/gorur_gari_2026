@@ -30,6 +30,9 @@ class ObstacleRound(Node):
         self.declare_parameter('speed_straight', 1.0)
         self.declare_parameter('speed_turn', 1.25)
         self.declare_parameter('max_steer_deg', 40.0)
+        # Press -> first drive command. Set from config/round_select.yaml by
+        # gorur_round.launch.py; the firmware's LED countdown must match it.
+        self.declare_parameter('start_delay_sec', 5.0)
 
         # ── Read Parameters ──
         self.fov_min_deg = float(self.get_parameter('fov_min_deg').value)
@@ -42,13 +45,17 @@ class ObstacleRound(Node):
         self.speed_straight = float(self.get_parameter('speed_straight').value)
         self.speed_turn = float(self.get_parameter('speed_turn').value)
         self.max_steer_rad = math.radians(float(self.get_parameter('max_steer_deg').value))
+        self.start_delay_sec = float(self.get_parameter('start_delay_sec').value)
+        if not self.start_delay_sec > 0.0:
+            raise ValueError(f'start_delay_sec must be > 0, got {self.start_delay_sec}')
 
         self.scan_angles = np.array([])   # radians; sorted -70 to left +70
         self.raw_ranges = np.array([])    # metres
         self.scan_ranges = np.array([])   # metres
 
         self.state = 'STANDBY'
-        self.countdown_start = None
+        self.start_timer = None         # one-shot, ends COUNTDOWN
+        self.button_was_down = False    # press edge detection
         self.lidar_last_timestamp = None
         self.vel = Twist()
 
@@ -73,11 +80,38 @@ class ObstacleRound(Node):
     
 
     def button_callback(self, msg):
-        if msg.data and self.state in ('STANDBY', 'FINISHED'):
-            self.state = 'COUNTDOWN'
-            self.countdown_start = time.time()
-            self.prev_steer = 0.0
-            self.get_logger().info('Button pressed! Starting Obstacle Round in 5s :::::')
+        # Act on the press edge only: the MCU keeps sending True while the
+        # button is held, and its LED countdown starts on the edge as well.
+        pressed = bool(msg.data)
+        rising = pressed and not self.button_was_down
+        self.button_was_down = pressed
+        if not rising or self.state == 'RUNNING':
+            return
+        # A press mid-countdown restarts it, exactly like the LED does.
+        restarted = self.state == 'COUNTDOWN'
+        self.state = 'COUNTDOWN'
+        self.prev_steer = 0.0
+        self.arm_start_timer()
+        self.get_logger().info(
+            f'Button pressed{" again, countdown restarted" if restarted else ""}! '
+            f'Starting Obstacle Round in {self.start_delay_sec:.1f}s :::::')
+
+    def arm_start_timer(self):
+        """(Re)start the one-shot timer that ends the countdown."""
+        if self.start_timer is not None:
+            self.destroy_timer(self.start_timer)
+        self.start_timer = self.create_timer(self.start_delay_sec, self.start_run)
+
+    def start_run(self):
+        """Fire once, start_delay_sec after the press, and drive at once."""
+        self.start_timer.cancel()  # one shot
+        if self.state != 'COUNTDOWN':
+            return
+        self.state = 'RUNNING'
+        self.get_logger().info(
+            f'{self.start_delay_sec:.1f}s elapsed! Navigating obstacle corridor.')
+        # First drive command now, not on the next 20 Hz tick.
+        self.obstacle_control_loop()
 
     def scan_callback(self, msg):
         self.lidar_last_timestamp = int(time.time() * 1000)
@@ -225,14 +259,9 @@ class ObstacleRound(Node):
         self.target_pub.publish(marker)
 
     def obstacle_control_loop(self):
-        if self.state in ('STANDBY', 'FINISHED'):
+        # STANDBY, FINISHED, or COUNTDOWN (start_run() ends that one)
+        if self.state != 'RUNNING':
             return
-
-        if self.state == 'COUNTDOWN':
-            if (time.time() - self.countdown_start) < 5.0:
-                return
-            self.state = 'RUNNING'
-            self.get_logger().info('5s elapsed! Navigating obstacle corridor.')
 
         # Watchdog: Stop immediately if LiDAR disconnects > 1.2s
         now_ms = int(time.time() * 1000)
