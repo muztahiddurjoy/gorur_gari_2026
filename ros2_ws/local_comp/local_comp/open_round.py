@@ -9,38 +9,45 @@ import time
 import numpy as np
 from geometry_msgs.msg import Twist
 
+from local_comp.config_utils import load_default_params
+
+
 class OpenRound(Node):
-    
+
     def __init__(self):
         super().__init__('open_round')
         self.get_logger().info('OpenRound node has been started.')
         self.scan = None
+        cfg = load_default_params(self, 'open_round.yaml', 'open_round')
 
-        self.declare_parameter('direction_latch_deg', 35.0)
-        self.declare_parameter('steer_alpha', 0.45)  # 0.0 = frozen, 1.0 = raw | NOT SO MUCH SENSITIVE
+        self.declare_parameter('direction_latch_deg', cfg.get('direction_latch_deg', 35.0))
+        self.declare_parameter('steer_alpha', cfg.get('steer_alpha', 0.45))
 
         self.lap_direction = None  # None -> 'CW' or 'CCW' after first turn
         self.prev_steer = 0.0
+        self.corner_target_yaw = None  # Locked target yaw during a 90-deg turn
         #===========================#
 
-        self.declare_parameter('fov_min_deg', -100.0)
-        self.declare_parameter('fov_max_deg', 100.0)
-        self.declare_parameter('max_range', 2.50)
-        self.declare_parameter('car_radius', 0.18)
-        self.declare_parameter('disparity_thresh', 0.12)
-        self.declare_parameter('wall_safe_dist', 0.8)
+        self.declare_parameter('fov_min_deg', cfg.get('fov_min_deg', -100.0))
+        self.declare_parameter('fov_max_deg', cfg.get('fov_max_deg', 100.0))
+        self.declare_parameter('max_range', cfg.get('max_range', 2.50))
+        self.declare_parameter('car_radius', cfg.get('car_radius', 0.18))
+        self.declare_parameter('disparity_thresh', cfg.get('disparity_thresh', 0.12))
+        self.declare_parameter('wall_safe_dist', cfg.get('wall_safe_dist', 0.35))
         
-        self.declare_parameter('target_laps_yaw', 1080.0) # (360*3=1080)
+        self.declare_parameter('target_laps_yaw', cfg.get('target_laps_yaw', 1065.0)) # 1080 deg minus exit tolerance
 
         # Steering controls
-        self.declare_parameter('speed_straight', 1.20)
-        self.declare_parameter('speed_turn', 1.0)           
-        self.declare_parameter('max_steer_deg', 22.0)       
-        self.declare_parameter('turn_entry_dist', 0.30)
-        self.declare_parameter('center_kp', 1.8)             # Proportional gain for straight centering
+        self.declare_parameter('speed_straight', cfg.get('speed_straight', 1.20))
+        self.declare_parameter('speed_turn', cfg.get('speed_turn', 0.95))           
+        self.declare_parameter('max_steer_deg', cfg.get('max_steer_deg', 25.0))       
+        self.declare_parameter('turn_entry_dist', cfg.get('turn_entry_dist', 1.05))
+        self.declare_parameter('center_kp', cfg.get('center_kp', 1.8))
+        self.declare_parameter('heading_kp', cfg.get('heading_kp', 0.025))
+        self.declare_parameter('corner_exit_tol_deg', cfg.get('corner_exit_tol_deg', 15.0))
         # Press -> first drive command. Set from config/round_select.yaml by
         # gorur_round.launch.py; the firmware's LED countdown must match it.
-        self.declare_parameter('start_delay_sec', 5.0)
+        self.declare_parameter('start_delay_sec', cfg.get('start_delay_sec', 5.0))
 
         # ── Read Parameters ──
         self.fov_min_deg = float(self.get_parameter('fov_min_deg').value)
@@ -57,6 +64,8 @@ class OpenRound(Node):
         self.steer_alpha = float(self.get_parameter('steer_alpha').value)
         self.turn_entry_dist = float(self.get_parameter('turn_entry_dist').value)
         self.center_kp = float(self.get_parameter('center_kp').value)
+        self.heading_kp = float(self.get_parameter('heading_kp').value)
+        self.corner_exit_tol_deg = float(self.get_parameter('corner_exit_tol_deg').value)
         self.start_delay_sec = float(self.get_parameter('start_delay_sec').value)
         if not self.start_delay_sec > 0.0:
             raise ValueError(f'start_delay_sec must be > 0, got {self.start_delay_sec}')
@@ -101,6 +110,7 @@ class OpenRound(Node):
         self.total_yaw_deg = 0.0
         self.prev_steer = 0.0
         self.lap_direction = None
+        self.corner_target_yaw = None
         self.arm_start_timer()
         self.get_logger().info(
             f'Button pressed{" again, countdown restarted" if restarted else ""}! '
@@ -118,6 +128,8 @@ class OpenRound(Node):
         if self.state != 'COUNTDOWN':
             return
         self.total_yaw_deg = 0.0
+        self.lap_direction = None
+        self.corner_target_yaw = None
         # Log distance to front wall normalized
         self.start_front_dist = float(np.clip(self.front_clearance(), 0.60, 1.60))
         self.state = 'RUNNING'
@@ -266,14 +278,20 @@ class OpenRound(Node):
             return
 
         if self.state == 'RUNNING' and self.scan_ranges.size > 0:
-            if abs(self.total_yaw_deg) >= self.target_laps_yaw and front_clear <= self.start_front_dist:
+            nose_mask = np.abs(self.scan_angles) <= math.radians(4.0)
+            nose_dist = float(np.median(self.raw_ranges[nose_mask])) if np.any(nose_mask) else 2.50
+            stop_dist = max(0.45, self.start_front_dist - 0.35)
+
+            if (self.corner_target_yaw is None
+                    and abs(self.total_yaw_deg) >= self.target_laps_yaw
+                    and nose_dist <= stop_dist):
                 self.vel.linear.x = 0.0
                 self.vel.angular.z = 0.0
                 self.pub.publish(self.vel)
                 self.state = 'FINISHED'
                 self.get_logger().info(
                     f'FINISHED 3 LAPS! Yaw={self.total_yaw_deg:+.1f} deg, '
-                    f'stopped on starting side (front wall {front_clear:.2f}m).')
+                    f'stopped past finish line (nose wall {nose_dist:.2f}m <= {stop_dist:.2f}m).')
                 return
             #### Experimental
             # 1. Measure side walls using our 25th-percentile helper function (±80° to ±100°)
@@ -288,10 +306,30 @@ class OpenRound(Node):
             if left_dist < self.wall_safe_dist:
                 wall_push -= (self.wall_safe_dist - left_dist) * 2.2    # push right (-)
 
-            is_turning = (front_clear <= self.turn_entry_dist)
+            # 2. IMU-gated straight vs 90-degree corner state transitions
+            if self.corner_target_yaw is None:
+                if front_clear <= self.turn_entry_dist and abs(self.total_yaw_deg) < self.target_laps_yaw:
+                    if self.lap_direction == 'CW':
+                        turn_sign = 1.0
+                    elif self.lap_direction == 'CCW':
+                        turn_sign = -1.0
+                    else:
+                        # Corner 1 before latch: infer turn side from open LiDAR target
+                        turn_sign = 1.0 if target_angle < 0.0 else -1.0
+                    base_cardinal = round(self.total_yaw_deg / 90.0) * 90.0
+                    self.corner_target_yaw = base_cardinal + turn_sign * 90.0
+                    self.get_logger().info(
+                        f'Corner entry: yaw={self.total_yaw_deg:+.1f}° -> target={self.corner_target_yaw:+.1f}°')
+            else:
+                if abs(self.corner_target_yaw - self.total_yaw_deg) <= self.corner_exit_tol_deg:
+                    self.get_logger().info(
+                        f'Corner exit: yaw={self.total_yaw_deg:+.1f}° (target={self.corner_target_yaw:+.1f}°)')
+                    self.corner_target_yaw = None
+
+            is_turning = (self.corner_target_yaw is not None)
 
             if not is_turning:
-                # ── STRAIGHT MODE ──
+                # ── STRAIGHT MODE: Cardinal IMU Lock + Gentle LiDAR Centering Trim ──
                 outer_is_right = (self.lap_direction != 'CW')
 
                 if left_dist < 0.85 and right_dist < 0.85:
@@ -303,20 +341,26 @@ class OpenRound(Node):
                 else:
                     error = 0.0
 
-                # Filter the target_angle to ±20° so the car runs straight after a turn
-                # stopping the next, too turn early
-                straight_align = np.clip(target_angle, math.radians(-20.0), math.radians(20.0)) / self.max_steer_rad
-                center_trim = np.clip(+self.center_kp * error, -0.45, 0.45)
+                cardinal_yaw = round(self.total_yaw_deg / 90.0) * 90.0
+                # Trim target heading up to ±10° to hold 0.50m centerline
+                center_angle_trim = float(np.clip(-error * 16.0, -10.0, 10.0))
+                desired_yaw = cardinal_yaw + center_angle_trim
 
-                target_steer = np.clip(0.55 * straight_align + center_trim + wall_push, -0.75, 0.75)
+                yaw_error = desired_yaw - self.total_yaw_deg
+                heading_steer = -self.heading_kp * yaw_error
+
+                target_steer = np.clip(heading_steer + wall_push, -0.60, 0.60)
                 target_speed = self.speed_straight
 
             else:
-                # ── CORNER MODE ──
+                # ── CORNER MODE: Blended LiDAR Parabolic Curve + IMU Target Tracking ──
                 norm_angle = np.clip(target_angle / self.max_steer_rad, -1.0, 1.0)
-                # 1.35 exponent: softer than linear at turn entry, strong enough mid-corner
-                curve_steer = math.copysign(abs(norm_angle) ** 1.35, norm_angle)
-                target_steer = np.clip(curve_steer + wall_push, -0.85, 0.85)
+                lidar_curve = math.copysign(abs(norm_angle) ** 1.35, norm_angle)
+
+                rem_yaw = self.corner_target_yaw - self.total_yaw_deg
+                imu_curve = float(np.clip(-0.012 * rem_yaw, -0.75, 0.75))
+
+                target_steer = np.clip(0.60 * lidar_curve + 0.40 * imu_curve + wall_push, -0.85, 0.85)
                 target_speed = self.speed_turn
 
             # 3. Smooth steering transition
