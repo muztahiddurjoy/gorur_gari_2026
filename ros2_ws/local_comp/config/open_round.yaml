@@ -20,8 +20,11 @@ open_round:
     target_laps_yaw: 1065.0     # Yaw threshold for 3 full laps (12 corners x 90° minus exit tol)
 
     # ── Speed & Throttle Profile (m/s) ──
-    speed_straight: 1.20        # Straight speed (m/s)
-    speed_turn: 1.00            # Cornering speed (m/s) - 
+    # linear.x -> motor: mcu_bridge throttle = x * 100 (throttle_scale),
+    # firmware duty = throttle / 127 * 255. 0.50 -> throttle 50 -> PWM 100/255,
+    # the lowest duty that still pulls the bot.
+    speed_straight: 0.50        # Straight speed (m/s) -> PWM 100
+    speed_turn: 0.50            # Cornering speed (m/s) -> PWM 100
 
     # ── Steering & Control Tuning ──
     max_steer_deg: 25.0         # Maximum steering lock in degrees (softened for wide arc)
