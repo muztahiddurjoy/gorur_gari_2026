@@ -21,11 +21,11 @@ open_round:
 
     # ── Speed & Throttle Profile (m/s) ──
     # linear.x -> motor: mcu_bridge throttle = x * 100 (throttle_scale),
-    # firmware duty = throttle / 127 * 255. 0.40 -> throttle 40 -> PWM 80/255.
-    # Below PWM 100 the bot may not start from rest on its own; mcu_bridge's
-    # launch boost (x2 for 1 s) gets it rolling, then this keeps it moving.
-    speed_straight: 0.40        # Straight speed (m/s) -> PWM 80
-    speed_turn: 0.40            # Cornering speed (m/s) -> PWM 80
+    # firmware duty = throttle / 127 * 255. 0.29 -> 28.999.. truncated to
+    # throttle 28 -> PWM 56/255. Below PWM 100 the bot may not start from rest
+    # on its own; mcu_bridge's launch boost (x2 for 1 s) gets it rolling.
+    speed_straight: 0.29        # Straight speed (m/s) -> PWM 56
+    speed_turn: 0.29            # Cornering speed (m/s) -> PWM 56
 
     # ── Steering & Control Tuning ──
     max_steer_deg: 25.0         # Maximum steering lock in degrees (softened for wide arc)
