@@ -17,6 +17,7 @@
 #   obstacle  -> local_comp obstacle_round  (tuning: local_comp/config/obstacle_round.yaml)
 round: open
 
+
 # Seconds from the press to the first drive command, for either round.
 # The LED countdown is firmware: START_BLINK_COUNT x START_BLINK_INTERVAL_MS
 # in firmware/include/config.h (5 x 1000 ms). Change both together and

@@ -28,7 +28,7 @@ class OpenRound(Node):
         self.declare_parameter('max_range', 2.50)
         self.declare_parameter('car_radius', 0.18)
         self.declare_parameter('disparity_thresh', 0.12)
-        self.declare_parameter('wall_safe_dist', 0.35)
+        self.declare_parameter('wall_safe_dist', 0.8)
         
         self.declare_parameter('target_laps_yaw', 1080.0) # (360*3=1080)
 
